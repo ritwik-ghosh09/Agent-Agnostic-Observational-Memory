@@ -1,0 +1,23 @@
+@startuml
+!include /coding/docs/puml/_standard-style.puml
+
+package "Ontology Sub-Component" {
+  component "OntologyManager" as om <<core>>
+  component "OntologyClassificationAgent" as oca <<agent>>
+  component "EntityValidator" as ev <<agent>>
+  component "OntologyCache" as oc <<storage>>
+  component "OntologyVersioning" as ov <<core>>
+}
+
+package "External Dependencies" {
+  component "Machine Learning Model" as mlm <<external>>
+}
+
+om --> oc : uses
+om --> ov : uses
+oca --> om : uses
+oca --> mlm : uses
+ev --> om : uses
+om --> oca : provides API
+
+@enduml

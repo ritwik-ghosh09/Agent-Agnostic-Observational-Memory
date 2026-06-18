@@ -1,0 +1,59 @@
+@startuml workflow-technology-research
+!include _standard-style.puml
+
+title Technology Research Workflow - Sequence Diagram
+
+actor User as U
+participant "Claude Code/CoPilot" as Client
+participant "Coordinator Agent" as Coord
+participant "Web Search Agent" as WS
+participant "Semantic Analysis Agent" as SA
+participant "Knowledge Graph Agent" as KG
+database "Knowledge Base" as KB
+
+U -> Client: start_workflow("technology-research")
+Client -> Coord: Research workflow request
+Coord -> Coord: Parse research parameters
+
+note over Coord: Phase 1: Multi-Source Search
+par Documentation Search
+  Coord -> WS: Search official docs
+  WS -> WS: Query documentation sites
+  WS -> Coord: Return official docs
+else Best Practices Search
+  Coord -> WS: Search for best practices
+  WS -> WS: Query community sources
+  WS -> Coord: Return community insights
+else Comparison Search
+  Coord -> WS: Search for comparisons
+  WS -> WS: Query comparison articles
+  WS -> Coord: Return comparative analysis
+end
+
+note over Coord: Phase 2: Content Analysis
+Coord -> SA: Analyze gathered content
+SA -> SA: Extract key insights
+SA -> SA: Identify patterns and recommendations
+SA -> SA: Create comparative analysis
+SA -> Coord: Return structured research
+
+note over Coord: Phase 3: Knowledge Organization
+Coord -> KG: Organize research results
+loop for each technology aspect
+  KG -> KB: Store technology insights
+  KG -> KB: Create comparison entities
+  KG -> KB: Link related concepts
+end
+KG -> Coord: Confirm organization
+
+Coord -> Client: Return research report
+Client -> U: Display comprehensive analysis
+
+U -> Client: search_knowledge("technology comparison")
+Client -> KG: Search for comparisons
+KG -> KB: Query comparative data
+KB -> KG: Return organized results
+KG -> Client: Formatted comparison
+Client -> U: Show technology insights
+
+@enduml

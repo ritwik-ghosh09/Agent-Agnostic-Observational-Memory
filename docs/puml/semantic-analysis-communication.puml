@@ -1,0 +1,107 @@
+@startuml semantic-analysis-communication
+!include _standard-style.puml
+
+title Semantic Analysis System - Communication Architecture
+
+top to bottom direction
+
+package "MCP Integration Layer" {
+  component [MCP Server] as MCP
+  port "Coding Agent Interface" as MCPPort
+  note right of MCP
+    • 12 tools for Coding Agent
+    • Request routing to CoordinatorAgent
+    • Response aggregation
+    • Direct function calls (no MQTT/RPC)
+  end note
+}
+
+package "14-Agent System - Direct Function Calls" {
+
+  component [CoordinatorAgent] as Coordinator
+  note right of Coordinator
+    **Central Orchestrator**
+    • Receives MCP tool requests
+    • Executes workflow definitions
+    • Direct function calls to agents
+    • Manages GraphDB initialization
+    • No MQTT/RPC messaging
+  end note
+
+  rectangle "Analysis Agents" {
+    component [GitHistoryAgent] as Git
+    component [VibeHistoryAgent] as Vibe
+    component [SemanticAnalysisAgent] as Semantic
+    component [WebSearchAgent] as WebSearch
+    component [InsightGenerationAgent] as Insight
+    component [ObservationGenerationAgent] as Observation
+    component [QualityAssuranceAgent] as QA
+  }
+
+  rectangle "Infrastructure Agents" {
+    component [PersistenceAgent] as Persist
+    component [DeduplicationAgent] as Dedup
+  }
+}
+
+package "Storage Layer" {
+  database [GraphDB\nGraphology + LevelDB] as GraphDB
+  component [Graph Exporter] as Exporter
+  database [coding.json\n.data/knowledge-export/] as Storage
+}
+
+package "External Services" {
+  cloud [Groq] as Groq
+  cloud [Gemini] as Gemini
+  cloud [Anthropic] as Anthropic
+  cloud [OpenAI] as OpenAI
+  cloud [Web APIs] as WebAPIs
+}
+
+' MCP to Coordinator
+[Coding Agent] --> MCP : MCP tool calls
+MCP --> Coordinator : Direct function call\n(workflow execution)
+
+' Coordinator orchestrates all agents via direct calls
+Coordinator --> Git : direct call
+Coordinator --> Vibe : direct call
+Coordinator --> Semantic : direct call
+Coordinator --> WebSearch : direct call
+Coordinator --> Insight : direct call
+Coordinator --> Observation : direct call
+Coordinator --> QA : direct call
+Coordinator --> Persist : direct call
+Coordinator --> Dedup : direct call
+
+' Storage connections
+Coordinator --> GraphDB : provides initialized\nGraphDB instance
+Persist --> GraphDB : stores entities
+GraphDB --> Exporter : auto-export 30s
+Exporter --> Storage : writes JSON
+
+' LLM connections (5-tier fallback chain)
+Semantic --> Groq : 1st provider
+Semantic --> Gemini : 2nd provider
+Semantic --> Anthropic : 3rd provider
+Semantic --> OpenAI : 4th provider
+Vibe --> Groq : LLM
+Insight --> Groq : LLM
+Observation --> Groq : LLM
+QA --> Groq : LLM
+Dedup --> OpenAI : embeddings
+WebSearch --> WebAPIs : search
+
+' Return path
+Coordinator --> MCP : results
+MCP --> [Coding Agent] : tool response
+
+note bottom of Coordinator
+  **Direct Function Call Architecture**
+  • No MQTT broker
+  • No JSON-RPC server
+  • No event-driven pub/sub
+  • Agents called via workflow definitions
+  • Synchronous execution within Node.js
+end note
+
+@enduml

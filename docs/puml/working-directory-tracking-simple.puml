@@ -1,0 +1,36 @@
+@startuml working-directory-tracking-simple
+!include _standard-style.puml
+
+title LSL v3.0 - Working Directory Context Tracking
+
+class WorkingDirectoryTracker {
+  -currentWorkingDir: string
+  +updateContext(entry)
+  +resolveRelativePaths(input, workingDir)
+  +isCodingContext(): boolean
+}
+
+class ConversationAnalyzer {
+  -workingDirTracker: WorkingDirectoryTracker
+  +analyzeConversationForCoding(transcript): boolean
+  +processTranscriptEntry(entry)
+}
+
+WorkingDirectoryTracker ||--|| ConversationAnalyzer
+
+note right of WorkingDirectoryTracker
+  Tracks working directory changes
+  from transcript cwd field
+  
+  Resolves relative paths using
+  current working directory context
+end note
+
+note bottom
+  Path Resolution Example:
+  Input: docs/system.md
+  Working Dir: /Users/q284340/Agentic/coding
+  Output: /Users/q284340/Agentic/coding/docs/system.md
+end note
+
+@enduml

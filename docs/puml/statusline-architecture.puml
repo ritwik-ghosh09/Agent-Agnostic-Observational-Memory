@@ -1,0 +1,93 @@
+@startuml
+!include _standard-style.puml
+
+title Unified Status Line System Architecture\n(tmux-based, agent-agnostic)
+
+top to bottom direction
+
+' Main entry point - any coding agent
+component [Coding Agent\n(Claude / CoPilot / Future)] as CC <<agent>>
+component [tmux-session-wrapper.sh] as TmuxWrapper <<infra>>
+
+' Execution layer
+component [tmux status-right] as TmuxStatus <<infra>>
+component [combined-status-line.js] as MainScript <<orchestrator>>
+
+' Service providers arranged horizontally
+package "Status Components" {
+  component [Global Config Manager] as GCM <<service>>
+  component [Core Services] as CoreSvc <<service>>
+  component [Constraint Monitor] as ConstraintSvc <<service>>
+  component [Semantic Analysis] as SemanticSvc <<service>>
+}
+
+' Data sources
+package "Data Sources" {
+  database [Port Scanner] as Ports
+  database [Docker Services] as Docker
+  database [MCP Constraint API\nhttp://localhost:3031] as ConstraintAPI
+  database [Semantic API] as SemanticAPI
+}
+
+' Status output format
+package "Status Output Format" {
+  component "[GCM✅]" as GCM_Out
+  component "[C🟢]" as Core_Out
+  component "[🛡️ 85% 🔍EX]" as Constraint_Out
+  component "[🧠API✅]" as Semantic_Out
+}
+
+' Main flow
+CC --> TmuxWrapper : agent launched via\ntmux_session_wrapper
+TmuxWrapper --> TmuxStatus : configures status-right\nwith combined-status-line.js
+TmuxStatus --> MainScript : invokes every 5s
+
+' Service orchestration
+MainScript --> GCM : getGlobalConfigStatus()
+MainScript --> CoreSvc : getCoreServicesStatus()
+MainScript --> ConstraintSvc : getConstraintStatus()
+MainScript --> SemanticSvc : getSemanticStatus()
+
+' Data source connections
+GCM --> Ports : checks port availability
+CoreSvc --> Docker : verifies containers
+ConstraintSvc --> ConstraintAPI : GET /api/violations
+SemanticSvc --> SemanticAPI : checks AI services
+
+' Output generation
+GCM --> GCM_Out : operational/warning/failed
+CoreSvc --> Core_Out : healthy/degraded/failed
+ConstraintSvc --> Constraint_Out : compliance %
+SemanticSvc --> Semantic_Out : API status
+
+' Final aggregation
+MainScript --> TmuxStatus : [GCM✅] [C🟢] [🛡️ 85%] [🧠API✅]
+
+note top of CC
+  **Rendering: tmux status-right**
+  All agents wrapped in tmux via
+  tmux-session-wrapper.sh
+
+  **Update Frequency:** Every 5 seconds
+  **Supports:** tmux formatting codes
+  (#[underscore], #[bold], colors)
+end note
+
+note right of ConstraintAPI
+  **Constraint Monitor Integration:**
+  • API: http://localhost:3031/api/violations
+  • Data: Recent violations, compliance score
+  • Calculation: 100% - penalties for violations
+  • Timeout: 2 seconds with graceful fallback
+end note
+
+note left of MainScript
+  **buildCombinedStatus() Method:**
+  • Parallel status collection
+  • Individual component assessment
+  • Overall health calculation
+  • Color coding application
+  • Formatted bracket output
+end note
+
+@enduml

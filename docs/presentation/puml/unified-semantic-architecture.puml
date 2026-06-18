@@ -1,0 +1,79 @@
+@startuml unified-semantic-architecture
+!include _standard-style.puml
+
+title Semantic Analysis Architecture
+
+left to right direction
+
+package "Clients" {
+  [Claude\nCode] <<external>> as claude
+  [CoPilot] <<external>> as copilot
+}
+
+package "Coordinator" #FFFFCC {
+  [Workflow\nOrchestrator] <<agent>> as coord
+}
+
+package "10 Worker Agents" {
+  package "Analysis" #E6F3FF {
+    [Git] <<agent>> as git
+    [Vibe] <<agent>> as vibe
+    [Web] <<agent>> as web
+    [Obs] <<agent>> as obs
+    [Persist] <<agent>> as per
+  }
+
+  package "LLM" #FFE6E6 {
+    [Semantic] <<agent>> as sem
+    [Insights] <<agent>> as ins
+  }
+
+  package "Infra" #E8F4FD {
+    [Sync] <<agent>> as sync
+    [Dedup] <<agent>> as dedup
+    [Quality] <<agent>> as qa
+  }
+}
+
+package "Storage" {
+  database "Graph" <<storage>> as graphdb
+  database "Files" <<storage>> as files
+}
+
+package "LLMs\n(4-tier chain)" {
+  cloud "Groq" <<external>> as groq
+  cloud "Gemini" <<external>> as gemini
+  cloud "Custom" <<external>> as custom
+  cloud "Claude" <<external>> as anthropic
+  cloud "GPT" <<external>> as openai
+}
+
+' Client flow
+claude --> coord
+copilot --> coord
+
+' Coordinator to agents
+coord --> git
+coord --> vibe
+coord --> sem
+coord --> web
+coord --> ins
+coord --> obs
+coord --> qa
+coord --> per
+coord --> sync
+coord --> dedup
+
+' LLM usage
+sem ..> groq
+sem ..> gemini
+sem ..> custom
+sem ..> anthropic
+sem ..> openai
+ins ..> sem : "Delegates"
+
+' Storage
+sync --> graphdb
+sync --> files
+
+@enduml

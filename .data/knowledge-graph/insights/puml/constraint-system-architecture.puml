@@ -1,0 +1,33 @@
+@startuml
+!include /coding/docs/puml/_standard-style.puml
+
+package "Constraint System" {
+  component "ConstraintSystem" as cs <<core>>
+  component "GraphDatabaseAdapter" as gda <<storage>>
+  component "ContentValidationAgent" as cva <<agent>>
+  component "UnifiedHookManager" as uhm <<core>>
+  component "ViolationCaptureService" as vcs <<core>>
+}
+
+package "Storage" {
+  database "GraphDatabase" as gd <<storage>>
+  database "LevelDB" as ld <<storage>>
+}
+
+package "Integrations" {
+  component "MCP Server" as mcp <<external>>
+  component "System Health Dashboard" as shd <<external>>
+}
+
+cs --> gda : uses
+gda --> gd : stores in
+gda --> ld : uses
+cs --> cva : uses
+cva --> cs : validates
+uhm --> cs : manages hooks for
+vcs --> cs : captures violations for
+vcs --> gd : stores violations in
+cs --> mcp : integrates with
+cs --> shd : integrates with
+
+@enduml

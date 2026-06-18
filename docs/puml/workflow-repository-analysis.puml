@@ -1,0 +1,46 @@
+@startuml workflow-repository-analysis
+!include _standard-style.puml
+
+title Repository Analysis Workflow - Sequence Diagram
+
+actor User as U
+participant "Claude Code/CoPilot" as Client
+participant "Coordinator Agent" as Coord
+participant "Semantic Analysis Agent" as SA
+participant "Web Search Agent" as WS
+participant "Knowledge Graph Agent" as KG
+database "Knowledge Base" as KB
+
+U -> Client: start_workflow("repository-analysis")
+Client -> Coord: Start workflow request
+Coord -> Coord: Initialize workflow state
+
+note over Coord: Phase 1: Code Analysis
+Coord -> SA: Analyze repository
+SA -> SA: Process git history
+SA -> SA: Extract patterns
+SA -> Coord: Return code patterns
+
+note over Coord: Phase 2: Web Research
+Coord -> WS: Search for related patterns
+WS -> WS: Search documentation
+WS -> WS: Filter relevant results
+WS -> Coord: Return web insights
+
+note over Coord: Phase 3: Knowledge Integration
+Coord -> KG: Create knowledge entities
+KG -> KB: Store patterns
+KG -> KB: Store insights
+KG -> Coord: Confirm storage
+
+note over Coord: Phase 4: Report Generation
+Coord -> Coord: Aggregate results
+Coord -> Client: Return comprehensive report
+Client -> U: Display workflow results
+
+U -> Client: get_workflow_status()
+Client -> Coord: Status request
+Coord -> Client: Progress and results
+Client -> U: Show progress
+
+@enduml

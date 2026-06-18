@@ -1,0 +1,59 @@
+{
+	"folders": [
+		{
+			"name": "coding",
+			"path": "."
+		},
+		{
+			"name": "coding-history",
+			"path": ".specstory/history"
+		},
+		{
+			"name": "code-graph-rag",
+			"path": "integrations/code-graph-rag"
+		},
+		{
+			"name": "mcp-constraint-monitor",
+			"path": "integrations/mcp-constraint-monitor"
+		},
+		{
+			"name": "mcp-server-semantic-analysis",
+			"path": "integrations/mcp-server-semantic-analysis"
+		},
+		{
+			"name": "memory-visualizer",
+			"path": "integrations/memory-visualizer"
+		}
+	],
+	"settings": {
+		"debug.console.acceptSuggestionOnEnter": "off",
+		"git.openRepositoryInParentFolders": "always",
+		"git.autoRepositoryDetection": false,
+		"git.detectSubmodules": false,
+		"git.repositoryScanMaxDepth": 0,
+		"git.repositoryScanIgnoredFolders": [
+			"node_modules"
+		],
+		"git.ignoredRepositories": [],
+		"workbench.colorCustomizations": {
+			"activityBar.activeBackground": "#1f6fd0",
+			"activityBar.background": "#1f6fd0",
+			"activityBar.foreground": "#e7e7e7",
+			"activityBar.inactiveForeground": "#e7e7e799",
+			"activityBarBadge.background": "#ee90bb",
+			"activityBarBadge.foreground": "#15202b",
+			"commandCenter.border": "#e7e7e799",
+			"sash.hoverBorder": "#1f6fd0",
+			"statusBar.background": "#1857a4",
+			"statusBar.foreground": "#e7e7e7",
+			"statusBarItem.hoverBackground": "#1f6fd0",
+			"statusBarItem.remoteBackground": "#1857a4",
+			"statusBarItem.remoteForeground": "#e7e7e7",
+			"titleBar.activeBackground": "#1857a4",
+			"titleBar.activeForeground": "#e7e7e7",
+			"titleBar.inactiveBackground": "#1857a499",
+			"titleBar.inactiveForeground": "#e7e7e799"
+		},
+		"peacock.color": "#1857a4"
+	}
+}

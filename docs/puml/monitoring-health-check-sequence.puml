@@ -1,0 +1,111 @@
+@startuml
+!include _standard-style.puml
+
+title Health Check Flow (Coordinator, Watchdog, PSM)
+
+actor "launchd\n(every 60s)" as launchd
+participant "System Monitor\nWatchdog" as Watchdog
+participant "Process State\nManager" as PSM
+database ".live-process-\nregistry.json" as Registry
+participant "Global Service\nCoordinator" as Coordinator
+participant "Dashboard\nService" as Dashboard
+
+== Watchdog Health Check Cycle ==
+
+launchd -> Watchdog : trigger check
+activate Watchdog
+
+Watchdog -> PSM : isServiceRunning('coordinator', 'global')
+activate PSM
+PSM -> Registry : read with lock
+activate Registry
+Registry --> PSM : service data
+deactivate Registry
+PSM --> Watchdog : true/false + health age
+deactivate PSM
+
+alt Coordinator Healthy
+  Watchdog -> PSM : getService('coordinator', 'global')
+  activate PSM
+  PSM --> Watchdog : {pid, lastHealthCheck, ...}
+  deactivate PSM
+
+  Watchdog -> Watchdog : verify PID alive\ncheck health age < 120s
+
+  Watchdog --> launchd : ✅ healthy
+  deactivate Watchdog
+
+else Coordinator Dead or Stale
+  Watchdog -> Watchdog : ❌ needs restart
+
+  Watchdog -> Coordinator : spawn --daemon
+  activate Coordinator
+  Coordinator --> Watchdog : PID
+
+  Watchdog -> PSM : registerService(coordinator, PID)
+  activate PSM
+  PSM -> Registry : write with lock
+  activate Registry
+  Registry --> PSM : success
+  deactivate Registry
+  PSM --> Watchdog : registered
+  deactivate PSM
+
+  Watchdog --> launchd : 🚀 restarted
+  deactivate Watchdog
+end
+
+== Coordinator Health Check Cycle (every 15s) ==
+
+Coordinator -> Coordinator : performHealthCheck()
+activate Coordinator
+
+loop for each managed service
+  Coordinator -> PSM : isServiceRunning(service)
+  activate PSM
+  PSM -> Registry : check PID alive
+  Registry --> PSM : alive/dead
+  PSM --> Coordinator : running status
+  deactivate PSM
+
+  alt Service Healthy
+    Coordinator -> Dashboard : port check / health file
+    Dashboard --> Coordinator : ✅ responding
+
+    Coordinator -> PSM : refreshHealthCheck(service)
+    activate PSM
+    PSM -> Registry : update lastHealthCheck
+    Registry --> PSM : updated
+    deactivate PSM
+
+  else Service Dead
+    Coordinator -> Coordinator : attempt recovery
+    Coordinator -> Dashboard : restart service
+    activate Dashboard
+    Dashboard --> Coordinator : new PID
+
+    Coordinator -> PSM : registerService(new PID)
+    activate PSM
+    PSM -> Registry : register new instance
+    Registry --> PSM : registered
+    deactivate PSM
+  end
+end
+
+Coordinator -> PSM : refreshHealthCheck('coordinator')
+activate PSM
+PSM -> Registry : update coordinator timestamp
+Registry --> PSM : updated
+deactivate PSM
+
+deactivate Coordinator
+
+note over Watchdog, Registry
+  **Key Integration Points:**
+  - Watchdog uses PSM to check coordinator
+  - Coordinator uses PSM to track all services
+  - PSM maintains single source of truth
+  - Both update same registry with file locking
+end note
+
+@enduml

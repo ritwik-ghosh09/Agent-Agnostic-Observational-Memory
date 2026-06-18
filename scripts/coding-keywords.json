@@ -1,0 +1,56 @@
+{
+  "project": "coding",
+  "description": "Minimal Positive Keywords for Coding Infrastructure Classification",
+  "classification_version": "2.3-false-positive-fix",
+  "keywords": {
+    "primary": [
+      "mcp-constraint-monitor", "semantic-analysis-system", "coding infrastructure",
+      "ReliableCodingClassifier", "PathAnalyzer", "KeywordMatcher", "SemanticAnalyzer",
+      "enhanced-transcript-monitor", "generate-proper-lsl-from-transcripts",
+      "post-session-logger", "UKB", "VKB", "CKB",
+      "update_knowledge_base", "view_knowledge_base", "SynchronizationAgent",
+      "constraint monitor", "LSL system", "coding session",
+      "batch facility", "generate-lsl", "ukb-cli.js", "vkb-cli.js"
+    ],
+    "secondary": [
+      "DeduplicationAgent", "DocumentationAgent", "CoordinatorAgent",
+      "WebSearchAgent", "KnowledgeGraphAgent", "SemanticAnalysisAgent",
+      "JSON-RPC", "MQTT broker", "json-rpc server",
+      "vscode-km-copilot",
+      "conversation-analyzer",
+      "knowledge-export", "graphology", "adaptive-classifier",
+      "workflow orchestration", "service orchestration",
+      "agent registry", "universal launcher", "fallback services"
+    ],
+    "file_patterns": [
+      "enhanced-transcript-monitor", "post-session-logger",
+      "reliable-coding-classifier", "semantic-analysis", "mcp-constraint-monitor",
+      "coding-keywords.json", "session-index.json", "ukb-cli.js", "vkb-cli.js"
+    ],
+    "path_patterns": [
+      "/coding/", "/Agentic/coding/", "knowledge-management/",
+      "semantic-analysis-system/", "integrations/mcp-", "src/live-logging/",
+      "bin/coding", "scripts/enhanced-transcript-monitor", "scripts/coding-keywords"
+    ],
+    "mcp_patterns": [
+      "mcp__constraint-monitor", "mcp__semantic-analysis",
+      "determine_insights", "get_system_status", "search_knowledge"
+    ]
+  },
+  "exclusion_patterns": ["brandschutz", "fire safety", "onboarding training", "quiz question", "successfactors"],
+  "classification_rules": {
+    "minimum_score": 4,
+    "primary_weight": 4,
+    "secondary_weight": 2,
+    "file_patterns_weight": 3,
+    "path_patterns_weight": 3,
+    "mcp_patterns_weight": 4,
+    "exclusion_penalty": -5,
+    "processing_timeout_ms": 5
+  },
+  "analysis_focus": [
+    "coding infrastructure development", "LSL system maintenance",
+    "MCP server implementation", "knowledge management workflows",
+    "semantic analysis system", "constraint monitoring"
+  ]
+}

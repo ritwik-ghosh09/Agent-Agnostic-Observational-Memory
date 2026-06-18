@@ -1,0 +1,25 @@
+@startuml
+!include _standard-style.puml
+!theme plain
+title Cross-Project Content Routing
+
+top to bottom direction
+
+rectangle "<project>" as nano {
+  file "session.md" as nano_session
+  file ".redirect-status" as redirect
+}
+
+rectangle "coding" as coding {
+  file "from-<project>.md" as coding_session
+}
+
+component "Monitor" as monitor
+component "Classifier" as classifier
+
+monitor -> classifier : Analyze content
+classifier -> nano_session : <project> content
+classifier -> coding_session : coding content
+classifier -> redirect : Update status
+
+@enduml

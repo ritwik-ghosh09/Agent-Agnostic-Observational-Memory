@@ -1,0 +1,70 @@
+@startuml
+!include _standard-style.puml
+
+title Coding Project - Complete System Architecture
+
+left to right direction
+
+skinparam defaultFontSize 24
+skinparam packageFontSize 26
+skinparam componentFontSize 22
+skinparam arrowThickness 6
+
+' User Interface Layer (positioned left)
+actor "Developer" as dev #FFE6E6
+actor "AI Assistant\n(Claude/Copilot)" as ai #FFE6E6
+
+' Core Real-Time Systems
+package "Core Real-Time Systems" as realtime #E8F5E8 {
+  component "Live Session Logging\n(5-Layer Classification)" as lsl <<core>>
+  component "Constraint Monitoring\n(18 Constraints)" as constraints <<core>>
+  component "Status Line System\n(4-Layer Health)" as status <<core>>
+}
+
+dev -down-> ai : uses
+ai -right-> realtime : all interactions
+
+' Knowledge Management
+package "Knowledge Management" as km #FFF9E6 {
+  component "Continuous Learning\n(Automatic)" as learning <<core>>
+  component "UKB/VKB\n(Manual Capture)" as ukb <<cli>>
+}
+
+realtime -right-> km : feeds content
+
+' LLM Providers
+cloud "LLM Providers" as llm_providers #F8F8F8 {
+  [Groq] as groq
+  [OpenAI] as openai
+  [DMR/llama.cpp] as localllm
+}
+
+lsl -down-> llm_providers : Layer 4\nclassification
+learning -down-> localllm : sensitive\ndata
+
+' MCP Integration Layer
+package "MCP Integration Servers" as mcp #E0E7FF {
+  [Semantic Analysis\n(14 Agents)] as semantic <<mcp>>
+  [Constraint Monitor] as mcp_constraint <<mcp>>
+  [Code Graph RAG] as code_graph <<mcp>>
+}
+
+constraints -down-> mcp_constraint : violations
+
+' Storage Layer
+database "Storage Layer" as storage #F5F5F5 {
+  database "Graph DB\n(Primary Knowledge)\n.data/knowledge-graph/" as graphdb <<primary>>
+  database "Qdrant\n(Docker Vector Search)" as qdrant <<search>>
+  database "SQLite\n(Analytics Only)\n.data/knowledge.db" as sqlite <<analytics>>
+  folder ".specstory/history/\n(Session Logs)" as lsl_logs <<logs>>
+}
+
+' Git-tracked JSON exports
+file ".data/knowledge-export/*.json\n(Git-Tracked)" as json #F9F9F9
+
+km -down-> storage : all knowledge
+lsl -down-> lsl_logs : sessions
+mcp -down-> graphdb : insights
+graphdb <-down-> json : auto-sync\n(5s debounce)
+
+@enduml

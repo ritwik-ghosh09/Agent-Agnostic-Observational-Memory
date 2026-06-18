@@ -1,0 +1,987 @@
+#!/usr/bin/env node
+
+/**
+ * Process State Manager
+ *
+ * Unified registry for tracking all system processes with:
+ * - Atomic file operations via locking
+ * - Session-aware process tracking
+ * - Service type classification (global, per-project, per-session)
+ * - Health monitoring and auto-cleanup
+ */
+
+import { promises as fs } from 'fs';
+import fsSync from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import lockfile from 'proper-lockfile';
+import { runIfMain } from '../lib/utils/esm-cli.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const scriptRoot = path.resolve(__dirname, '..');
+
+class ProcessStateManager {
+  constructor(options = {}) {
+    this.codingRoot = options.codingRoot || process.env.CODING_REPO || scriptRoot;
+    this.registryPath = path.join(this.codingRoot, '.live-process-registry.json');
+    this.lockOptions = {
+      stale: 5000, // Consider lock stale after 5 seconds
+      retries: {
+        retries: 10,       // More retries for concurrent service startups (was 5)
+        minTimeout: 100,
+        maxTimeout: 2000,  // Wait longer between retries (was 1000)
+        factor: 1.5        // Gentler backoff to avoid too-quick exhaustion
+      }
+    };
+  }
+
+  /**
+   * Initialize registry file if it doesn't exist or is invalid
+   */
+  async initialize() {
+    const defaultRegistry = {
+      version: '3.1.0',
+      lastChange: Date.now(),
+      stoppedProjects: {},
+      sessions: {},
+      services: {
+        global: {},
+        projects: {}
+      }
+    };
+
+    try {
+      const content = await fs.readFile(this.registryPath, 'utf8');
+      // Validate JSON content - this throws if invalid/empty
+      JSON.parse(content);
+    } catch {
+      // File doesn't exist, is empty, or contains invalid JSON - create with default structure
+      await fs.writeFile(this.registryPath, JSON.stringify(defaultRegistry, null, 2), 'utf8');
+    }
+  }
+
+  /**
+   * Execute operation with file lock
+   */
+  async withLock(operation) {
+    await this.initialize();
+
+    let release;
+    try {
+      release = await lockfile.lock(this.registryPath, this.lockOptions);
+      const result = await operation();
+      return result;
+    } finally {
+      if (release) {
+        await release();
+      }
+    }
+  }
+
+  /**
+   * Read registry data
+   */
+  async readRegistry() {
+    try {
+      const content = await fs.readFile(this.registryPath, 'utf8');
+      const data = JSON.parse(content);
+      // Ensure structure integrity
+      if (!data.services) data.services = { global: {}, projects: {} };
+      if (!data.services.global) data.services.global = {};
+      if (!data.services.projects) data.services.projects = {};
+      if (!data.sessions) data.sessions = {};
+      return data;
+    } catch {
+      return { services: { global: {}, projects: {} }, sessions: {}, lastChange: 0 };
+    }
+  }
+
+  /**
+   * Write registry data
+   */
+  async writeRegistry(data) {
+    data.lastChange = Date.now();
+    await fs.writeFile(this.registryPath, JSON.stringify(data, null, 2), 'utf8');
+  }
+
+  /**
+   * Register a service
+   *
+   * @param {Object} serviceInfo
+   * @param {string} serviceInfo.name - Service identifier
+   * @param {string} serviceInfo.type - 'global', 'per-project', or 'per-session'
+   * @param {number} serviceInfo.pid - Process ID
+   * @param {string} serviceInfo.script - Script path
+   * @param {string} [serviceInfo.projectPath] - For per-project services
+   * @param {string} [serviceInfo.sessionId] - For per-session services
+   * @param {Object} [serviceInfo.metadata] - Additional metadata
+   */
+  async registerService(serviceInfo) {
+    return this.withLock(async () => {
+      const registry = await this.readRegistry();
+
+      const serviceRecord = {
+        pid: serviceInfo.pid,
+        script: serviceInfo.script,
+        type: serviceInfo.type,
+        startTime: Date.now(),
+        lastHealthCheck: Date.now(),
+        status: 'running',
+        metadata: serviceInfo.metadata || {}
+      };
+
+      if (serviceInfo.type === 'global') {
+        registry.services.global[serviceInfo.name] = serviceRecord;
+      } else if (serviceInfo.type === 'per-project') {
+        if (!serviceInfo.projectPath) {
+          throw new Error('projectPath required for per-project services');
+        }
+        if (!registry.services.projects[serviceInfo.projectPath]) {
+          registry.services.projects[serviceInfo.projectPath] = {};
+        }
+        registry.services.projects[serviceInfo.projectPath][serviceInfo.name] = serviceRecord;
+
+        // Auto-clear stop marker when a new monitor registers (new session resuming)
+        if (registry.stoppedProjects?.[serviceInfo.projectPath]) {
+          delete registry.stoppedProjects[serviceInfo.projectPath];
+        }
+      } else if (serviceInfo.type === 'per-session') {
+        if (!serviceInfo.sessionId) {
+          throw new Error('sessionId required for per-session services');
+        }
+        if (!registry.sessions[serviceInfo.sessionId]) {
+          registry.sessions[serviceInfo.sessionId] = {
+            startTime: Date.now(),
+            services: {}
+          };
+        }
+        registry.sessions[serviceInfo.sessionId].services[serviceInfo.name] = serviceRecord;
+      }
+
+      await this.writeRegistry(registry);
+      return serviceRecord;
+    });
+  }
+
+  /**
+   * Check if a service is currently running
+   */
+  async isServiceRunning(name, type, context = {}) {
+    return this.withLock(async () => {
+      const registry = await this.readRegistry();
+
+      let serviceRecord;
+      if (type === 'global') {
+        serviceRecord = registry.services.global[name];
+      } else if (type === 'per-project' && context.projectPath) {
+        const projectServices = registry.services.projects[context.projectPath];
+        serviceRecord = projectServices ? projectServices[name] : null;
+      } else if (type === 'per-session' && context.sessionId) {
+        const session = registry.sessions[context.sessionId];
+        serviceRecord = session ? session.services[name] : null;
+      }
+
+      if (!serviceRecord) {
+        return false;
+      }
+
+      // Validate process is actually running
+      return this.isProcessAlive(serviceRecord.pid);
+    });
+  }
+
+  /**
+   * Check if a process ID is alive
+   */
+  isProcessAlive(pid) {
+    try {
+      // Sending signal 0 checks if process exists without killing it
+      process.kill(pid, 0);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * Find running processes matching a script pattern (OS-level check)
+   * This is critical for robust singleton enforcement - it catches processes
+   * that may not be registered in PSM (e.g., after crashes)
+   *
+   * @param {string} scriptPattern - Pattern to match in process command line (e.g., "live-logging-coordinator.js")
+   * @param {Object} options - Options for filtering
+   * @param {number} [options.excludePid] - Exclude this PID from results (typically process.pid)
+   * @returns {Promise<Array<{pid: number, command: string}>>} Array of matching processes
+   */
+  async findRunningProcessesByScript(scriptPattern, options = {}) {
+    const { execSync } = await import('child_process');
+    const excludePid = options.excludePid || process.pid;
+
+    try {
+      // Use pgrep to find matching processes
+      const output = execSync(`pgrep -lf "${scriptPattern}" 2>/dev/null || true`, {
+        encoding: 'utf8',
+        timeout: 5000
+      });
+
+      const processes = [];
+      const lines = output.trim().split('\n').filter(line => line.trim());
+
+      for (const line of lines) {
+        const match = line.match(/^(\d+)\s+(.+)$/);
+        if (match) {
+          const pid = parseInt(match[1], 10);
+          const command = match[2];
+
+          // Skip self and excluded PIDs
+          if (pid === process.pid || pid === excludePid) continue;
+
+          // Skip grep/pgrep processes
+          if (command.includes('pgrep') || command.includes('grep')) continue;
+
+          processes.push({ pid, command });
+        }
+      }
+
+      return processes;
+    } catch (error) {
+      // If pgrep fails, return empty (fail open)
+      console.error(`Warning: OS-level process check failed: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Robust singleton check - combines OS-level and PSM checks
+   * Use this to ensure only one instance of a service runs, even after crashes
+   *
+   * @param {string} serviceName - Service identifier for PSM
+   * @param {string} scriptPattern - Pattern to match in process command line
+   * @param {string} type - Service type ('global', 'per-project', 'per-session')
+   * @param {Object} context - Context for per-project/per-session services
+   * @returns {Promise<{canStart: boolean, reason: string, existingPids: number[]}>}
+   */
+  async robustSingletonCheck(serviceName, scriptPattern, type = 'global', context = {}) {
+    // Step 1: Clean up stale PSM entries first
+    await this.cleanupDeadProcesses();
+
+    // Step 2: OS-level check for any matching processes
+    const runningProcesses = await this.findRunningProcessesByScript(scriptPattern);
+
+    if (runningProcesses.length > 0) {
+      return {
+        canStart: false,
+        reason: `OS-level: Found ${runningProcesses.length} running process(es) matching "${scriptPattern}"`,
+        existingPids: runningProcesses.map(p => p.pid),
+        processes: runningProcesses
+      };
+    }
+
+    // Step 3: PSM check (belt-and-suspenders)
+    const isRunning = await this.isServiceRunning(serviceName, type, context);
+
+    if (isRunning) {
+      const service = await this.getService(serviceName, type, context);
+      return {
+        canStart: false,
+        reason: `PSM: Service "${serviceName}" already registered and running`,
+        existingPids: service ? [service.pid] : [],
+        processes: service ? [{ pid: service.pid, command: service.script }] : []
+      };
+    }
+
+    return {
+      canStart: true,
+      reason: 'No existing instance found',
+      existingPids: [],
+      processes: []
+    };
+  }
+
+  /**
+   * Get service information
+   */
+  async getService(name, type, context = {}) {
+    return this.withLock(async () => {
+      const registry = await this.readRegistry();
+
+      if (type === 'global') {
+        return registry.services?.global?.[name] || null;
+      } else if (type === 'per-project' && context.projectPath) {
+        const projectServices = registry.services?.projects?.[context.projectPath];
+        return projectServices ? projectServices[name] || null : null;
+      } else if (type === 'per-session' && context.sessionId) {
+        const session = registry.sessions?.[context.sessionId];
+        return session ? session.services?.[name] || null : null;
+      }
+
+      return null;
+    });
+  }
+
+  /**
+   * Refresh service health check timestamp
+   */
+  async refreshHealthCheck(name, type, context = {}) {
+    return this.withLock(async () => {
+      const registry = await this.readRegistry();
+
+      let serviceRecord;
+      if (type === 'global') {
+        serviceRecord = registry.services.global[name];
+      } else if (type === 'per-project' && context.projectPath) {
+        const projectServices = registry.services.projects[context.projectPath];
+        serviceRecord = projectServices ? projectServices[name] : null;
+      } else if (type === 'per-session' && context.sessionId) {
+        const session = registry.sessions[context.sessionId];
+        serviceRecord = session ? session.services[name] : null;
+      }
+
+      if (serviceRecord) {
+        serviceRecord.lastHealthCheck = Date.now();
+        serviceRecord.status = 'running';
+        await this.writeRegistry(registry);
+        return true;
+      }
+
+      return false;
+    });
+  }
+
+  /**
+   * Unregister a service
+   */
+  async unregisterService(name, type, context = {}) {
+    return this.withLock(async () => {
+      const registry = await this.readRegistry();
+
+      let removed = false;
+      if (type === 'global') {
+        if (registry.services.global[name]) {
+          delete registry.services.global[name];
+          removed = true;
+        }
+      } else if (type === 'per-project' && context.projectPath) {
+        const projectServices = registry.services.projects[context.projectPath];
+        if (projectServices && projectServices[name]) {
+          delete projectServices[name];
+          removed = true;
+          // Clean up empty project entries
+          if (Object.keys(projectServices).length === 0) {
+            delete registry.services.projects[context.projectPath];
+          }
+        }
+      } else if (type === 'per-session' && context.sessionId) {
+        const session = registry.sessions[context.sessionId];
+        if (session && session.services[name]) {
+          delete session.services[name];
+          removed = true;
+        }
+      }
+
+      if (removed) {
+        await this.writeRegistry(registry);
+      }
+
+      return removed;
+    });
+  }
+
+  /**
+   * Clean up dead PIDs from the registry
+   * This prevents stale entries from blocking new service registrations
+   *
+   * @returns {Promise<Object>} Statistics about cleanup: { globalCleaned, projectsCleaned, sessionsCleaned, total }
+   */
+  async cleanupDeadProcesses() {
+    return this.withLock(async () => {
+      const registry = await this.readRegistry();
+      let globalCleaned = 0;
+      let projectsCleaned = 0;
+      let sessionsCleaned = 0;
+
+      // Clean up global services with dead PIDs
+      for (const [serviceName, serviceRecord] of Object.entries(registry.services.global || {})) {
+        if (!this.isProcessAlive(serviceRecord.pid)) {
+          delete registry.services.global[serviceName];
+          globalCleaned++;
+        }
+      }
+
+      // Clean up per-project services with dead PIDs
+      for (const [projectPath, projectServices] of Object.entries(registry.services.projects || {})) {
+        for (const [serviceName, serviceRecord] of Object.entries(projectServices)) {
+          if (!this.isProcessAlive(serviceRecord.pid)) {
+            delete projectServices[serviceName];
+            projectsCleaned++;
+          }
+        }
+        // Remove empty project entries
+        if (Object.keys(projectServices).length === 0) {
+          delete registry.services.projects[projectPath];
+        }
+      }
+
+      // Clean up per-session services with dead PIDs
+      for (const [sessionId, session] of Object.entries(registry.sessions || {})) {
+        for (const [serviceName, serviceRecord] of Object.entries(session.services || {})) {
+          if (!this.isProcessAlive(serviceRecord.pid)) {
+            delete session.services[serviceName];
+            sessionsCleaned++;
+          }
+        }
+        // Remove empty sessions
+        if (Object.keys(session.services || {}).length === 0) {
+          delete registry.sessions[sessionId];
+        }
+      }
+
+      // Clean up expired stop markers
+      let stoppedCleaned = 0;
+      const now = Date.now();
+      if (registry.stoppedProjects) {
+        for (const [projectPath, marker] of Object.entries(registry.stoppedProjects)) {
+          if (marker.expiresAt && now > marker.expiresAt) {
+            delete registry.stoppedProjects[projectPath];
+            stoppedCleaned++;
+          }
+        }
+      }
+
+      const total = globalCleaned + projectsCleaned + sessionsCleaned + stoppedCleaned;
+      if (total > 0) {
+        await this.writeRegistry(registry);
+      }
+
+      return {
+        globalCleaned,
+        projectsCleaned,
+        sessionsCleaned,
+        stoppedCleaned,
+        total
+      };
+    });
+  }
+
+  /**
+   * Register a session
+   */
+  async registerSession(sessionId, metadata = {}) {
+    return this.withLock(async () => {
+      const registry = await this.readRegistry();
+
+      if (!registry.sessions[sessionId]) {
+        registry.sessions[sessionId] = {
+          startTime: Date.now(),
+          services: {},
+          metadata
+        };
+        await this.writeRegistry(registry);
+      }
+
+      return registry.sessions[sessionId];
+    });
+  }
+
+  /**
+   * Cleanup a session and terminate all its services
+   */
+  async cleanupSession(sessionId) {
+    return this.withLock(async () => {
+      const registry = await this.readRegistry();
+
+      const session = registry.sessions[sessionId];
+      if (!session) {
+        return { cleaned: 0, terminated: [] };
+      }
+
+      const terminated = [];
+      let cleaned = 0;
+
+      // Terminate all session services
+      for (const [serviceName, serviceRecord] of Object.entries(session.services)) {
+        try {
+          if (this.isProcessAlive(serviceRecord.pid)) {
+            process.kill(serviceRecord.pid, 'SIGTERM');
+            terminated.push({ name: serviceName, pid: serviceRecord.pid });
+          }
+          cleaned++;
+        } catch (error) {
+          // Process might already be dead
+          cleaned++;
+        }
+      }
+
+      // Remove session from registry
+      delete registry.sessions[sessionId];
+      await this.writeRegistry(registry);
+
+      return { cleaned, terminated };
+    });
+  }
+
+  /**
+   * Alias for cleanupDeadProcesses - removes stale service entries
+   */
+  async cleanupStaleServices() {
+    return this.cleanupDeadProcesses();
+  }
+
+  /**
+   * Mark a project as intentionally stopped (prevents restart loops)
+   *
+   * @param {string} projectPath - Absolute project path
+   * @param {Object} [options]
+   * @param {string} [options.reason] - Why it was stopped (default: 'graceful_shutdown')
+   * @param {string} [options.stoppedBy] - Which service stopped it
+   * @param {number} [options.pid] - PID of the stopped process
+   * @param {number} [options.ttlMs] - Time-to-live in ms (default: 24h)
+   */
+  async stopProject(projectPath, options = {}) {
+    return this.withLock(async () => {
+      const registry = await this.readRegistry();
+      if (!registry.stoppedProjects) {
+        registry.stoppedProjects = {};
+      }
+
+      const ttlMs = options.ttlMs || 24 * 60 * 60 * 1000; // 24h default
+      registry.stoppedProjects[projectPath] = {
+        stoppedAt: Date.now(),
+        expiresAt: Date.now() + ttlMs,
+        reason: options.reason || 'graceful_shutdown',
+        stoppedBy: options.stoppedBy || 'unknown',
+        lastPid: options.pid || null
+      };
+
+      await this.writeRegistry(registry);
+      return true;
+    });
+  }
+
+  /**
+   * Check if a project is intentionally stopped
+   * Returns false if marker is expired or missing (fail-open)
+   *
+   * @param {string} projectPath - Absolute project path
+   * @returns {Promise<boolean>}
+   */
+  async isProjectStopped(projectPath) {
+    try {
+      return await this.withLock(async () => {
+        const registry = await this.readRegistry();
+        const marker = registry.stoppedProjects?.[projectPath];
+
+        if (!marker) return false;
+
+        // Auto-clean expired markers
+        if (marker.expiresAt && Date.now() > marker.expiresAt) {
+          delete registry.stoppedProjects[projectPath];
+          await this.writeRegistry(registry);
+          return false;
+        }
+
+        return true;
+      });
+    } catch {
+      // Fail-open: if check fails, allow restart
+      return false;
+    }
+  }
+
+  /**
+   * Manually clear a project's stop marker
+   *
+   * @param {string} projectPath - Absolute project path
+   * @returns {Promise<boolean>} true if marker was cleared
+   */
+  async clearProjectStop(projectPath) {
+    return this.withLock(async () => {
+      const registry = await this.readRegistry();
+      if (registry.stoppedProjects?.[projectPath]) {
+        delete registry.stoppedProjects[projectPath];
+        await this.writeRegistry(registry);
+        return true;
+      }
+      return false;
+    });
+  }
+
+  /**
+   * Get all stopped projects (for CLI/debugging)
+   *
+   * @returns {Promise<Object>} Map of projectPath -> stop marker
+   */
+  async getStoppedProjects() {
+    return this.withLock(async () => {
+      const registry = await this.readRegistry();
+      const stopped = {};
+      const now = Date.now();
+
+      for (const [projectPath, marker] of Object.entries(registry.stoppedProjects || {})) {
+        if (!marker.expiresAt || now <= marker.expiresAt) {
+          stopped[projectPath] = marker;
+        }
+      }
+
+      return stopped;
+    });
+  }
+
+  /**
+   * Get all services across all types
+   */
+  async getAllServices() {
+    return this.withLock(async () => {
+      return this.readRegistry();
+    });
+  }
+
+  /**
+   * Check database health and lock status
+   */
+  async checkDatabaseHealth() {
+    const health = {
+      levelDB: { available: true, locked: false, lockedBy: null },
+      qdrant: { available: false }
+    };
+
+    // Check Level DB lock
+    const levelDBLockPath = path.join(this.codingRoot, '.data/knowledge-graph/LOCK');
+    try {
+      await fs.access(levelDBLockPath);
+      // Lock file exists - check who owns it
+      const { spawn } = await import('child_process');
+      // Use bare 'lsof' so PATH resolves it correctly. macOS ships it at
+      // /usr/sbin/lsof; Linux (the Docker image) at /usr/bin/lsof. The
+      // hardcoded macOS path was throwing ENOENT inside the container,
+      // crash-looping anything that called this (notably health-verifier).
+      const lsof = spawn('lsof', [levelDBLockPath]);
+
+      let output = '';
+      lsof.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+
+      // Add timeout to prevent lsof from hanging indefinitely (5 second timeout)
+      const LSOF_TIMEOUT_MS = 5000;
+      await new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          lsof.kill('SIGKILL');
+          resolve();
+        }, LSOF_TIMEOUT_MS);
+
+        lsof.on('close', () => {
+          clearTimeout(timeout);
+          resolve();
+        });
+      });
+
+      if (output.trim()) {
+        const lines = output.split('\n').filter(line => line.trim());
+        if (lines.length > 1) {
+          // Parse lsof output: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+          const match = lines[1].match(/\s+(\d+)\s+/);
+          if (match) {
+            const holderPid = parseInt(match[1]);
+            // Locks held by macOS Docker Desktop's VirtualMachine helper
+            // surface as held by that single host PID via virtiofs — even
+            // though the real owner is a process inside a container. Treat
+            // these as healthy: the in-container service has the lock.
+            const holderCmd = (lines[1].split(/\s+/)[0] || '').toLowerCase();
+            const isDockerVm = holderCmd.startsWith('com.apple') ||
+              holderCmd.includes('virtualization') ||
+              holderCmd === 'qemu-system';
+            if (!isDockerVm) {
+              health.levelDB.locked = true;
+              health.levelDB.lockedBy = holderPid;
+            }
+          }
+        }
+      }
+    } catch {
+      // Lock file doesn't exist - database is available
+      health.levelDB.locked = false;
+    }
+
+    // Check Qdrant availability (use QDRANT_URL env var for Docker networking)
+    try {
+      const qdrantBase = process.env.QDRANT_URL || 'http://localhost:6333';
+      const response = await fetch(`${qdrantBase}/readyz`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(2000)
+      });
+      health.qdrant.available = response.ok;
+    } catch {
+      health.qdrant.available = false;
+    }
+
+    return health;
+  }
+
+  /**
+   * Get health status report
+   */
+  async getHealthStatus() {
+    return this.withLock(async () => {
+      const registry = await this.readRegistry();
+      const status = {
+        healthy: 0,
+        unhealthy: 0,
+        total: 0,
+        databases: null,
+        details: {
+          global: [],
+          projects: {},
+          sessions: {}
+        }
+      };
+
+      // Check database health
+      status.databases = await this.checkDatabaseHealth();
+
+      // Check global services
+      for (const [name, service] of Object.entries(registry.services.global)) {
+        status.total++;
+        const alive = this.isProcessAlive(service.pid);
+        if (alive) {
+          status.healthy++;
+        } else {
+          status.unhealthy++;
+        }
+        status.details.global.push({
+          name,
+          pid: service.pid,
+          alive,
+          uptime: Date.now() - service.startTime
+        });
+      }
+
+      // Check per-project services
+      for (const [projectPath, services] of Object.entries(registry.services.projects)) {
+        status.details.projects[projectPath] = [];
+        for (const [name, service] of Object.entries(services)) {
+          status.total++;
+          const alive = this.isProcessAlive(service.pid);
+          if (alive) {
+            status.healthy++;
+          } else {
+            status.unhealthy++;
+          }
+          status.details.projects[projectPath].push({
+            name,
+            pid: service.pid,
+            alive,
+            uptime: Date.now() - service.startTime
+          });
+        }
+      }
+
+      // Check session services
+      for (const [sessionId, session] of Object.entries(registry.sessions)) {
+        status.details.sessions[sessionId] = [];
+        for (const [name, service] of Object.entries(session.services)) {
+          status.total++;
+          const alive = this.isProcessAlive(service.pid);
+          if (alive) {
+            status.healthy++;
+          } else {
+            status.unhealthy++;
+          }
+          status.details.sessions[sessionId].push({
+            name,
+            pid: service.pid,
+            alive,
+            uptime: Date.now() - service.startTime
+          });
+        }
+      }
+
+      // Validate database availability
+      status.databaseIssues = [];
+
+      // Check if Level DB lock is held by unregistered process
+      if (status.databases.levelDB.locked && status.databases.levelDB.lockedBy) {
+        const lockHolderPid = status.databases.levelDB.lockedBy;
+        let isRegistered = false;
+
+        // Check if lock holder is a registered service
+        for (const service of Object.values(registry.services.global)) {
+          if (service.pid === lockHolderPid) {
+            isRegistered = true;
+            break;
+          }
+        }
+
+        if (!isRegistered) {
+          for (const services of Object.values(registry.services.projects)) {
+            for (const service of Object.values(services)) {
+              if (service.pid === lockHolderPid) {
+                isRegistered = true;
+                break;
+              }
+            }
+            if (isRegistered) break;
+          }
+        }
+
+        if (!isRegistered) {
+          for (const session of Object.values(registry.sessions)) {
+            for (const service of Object.values(session.services)) {
+              if (service.pid === lockHolderPid) {
+                isRegistered = true;
+                break;
+              }
+            }
+            if (isRegistered) break;
+          }
+        }
+
+        // Exclude macOS system processes (Docker Virtualization.framework, Spotlight, etc.)
+        // These hold read-only file handles but don't actually lock LevelDB for writes
+        if (!isRegistered) {
+          try {
+            const { execSync } = require('child_process');
+            const comm = execSync(`ps -p ${lockHolderPid} -o comm= 2>/dev/null`, { encoding: 'utf8' }).trim();
+            if (comm.includes('com.apple.') || comm.includes('Virtualization') || comm.includes('mds') || comm.includes('Spotlight')) {
+              isRegistered = true; // Treat system processes as benign
+            }
+          } catch { /* process may have exited */ }
+        }
+
+        if (!isRegistered) {
+          status.databaseIssues.push({
+            type: 'leveldb_lock',
+            severity: 'critical',
+            message: `Level DB locked by unregistered process (PID: ${lockHolderPid})`,
+            pid: lockHolderPid
+          });
+        }
+      }
+
+      // Check Qdrant availability
+      if (!status.databases.qdrant.available) {
+        status.databaseIssues.push({
+          type: 'qdrant_unavailable',
+          severity: 'warning',
+          message: 'Qdrant vector database is not available (http://localhost:6333/readyz failed)'
+        });
+      }
+
+      return status;
+    });
+  }
+}
+
+// CLI support
+const isMainModule = import.meta.url === `file://${process.argv[1]}`;
+
+if (isMainModule) {
+  const manager = new ProcessStateManager();
+
+  const command = process.argv[2];
+
+  (async () => {
+    try {
+      switch (command) {
+        case 'init':
+          await manager.initialize();
+          console.log('✅ Process registry initialized');
+          break;
+
+        case 'status':
+          const status = await manager.getHealthStatus();
+          console.log('\n📊 Process Health Status:');
+          console.log(`   Total: ${status.total} | Healthy: ${status.healthy} | Unhealthy: ${status.unhealthy}\n`);
+
+          console.log('Global Services:');
+          status.details.global.forEach(s => {
+            const icon = s.alive ? '✅' : '❌';
+            const uptime = Math.floor(s.uptime / 1000 / 60);
+            console.log(`   ${icon} ${s.name} (PID: ${s.pid}, uptime: ${uptime}m)`);
+          });
+
+          console.log('\nProject Services:');
+          for (const [project, services] of Object.entries(status.details.projects)) {
+            console.log(`   ${project}:`);
+            services.forEach(s => {
+              const icon = s.alive ? '✅' : '❌';
+              const uptime = Math.floor(s.uptime / 1000 / 60);
+              console.log(`     ${icon} ${s.name} (PID: ${s.pid}, uptime: ${uptime}m)`);
+            });
+          }
+
+          console.log('\nSession Services:');
+          for (const [sessionId, services] of Object.entries(status.details.sessions)) {
+            console.log(`   Session ${sessionId}:`);
+            services.forEach(s => {
+              const icon = s.alive ? '✅' : '❌';
+              const uptime = Math.floor(s.uptime / 1000 / 60);
+              console.log(`     ${icon} ${s.name} (PID: ${s.pid}, uptime: ${uptime}m)`);
+            });
+          }
+          break;
+
+        case 'cleanup':
+          const cleaned = await manager.cleanupDeadProcesses();
+          console.log(`✅ Cleaned up ${cleaned} dead process(es)`);
+          break;
+
+        case 'dump':
+          const registry = await manager.getAllServices();
+          console.log(JSON.stringify(registry, null, 2));
+          break;
+
+        case 'stopped': {
+          const stoppedProjects = await manager.getStoppedProjects();
+          const entries = Object.entries(stoppedProjects);
+          if (entries.length === 0) {
+            process.stdout.write('\n\u2705 No stopped projects\n\n');
+          } else {
+            process.stdout.write(`\n\ud83d\uded1 Stopped Projects (${entries.length}):\n\n`);
+            for (const [projectPath, marker] of entries) {
+              const ago = Math.round((Date.now() - marker.stoppedAt) / 1000 / 60);
+              const expiresIn = Math.round((marker.expiresAt - Date.now()) / 1000 / 60);
+              process.stdout.write(`   ${projectPath}\n`);
+              process.stdout.write(`     Stopped ${ago}m ago by ${marker.stoppedBy} (${marker.reason})\n`);
+              process.stdout.write(`     Expires in ${expiresIn}m | Last PID: ${marker.lastPid || 'unknown'}\n\n`);
+            }
+          }
+          break;
+        }
+
+        case 'unstop': {
+          const targetPath = process.argv[3];
+          if (!targetPath) {
+            process.stderr.write('Usage: node process-state-manager.js unstop <project-path>\n');
+            process.exit(1);
+          }
+          const cleared = await manager.clearProjectStop(targetPath);
+          if (cleared) {
+            process.stdout.write(`\u2705 Cleared stop marker for ${targetPath}\n`);
+          } else {
+            process.stdout.write(`\u2139\ufe0f  No stop marker found for ${targetPath}\n`);
+          }
+          break;
+        }
+
+
+        default:
+          console.log('Process State Manager CLI\n');
+          console.log('Usage: node process-state-manager.js <command>\n');
+          console.log('Commands:');
+          console.log('  init     - Initialize registry file');
+          console.log('  status   - Show health status of all services');
+          console.log('  cleanup  - Remove dead processes from registry');
+          console.log('  dump          - Dump entire registry as JSON');
+          console.log('  stopped       - List intentionally stopped projects');
+          console.log('  unstop <path> - Clear stop marker for a project');
+      }
+    } catch (error) {
+      console.error('❌ Error:', error.message);
+      process.exit(1);
+    }
+  })();
+}
+
+export default ProcessStateManager;

@@ -1,0 +1,699 @@
+'use client'
+
+import React, { useState, useEffect } from 'react'
+import { useAppSelector, useAppDispatch } from '@/store'
+import { triggerVerificationStart } from '@/store/slices/autoHealingSlice'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  Activity,
+  Database,
+  Server,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  RefreshCw,
+  Zap,
+  ExternalLink,
+  Brain,
+  RotateCcw,
+  Terminal
+} from 'lucide-react'
+import HealthStatusCard from './health-status-card'
+import ViolationsTable from './violations-table'
+import SystemChecksTable from './system-checks-table'
+import UKBWorkflowModal from './ukb-workflow-modal'
+import CGRReindexModal from './cgr-reindex-modal'
+import LoggingControl from './logging-control'
+import { openConfirmModal } from '@/store/slices/cgrSlice'
+import { Logger, LogCategories } from '@/utils/logging'
+
+export default function SystemHealthDashboard() {
+  const dispatch = useAppDispatch()
+  const healthStatus = useAppSelector((state) => state.healthStatus)
+  const [ukbModalOpen, setUkbModalOpen] = useState(false)
+  const [loggingControlOpen, setLoggingControlOpen] = useState(false)
+  const [serviceDetailOpen, setServiceDetailOpen] = useState(false)
+  const healthReport = useAppSelector((state) => state.healthReport)
+  const autoHealing = useAppSelector((state) => state.autoHealing)
+  const ukb = useAppSelector((state) => state.ukb)
+  const cgr = useAppSelector((state) => state.cgr)
+
+  // Log component mount
+  useEffect(() => {
+    Logger.info(LogCategories.UI, 'SystemHealthDashboard mounted')
+    return () => {
+      Logger.debug(LogCategories.UI, 'SystemHealthDashboard unmounted')
+    }
+  }, [])
+
+  // Real-time age calculation - updates every second
+  const [currentTime, setCurrentTime] = useState(Date.now())
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now())
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const handleTriggerVerification = () => {
+    dispatch(triggerVerificationStart())
+  }
+
+  const getStatusIcon = () => {
+    switch (healthStatus.overallStatus) {
+      case 'healthy':
+        return <CheckCircle2 className="h-8 w-8 text-green-500" />
+      case 'degraded':
+        return <AlertTriangle className="h-8 w-8 text-yellow-500" />
+      case 'unhealthy':
+        return <XCircle className="h-8 w-8 text-red-500" />
+      default:
+        return <Clock className="h-8 w-8 text-gray-400" />
+    }
+  }
+
+  const getStatusColor = () => {
+    switch (healthStatus.overallStatus) {
+      case 'healthy':
+        return 'bg-green-50 border-green-200'
+      case 'degraded':
+        return 'bg-yellow-50 border-yellow-200'
+      case 'unhealthy':
+        return 'bg-red-50 border-red-200'
+      default:
+        return 'bg-gray-50 border-gray-200'
+    }
+  }
+
+  // Visual refresh countdown (independent of data polling which happens every 500ms)
+  const DISPLAY_REFRESH_SECONDS = 5
+  const [refreshCountdown, setRefreshCountdown] = useState(DISPLAY_REFRESH_SECONDS)
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRefreshCountdown(prev => prev <= 1 ? DISPLAY_REFRESH_SECONDS : prev - 1)
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Map check status to UI status
+  const mapCheckStatus = (check: any): 'operational' | 'warning' | 'error' | 'offline' | 'unknown' => {
+    if (check.status === 'passed') return 'operational'
+    if (check.status === 'warning') return 'warning'
+    if (check.status === 'failed' || check.status === 'error') return 'error'
+    if (check.status === 'unknown') return 'unknown'
+    return 'offline'
+  }
+
+  // Get checks by category
+  const getChecksByCategory = (category: string) => {
+    if (!healthReport.report?.checks) return []
+    return healthReport.report.checks.filter((check: any) => check.category === category)
+  }
+
+  // Build database items from real data
+  const getDatabaseItems = () => {
+    const checks = getChecksByCategory('databases')
+    const items = []
+
+    // LevelDB check
+    const leveldbCheck = checks.find((c: any) => c.check === 'leveldb_lock_check')
+    if (leveldbCheck) {
+      items.push({
+        name: 'LevelDB',
+        status: mapCheckStatus(leveldbCheck),
+        description: 'Graph database',
+        tooltip: leveldbCheck.message + (leveldbCheck.recommendation ? ` - ${leveldbCheck.recommendation}` : '')
+      })
+    }
+
+    // Qdrant check
+    const qdrantCheck = checks.find((c: any) => c.check === 'qdrant_availability')
+    if (qdrantCheck) {
+      items.push({
+        name: 'Qdrant',
+        status: mapCheckStatus(qdrantCheck),
+        description: 'Vector database',
+        tooltip: qdrantCheck.message + (qdrantCheck.recommendation ? ` - ${qdrantCheck.recommendation}` : '')
+      })
+    }
+
+    // CGR Cache check - tracks code-graph-rag index for 'coding' repository
+    const cgrCheck = checks.find((c: any) => c.check === 'cgr_cache')
+    if (cgrCheck) {
+      const commitsBehind = cgrCheck.details?.commits_behind
+      const cachedCommit = cgrCheck.details?.cached_commit
+      const repoName = cgrCheck.details?.repo_name || 'coding'
+      const isReindexing = cgr.reindexStatus === 'running'
+
+      // Description shows repo name and staleness
+      let description = 'Code graph'
+      if (isReindexing) {
+        description = 'Re-indexing coding...'
+      } else if (commitsBehind !== undefined && commitsBehind > 0) {
+        description = `${repoName}: ${commitsBehind} commit${commitsBehind > 1 ? 's' : ''} behind`
+      } else if (cachedCommit && commitsBehind === 0) {
+        description = `${repoName} @ ${cachedCommit.substring(0, 7)} (current)`
+      } else if (cachedCommit) {
+        description = `${repoName} @ ${cachedCommit.substring(0, 7)}`
+      }
+
+      // Tooltip explains scope
+      const scopeNote = 'CGR Cache tracks the code-graph-rag index for coding (including all integrations). Re-indexing rebuilds the AST-based code graph (~33k functions).'
+      const statusNote = cgrCheck.message + (cgrCheck.recommendation ? ` - ${cgrCheck.recommendation}` : '')
+
+      items.push({
+        name: 'CGR Cache',
+        status: mapCheckStatus(cgrCheck),
+        description,
+        tooltip: `${statusNote}\n\n${scopeNote}`,
+        action: {
+          label: isReindexing ? 'Running...' : 'Re-index',
+          icon: <RotateCcw className={`h-3 w-3 mr-1 ${isReindexing ? 'animate-spin' : ''}`} />,
+          onClick: () => dispatch(openConfirmModal()),
+          disabled: isReindexing,
+          variant: 'outline' as const,
+        }
+      })
+    }
+
+    return items
+  }
+
+  // Build service items from real data
+  const getServiceItems = () => {
+    const checks = getChecksByCategory('services')
+    const items = []
+
+    // VKB Server
+    const vkbCheck = checks.find((c: any) => c.check === 'vkb_server')
+    if (vkbCheck) {
+      items.push({
+        name: 'VKB Server',
+        status: mapCheckStatus(vkbCheck),
+        description: 'Port 8080',
+        tooltip: vkbCheck.message + (vkbCheck.recommendation ? ` - ${vkbCheck.recommendation}` : '')
+      })
+    }
+
+    // Constraint Monitor
+    const constraintCheck = checks.find((c: any) => c.check === 'constraint_monitor')
+    if (constraintCheck) {
+      items.push({
+        name: 'Constraint Monitor',
+        status: mapCheckStatus(constraintCheck),
+        description: 'Port 3031',
+        tooltip: constraintCheck.message + (constraintCheck.recommendation ? ` - ${constraintCheck.recommendation}` : '')
+      })
+    }
+
+    // Dashboard
+    const dashboardCheck = checks.find((c: any) => c.check === 'dashboard_server')
+    if (dashboardCheck) {
+      items.push({
+        name: 'Dashboard',
+        status: mapCheckStatus(dashboardCheck),
+        description: 'Port 3030',
+        tooltip: dashboardCheck.message + (dashboardCheck.recommendation ? ` - ${dashboardCheck.recommendation}` : '')
+      })
+    }
+
+    // Semantic Analysis SSE
+    const sseCheck = checks.find((c: any) => c.check === 'semantic_analysis_sse')
+    if (sseCheck) {
+      items.push({
+        name: 'Semantic Analysis',
+        status: mapCheckStatus(sseCheck),
+        description: 'Port 3848',
+        tooltip: sseCheck.message + (sseCheck.recommendation ? ` - ${sseCheck.recommendation}` : '')
+      })
+    }
+
+    return items
+  }
+
+  // Build process items from real data
+  const getProcessItems = () => {
+    const checks = getChecksByCategory('processes')
+    const items = []
+
+    // Stale PIDs check
+    const stalePidsCheck = checks.find((c: any) => c.check === 'stale_pids')
+    if (stalePidsCheck) {
+      items.push({
+        name: 'Stale PIDs',
+        status: mapCheckStatus(stalePidsCheck),
+        description: 'Cleaned automatically',
+        tooltip: stalePidsCheck.message + (stalePidsCheck.recommendation ? ` - ${stalePidsCheck.recommendation}` : '')
+      })
+    }
+
+    // Process Registry (infer from presence of process checks)
+    if (checks.length > 0) {
+      items.unshift({
+        name: 'Process Registry',
+        status: 'operational' as const,
+        description: 'PSM tracking',
+        tooltip: 'Process State Manager (PSM) is operational. Process lifecycle tracking and health monitoring are active.'
+      })
+    }
+
+    return items
+  }
+
+  // Build UKB (Knowledge Base Update) items from UKB state
+  const getUKBItems = () => {
+    const items = []
+
+    // Show running workflows
+    if (ukb.running > 0) {
+      items.push({
+        name: 'Running Workflows',
+        status: 'operational' as const,
+        description: `${ukb.running} active`,
+        tooltip: `${ukb.running} UKB workflow(s) currently running with 13-agent analysis`
+      })
+    }
+
+    // Show stale workflows (warning)
+    if (ukb.stale > 0) {
+      items.push({
+        name: 'Stale Workflows',
+        status: 'warning' as const,
+        description: `${ukb.stale} stale`,
+        tooltip: `${ukb.stale} workflow(s) haven't sent heartbeat in ${ukb.config.staleThresholdSeconds}s`
+      })
+    }
+
+    // Show frozen workflows (error)
+    if (ukb.frozen > 0) {
+      items.push({
+        name: 'Frozen Workflows',
+        status: 'error' as const,
+        description: `${ukb.frozen} frozen`,
+        tooltip: `${ukb.frozen} workflow(s) appear frozen (no activity for ${ukb.config.frozenThresholdSeconds}s)`
+      })
+    }
+
+    // If no workflows, show idle status
+    if (ukb.total === 0) {
+      items.push({
+        name: 'Status',
+        status: 'operational' as const,
+        description: 'Idle',
+        tooltip: `No UKB workflows running. Max concurrent: ${ukb.config.maxConcurrent}`
+      })
+    }
+
+    // Show capacity info
+    items.push({
+      name: 'Capacity',
+      status: ukb.total >= ukb.config.maxConcurrent ? 'warning' as const : 'operational' as const,
+      description: `${ukb.total}/${ukb.config.maxConcurrent} slots`,
+      tooltip: `Using ${ukb.total} of ${ukb.config.maxConcurrent} concurrent workflow slots`
+    })
+
+    return items
+  }
+
+  // Build per-port detail items with timestamps
+  const getPortDetailItems = () => {
+    const checks = getChecksByCategory('services')
+    const portMap: Record<string, { name: string, port: number }> = {
+      'dashboard_server': { name: 'Constraint Dashboard', port: 3030 },
+      'health_dashboard_frontend': { name: 'Health Dashboard UI', port: 3032 },
+      'health_dashboard_api': { name: 'Health Dashboard API', port: 3033 },
+      'semantic_analysis_sse': { name: 'Semantic Analysis SSE', port: 3848 },
+      'vkb_server': { name: 'VKB Server', port: 8080 },
+      'llm_cli_proxy': { name: 'LLM CLI Proxy', port: 12435 },
+    }
+
+    return Object.entries(portMap).map(([checkName, info]) => {
+      const check = checks.find((c: any) => c.check === checkName)
+      const lastChecked = check?.timestamp
+        ? new Date(check.timestamp).toLocaleTimeString()
+        : 'never'
+      return {
+        name: `Port ${info.port}`,
+        status: check ? mapCheckStatus(check) : ('offline' as const),
+        description: info.name,
+        tooltip: check
+          ? `${check.message} | Last checked: ${lastChecked}`
+          : `${info.name} — no check data yet`
+      }
+    })
+  }
+
+  // Phase 34 (D-11): build LLM Proxy Health card items from coordinator's
+  // state.proxy slice (added in Plan 34-02; auto_heal_status driven by the
+  // FSM in Plan 34-03). Reads (healthStatus as any).proxy because the
+  // healthStatus typing has not yet been extended for the new slice —
+  // pragmatic narrowing avoids a type-only follow-up gating this commit.
+  const getProxyHealthItems = () => {
+    const proxy = (healthStatus as any)?.proxy
+    const net = healthStatus.network
+    if (!proxy) {
+      return [{ name: 'Proxy semantic', status: 'offline' as const, description: 'No data yet — coordinator unreachable or proxy slice missing' }]
+    }
+    const semanticStatus: 'operational' | 'warning' | 'error' | 'offline' =
+      proxy.semantic_ok === true ? 'operational' :
+      proxy.semantic_ok === false ? 'error' : 'offline'
+    const cooldownDescription = proxy.auto_heal_status === 'cooldown'
+      ? `cooldown — ${(proxy.kickstart_timestamps?.length ?? '?')}/3 kickstarts in last 5 min`
+      : (proxy.auto_heal_status ?? 'unknown')
+    const autoHealStatus: 'operational' | 'warning' | 'offline' =
+      proxy.auto_heal_status === 'cooldown' ? 'warning' :
+      proxy.auto_heal_status === 'disabled' ? 'offline' : 'operational'
+    return [
+      {
+        name: 'Semantic readiness',
+        status: semanticStatus,
+        description: proxy.last_round_trip_ms != null ? `${proxy.last_round_trip_ms}ms RTT` : 'no data',
+        tooltip: proxy.reason ?? 'OK'
+      },
+      {
+        name: 'Network location',
+        status: (net?.location === 'unknown' ? 'warning' : 'operational') as 'warning' | 'operational',
+        description: ({ corporate: 'Corporate (CN)', vpn: 'VPN', home: 'Home', unknown: 'Unknown' } as Record<string, string>)[net?.location ?? 'unknown'] ?? net?.location ?? 'unknown'
+      },
+      {
+        name: 'Local proxy (px)',
+        status: (net?.proxy_running ? (net?.proxy_functional ? 'operational' : 'error') : (net?.location === 'corporate' ? 'error' : 'offline')) as 'operational' | 'error' | 'offline',
+        description: net?.proxy_running ? (net?.proxy_functional ? 'Running & functional' : 'Running but not functional') : 'Not running'
+      },
+      {
+        name: 'Internet',
+        status: (net?.internet_reachable ? 'operational' : 'error') as 'operational' | 'error',
+        description: net?.internet_reachable ? 'Reachable' : 'Unreachable'
+      },
+      {
+        name: 'Auto-heal',
+        status: autoHealStatus,
+        description: cooldownDescription
+      }
+    ]
+  }
+
+  // Build supervisord process items
+  const getSupervisordItems = () => {
+    const checks = getChecksByCategory('processes')
+    const supervisordCheck = checks.find((c: any) => c.check === 'supervisord_status')
+
+    if (!supervisordCheck?.details?.all_processes) {
+      return [{
+        name: 'Supervisord',
+        status: 'offline' as const,
+        description: 'No data available',
+        tooltip: 'Supervisord status check has not run yet or is not available'
+      }]
+    }
+
+    const processes: Array<{ name: string, status: string, detail: string }> =
+      supervisordCheck.details.all_processes
+
+    return processes.map((proc) => {
+      const uiStatus: 'operational' | 'warning' | 'error' | 'offline' =
+        proc.status === 'RUNNING' ? 'operational' :
+        proc.status === 'STARTING' ? 'warning' :
+        proc.status === 'FATAL' || proc.status === 'BACKOFF' ? 'error' :
+        'offline'
+      return {
+        name: proc.name,
+        status: uiStatus,
+        description: proc.status,
+        tooltip: `${proc.name} (${proc.status}): ${proc.detail}`
+      }
+    })
+  }
+
+  return (
+    <div className="container mx-auto p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">System Health Dashboard</h1>
+          <p className="text-muted-foreground">
+            Real-time monitoring of databases, services, and processes
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleTriggerVerification}
+            disabled={autoHealing.triggeringVerification}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${autoHealing.triggeringVerification ? 'animate-spin' : ''}`} />
+            Run Verification
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <a href="http://localhost:3030" target="_blank" rel="noopener noreferrer">
+              <ExternalLink className="h-4 w-4 mr-2" />
+              Constraint Dashboard
+            </a>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              Logger.info(LogCategories.MODAL, 'Opening Logger configuration modal')
+              setLoggingControlOpen(true)
+            }}
+          >
+            <Terminal className="h-4 w-4 mr-2" />
+            Logger
+          </Button>
+        </div>
+      </div>
+
+      {/* Overall Status Card */}
+      <Card className={`${getStatusColor()} border-2`}>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              {getStatusIcon()}
+              <div>
+                <CardTitle className="text-2xl">
+                  {(healthStatus.overallStatus || 'offline').charAt(0).toUpperCase() + (healthStatus.overallStatus || 'offline').slice(1)}
+                </CardTitle>
+                <CardDescription>
+                  {healthStatus.lastFetch ? (
+                    <>Refreshing in {refreshCountdown}s</>
+                  ) : (
+                    'Connecting...'
+                  )}
+                </CardDescription>
+              </div>
+            </div>
+            <div className="flex gap-4">
+              {autoHealing.enabled && (
+                <Badge variant="outline" className="h-fit">
+                  <Zap className="h-3 w-3 mr-1" />
+                  Auto-Healing Active
+                </Badge>
+              )}
+              {healthStatus.status === 'stale' && healthStatus.ageMs > 120000 && (
+                <Badge variant="destructive" className="h-fit">
+                  <Clock className="h-3 w-3 mr-1" />
+                  Verifier Stale ({Math.floor(healthStatus.ageMs / 60000)}m)
+                </Badge>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="text-center">
+              <div className="text-3xl font-bold">{healthStatus.violationCount}</div>
+              <div className="text-sm text-muted-foreground">Total Violations</div>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-red-500">{healthStatus.criticalCount}</div>
+              <div className="text-sm text-muted-foreground">Critical Issues</div>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-green-500">
+                {healthReport.report ? healthReport.report.summary.passed : 0}
+              </div>
+              <div className="text-sm text-muted-foreground">Checks Passed</div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Error Display */}
+      {healthStatus.error && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>{healthStatus.error}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Health Status Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+        <HealthStatusCard
+          title="Databases"
+          icon={<Database className="h-5 w-5" />}
+          items={getDatabaseItems()}
+        />
+        <HealthStatusCard
+          title="Services"
+          icon={<Server className="h-5 w-5" />}
+          items={getServiceItems()}
+        />
+        <HealthStatusCard
+          title="Processes"
+          icon={<Activity className="h-5 w-5" />}
+          items={getProcessItems()}
+        />
+        <HealthStatusCard
+          title="UKB Workflows"
+          icon={<Brain className="h-5 w-5" />}
+          items={getUKBItems()}
+          clickable={true}
+          onClick={() => setUkbModalOpen(true)}
+        />
+        <HealthStatusCard
+          title="LLM Proxy Health"
+          icon={<Brain className="h-5 w-5 text-purple-500" />}
+          items={getProxyHealthItems()}
+        />
+      </div>
+
+      {/* Service Detail — expandable per-port and per-supervisord-process status */}
+      <Card>
+        <CardHeader
+          className="cursor-pointer"
+          onClick={() => setServiceDetailOpen(!serviceDetailOpen)}
+        >
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Server className="h-5 w-5" />
+            Service Detail
+            <Badge variant="outline" className="ml-auto">
+              {serviceDetailOpen ? 'Collapse' : 'Expand'}
+            </Badge>
+          </CardTitle>
+          <CardDescription>Per-port status and supervisord process list</CardDescription>
+        </CardHeader>
+        {serviceDetailOpen && (
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h3 className="font-semibold mb-3">Port Liveness</h3>
+                <div className="space-y-2">
+                  {getPortDetailItems().map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between" title={item.tooltip}>
+                      <div className="flex items-center gap-2">
+                        {item.status === 'operational'
+                          ? <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          : <XCircle className="h-4 w-4 text-red-500" />}
+                        <span className="text-sm font-medium">{item.name}</span>
+                        <span className="text-xs text-muted-foreground">{item.description}</span>
+                      </div>
+                      <Badge variant={item.status === 'operational' ? 'outline' : 'destructive'}
+                             className={item.status === 'operational' ? 'bg-green-50 text-green-700 border-green-200' : ''}>
+                        {item.status === 'operational' ? 'OK' : 'Down'}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <h3 className="font-semibold mb-3">Supervisord Processes</h3>
+                <div className="space-y-2">
+                  {getSupervisordItems().map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between" title={item.tooltip}>
+                      <div className="flex items-center gap-2">
+                        {item.status === 'operational'
+                          ? <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          : item.status === 'warning'
+                            ? <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                            : <XCircle className="h-4 w-4 text-red-500" />}
+                        <span className="text-sm font-medium">{item.name}</span>
+                      </div>
+                      <Badge variant={item.status === 'operational' ? 'outline' : item.status === 'error' ? 'destructive' : 'outline'}
+                             className={
+                               item.status === 'operational' ? 'bg-green-50 text-green-700 border-green-200' :
+                               item.status === 'warning' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : ''
+                             }>
+                        {item.description}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
+      <Separator />
+
+      {/* Violations Table */}
+      {healthReport.report && healthReport.report.violations.length > 0 && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-2xl font-bold">Active Violations</h2>
+            <p className="text-muted-foreground">Issues detected during health verification</p>
+          </div>
+          <ViolationsTable violations={healthReport.report.violations} />
+        </div>
+      )}
+
+      {/* System Checks Table */}
+      {healthReport.report && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-2xl font-bold">All Health Checks</h2>
+            <p className="text-muted-foreground">
+              {healthReport.report.summary.total_checks} checks performed
+            </p>
+          </div>
+          <SystemChecksTable checks={healthReport.report.checks} />
+        </div>
+      )}
+
+      {/* Recommendations */}
+      {healthReport.report && healthReport.report.recommendations.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Recommendations</CardTitle>
+            <CardDescription>Suggested actions to improve system health</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2">
+              {healthReport.report.recommendations.map((rec, idx) => (
+                <li key={idx} className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 mt-0.5 text-yellow-500" />
+                  <span className="text-sm">{rec}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* UKB Workflow Modal */}
+      <UKBWorkflowModal
+        open={ukbModalOpen}
+        onOpenChange={setUkbModalOpen}
+        processes={ukb.processes || []}
+      />
+
+      {/* CGR Re-index Modal */}
+      <CGRReindexModal />
+
+      {/* Logger Configuration Modal */}
+      <LoggingControl
+        isOpen={loggingControlOpen}
+        onClose={() => setLoggingControlOpen(false)}
+      />
+    </div>
+  )
+}

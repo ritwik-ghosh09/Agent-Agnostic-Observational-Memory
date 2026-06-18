@@ -1,0 +1,57 @@
+@startuml
+!include _standard-style.puml
+
+title Integration Architecture - How Components Connect
+
+top to bottom direction
+
+package "Coding Core System" as core #E8F5E8 {
+  [LSL\nSystem] as lsl <<core>>
+  [Constraint\nMonitoring] as constraints <<core>>
+}
+
+package "MCP Integration Layer" as mcp #E0E7FF {
+  [Semantic\nAnalysis\n(14 Agents)] as semantic <<mcp>>
+  [Constraint\nMonitor] as monitor <<mcp>>
+  [Code Graph\nRAG] as code_graph <<mcp>>
+}
+
+cloud "Fast LLM Providers" as llm #F0F0F0 {
+  [Groq\n(llama-3.3-70b)] as groq <<llm>>
+  [Gemini\n(gemini-2.0-flash)] as gemini <<llm>>
+  [Anthropic\n(claude-haiku)] as anthropic <<llm>>
+  [OpenAI\n(gpt-4o-mini)] as openai <<llm>>
+}
+
+' Connections
+lsl -down-> groq : Layer 4 Classification\n(fast semantic)
+lsl -down-> gemini : Fallback 1
+lsl -down-> anthropic : Fallback 2
+lsl -down-> openai : Fallback 3
+constraints -down-> monitor : PreToolUse Hook
+constraints -down-> semantic : MCP Protocol\n(deep analysis)
+
+note bottom of mcp
+  **MCP Servers** provide:
+  • Standardized tool definitions
+  • Bi-directional communication
+  • Deep analysis capabilities
+end note
+
+note right of lsl
+  **LSL Classification**
+  5-layer system with fast
+  semantic analysis (Layer 4)
+  using Groq/Gemini/Anthropic/OpenAI
+  (NOT the 14-agent MCP server)
+end note
+
+note right of constraints
+  **Deep Semantic Analysis**
+  Constraint Monitoring delegates
+  to MCP Semantic Analysis for
+  cross-file architectural pattern
+  detection beyond per-event rules.
+end note
+
+@enduml

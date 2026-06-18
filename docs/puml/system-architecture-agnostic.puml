@@ -1,0 +1,116 @@
+@startuml system-architecture-agnostic
+!include _standard-style.puml
+
+title Knowledge Management System - Agent-Agnostic Architecture
+
+top to bottom direction
+
+package "Input Sources" {
+  [Git Repository] as git
+  [Conversation Logs] as logs
+  [Project Files] as files
+}
+
+package "Knowledge Capture Layer" {
+  [UKB Command] as ukb
+  [UKB-CLI (Node.js)] as ukbcli
+  [Knowledge API] as kapi
+  [Commit Analysis] as analysis
+  [Semantic Analysis] as semantic
+}
+
+package "Data Storage Layer" {
+  database [GraphDB + LevelDB] as storage
+  note right of storage
+    • Graphology in-memory graph
+    • LevelDB persistence
+    • Team collaboration
+    • Git-tracked exports
+  end note
+}
+
+package "Visualization Layer" {
+  [VKB Command] as vkb
+  [VKB-CLI (Node.js)] as vkbcli
+  [Web Visualizer] as visualizer
+  [Browser Interface] as browser
+}
+
+package "AI Agent Integration" {
+  component [Agent Abstraction Layer] as agentlayer
+  
+  frame "Supported Agents" {
+    [Claude Code] as claude
+    [GitHub Copilot] as copilot
+    [Other AI Agents] as other
+  }
+  
+  frame "Integration Methods" {
+    component [MCP Servers] as mcp
+    note right of mcp
+      • Memory persistence
+      • Browser automation
+      • Tool integration
+    end note
+    
+    component [Fallback Services] as fallback
+    note right of fallback
+      • Graphology memory
+      • Playwright browser
+      • File-based logging
+    end note
+    
+    component [Direct API] as api
+    note right of api
+      • REST/JSON-RPC
+      • CLI commands
+      • Webhooks
+    end note
+  }
+}
+
+package "Semantic Analysis System" {
+  [Multi-Agent Network] as agents
+  [LLM Providers] as llm
+  [Web Search] as search
+  [Knowledge Graph] as graph
+}
+
+' Input connections
+git --> analysis : Commit data
+logs --> semantic : Conversation data
+files --> semantic : Code analysis
+
+' Knowledge capture flow
+analysis --> ukbcli : Insights
+semantic --> ukbcli : Patterns
+ukb --> ukbcli : Delegates to
+ukbcli --> kapi : API calls
+kapi --> storage : Updates
+
+' Visualization flow
+storage --> vkbcli : Read
+vkb --> vkbcli : Delegates to
+vkbcli --> visualizer : Serve
+visualizer --> browser : Display
+
+' Agent integration
+claude --> mcp : Native integration
+copilot --> fallback : Compatibility layer
+other --> api : Generic interface
+
+agentlayer --> mcp : Route requests
+agentlayer --> fallback : Fallback mode
+agentlayer --> api : Direct calls
+
+mcp --> storage : Sync
+fallback --> storage : Sync
+api --> storage : Read/Write
+
+' Semantic analysis integration
+agents --> storage : Knowledge entities
+llm --> agents : Analysis
+search --> agents : Research
+graph --> storage : Relationships
+
+@enduml

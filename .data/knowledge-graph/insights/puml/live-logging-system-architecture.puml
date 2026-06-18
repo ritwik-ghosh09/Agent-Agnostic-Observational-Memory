@@ -1,0 +1,25 @@
+@startuml
+!include /coding/docs/puml/_standard-style.puml
+
+package "Live Logging System" {
+  component "Logging Module" as logging <<core>>
+  component "Ontology Classification Agent" as agent <<agent>>
+  component "LSL Config Validator" as validator <<cli>>
+  component "Transcript Adapter" as adapter <<api>>
+}
+
+package "Data Processing" {
+  component "MCP Server Semantic Analysis" as mcp <<core>>
+  component "Graph-Code RAG Analysis" as graph <<external>>
+  component "Constraint Monitor" as monitor <<external>>
+}
+
+logging --> agent : uses
+agent --> adapter : processes
+adapter --> logging : provides
+validator --> logging : configures
+mcp --> logging : uses
+graph --> mcp : integrated
+monitor --> mcp : monitors
+
+@enduml

@@ -1,0 +1,61 @@
+@startuml
+!include _standard-style.puml
+
+title Status Line System & Visual Feedback
+
+top to bottom direction
+
+package "Data Sources" {
+  [Constraint Monitor] as constraint
+  [Semantic Analysis] as semantic  
+  [Live Session Files] as sessions
+  [Service Status] as services
+  [Redirect Status Files] as redirect
+}
+
+package "Status Line Engine" {
+  [Combined Status Line] as combined
+  [Time Calculation] as timing
+  [Color Logic] as colors
+  [Cache Manager] as cache
+  [Redirect Timeout Logic] as redirect_timeout
+  [Enhanced Regex Detection] as regex
+}
+
+package "Visual Output" {
+  [Status Display] as display
+  [Color Indicators] as indicators
+  [Warning System] as warnings
+}
+
+' Data flow
+constraint --> combined : Compliance score
+semantic --> combined : Operational status
+sessions --> combined : Current session file
+services --> combined : Service health
+redirect --> combined : Redirect status & timestamp
+sessions --> regex : Session file names
+regex --> combined : Enhanced session detection
+combined --> timing : Session time range
+combined --> redirect_timeout : Redirect timestamp
+redirect_timeout --> combined : Dynamic flag visibility
+timing --> colors : Minutes remaining
+colors --> indicators : Visual coding
+cache --> combined : Performance optimization
+
+' Output generation  
+indicators --> display : Final status line
+warnings --> display : Alert notifications
+combined --> display : Text formatting
+
+note right of display : **Status Line Format**\n🛡️ 8.5 🔍EX 🧠 ✅ 🔀→coding 📋1330-1430-session\n\n**Components:**\n• 🛡️ 8.5: Constraint compliance\n• 🔍EX: Experimentation mode\n• 🧠 ✅: Semantic analysis status\n• 🔀→coding: Dynamic redirect flag (3min timeout)\n• 📋: Session indicator
+
+note right of timing : **Time Calculation**\n• Parse session: "1330-1430"\n• Extract end time: 14:30\n• Calculate remaining minutes\n• Apply color thresholds
+
+note right of colors : **Color Logic**\n**Normal (>5 min):** 📋1330-1430-session\n**Warning (≤5 min):** 📋🟠1330-1430-session(3min)\n**Ended (≤0 min):** 📋🔴1330-1430-session(ended)
+
+note right of regex : **Enhanced Regex Detection**\nHandles multiple session file patterns:\n• 2025-09-05_1530-1630-session.md\n• 2025-09-05_1530-1630_coding-session-from-<project>.md\n• 2025-09-05_1530-1630-session-from-coding.md
+
+note right of redirect_timeout : **Dynamic Redirect Flag**\nShows 🔀→coding only when:\n• Redirect status file exists\n• Timestamp < 3 minutes old\n• Automatically hides after timeout
+
+@enduml

@@ -1,0 +1,197 @@
+# Multi-stage Dockerfile for coding-services container
+# Contains all MCP servers (HTTP/SSE) and web services
+
+# ============================================================
+# Stage 1: Base image with Node.js 22 + Python 3.12 (via uv)
+# ============================================================
+FROM node:22-bookworm AS base
+
+# Install system dependencies (Python provided via uv below)
+RUN apt-get update && apt-get install -y \
+    supervisor \
+    curl \
+    git \
+    build-essential \
+    cmake \
+    lsof \
+    default-jre-headless \
+    graphviz \
+    plantuml \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv for Python dependency management
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+
+# Install Python 3.12 via uv (required by code-graph-rag which needs Python>=3.12)
+RUN uv python install 3.12
+
+WORKDIR /coding
+
+# ============================================================
+# Stage 2: Node.js dependencies
+# ============================================================
+FROM base AS node-deps
+
+# Copy root package files
+COPY package.json package-lock.json ./
+
+# Install root dependencies first (includes @rapid/llm-proxy from github:fwornle/rapid-llm-proxy)
+RUN npm ci --ignore-scripts || npm install --ignore-scripts
+
+# Install platform-specific native binaries for fastembed tokenizers
+# npm ci --ignore-scripts skips downloading the correct platform binary,
+# so we install it explicitly for the Docker build platform (linux-arm64 or linux-x64)
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then \
+      npm install @anush008/tokenizers-linux-arm64-gnu --no-save 2>/dev/null || true; \
+    else \
+      npm install @anush008/tokenizers-linux-x64-gnu --no-save 2>/dev/null || true; \
+    fi
+
+# Copy and install each integration's dependencies separately
+COPY integrations/mcp-server-semantic-analysis/package*.json ./integrations/mcp-server-semantic-analysis/
+RUN cd integrations/mcp-server-semantic-analysis && npm install --ignore-scripts --legacy-peer-deps 2>/dev/null || true
+
+COPY integrations/mcp-constraint-monitor/package*.json ./integrations/mcp-constraint-monitor/
+RUN cd integrations/mcp-constraint-monitor && npm install --ignore-scripts 2>/dev/null || true
+
+COPY integrations/mcp-constraint-monitor/dashboard/package*.json ./integrations/mcp-constraint-monitor/dashboard/
+RUN cd integrations/mcp-constraint-monitor/dashboard && npm install 2>/dev/null || true
+
+COPY integrations/system-health-dashboard/package*.json ./integrations/system-health-dashboard/
+RUN cd integrations/system-health-dashboard && npm install --ignore-scripts 2>/dev/null || true
+
+# ============================================================
+# Stage 3: Python dependencies
+# ============================================================
+FROM base AS python-deps
+
+WORKDIR /coding/integrations/code-graph-rag
+
+# Copy all Python project files (needed for editable install)
+COPY integrations/code-graph-rag/ ./
+
+# Create virtual environment with Python 3.12 and install dependencies
+RUN uv venv --python 3.12 .venv && \
+    . .venv/bin/activate && \
+    uv pip install -e "." && \
+    uv pip install -e ".[treesitter-full]" || true
+
+# Embedding model for KG operators
+WORKDIR /coding/integrations/mcp-server-semantic-analysis
+RUN uv venv --python 3.12 .embedding-venv && \
+    . .embedding-venv/bin/activate && \
+    uv pip install sentence-transformers numpy && \
+    python3 -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+
+# ============================================================
+# Stage 4: Build TypeScript projects
+# ============================================================
+FROM node-deps AS builder
+
+# Copy all source code
+COPY integrations/ ./integrations/
+COPY src/ ./src/
+COPY lib/ ./lib/
+COPY knowledge-management/insights/ ./knowledge-management/insights/
+COPY scripts/ ./scripts/
+COPY config/ ./config/
+COPY tsconfig.json ./
+
+# Install VKB server dependencies
+RUN cd lib/vkb-server && npm install --ignore-scripts 2>/dev/null || true
+
+# Install LLM service dependencies
+RUN cd lib/llm && npm install --ignore-scripts 2>/dev/null || true
+
+# Re-install integration deps after source COPY (node-deps stage installs may
+# have been overwritten by COPY integrations/ since .dockerignore excludes node_modules)
+RUN cd integrations/mcp-constraint-monitor && npm install --ignore-scripts 2>/dev/null || true
+RUN cd integrations/mcp-constraint-monitor/dashboard && npm install 2>/dev/null || true
+RUN cd integrations/mcp-server-semantic-analysis && npm install --ignore-scripts --legacy-peer-deps 2>/dev/null || true
+
+# Patch broken JSDoc comment in @rapid/llm-proxy network-detect.js
+# The comment contains "utun*/" which prematurely closes the /* block, breaking ESM parsing
+# Fix: replace everything before the first import statement with a clean comment
+RUN for f in $(find integrations/*/node_modules/@rapid/llm-proxy/dist -name "network-detect.js" 2>/dev/null); do \
+      sed -i '1,/^import/{ /^import/!d }' "$f" && \
+      sed -i '1i // Network Detection Module (patched: broken JSDoc removed)' "$f"; \
+    done 2>/dev/null || true
+
+# Rebuild native bindings for the container's architecture
+RUN npm rebuild better-sqlite3 classic-level 2>/dev/null || true
+
+# Build TypeScript projects (run build in each directory)
+RUN cd lib/llm && npm run build 2>/dev/null || true
+RUN cd integrations/mcp-server-semantic-analysis && npm run build 2>/dev/null || true
+RUN cd integrations/system-health-dashboard && npm run build 2>/dev/null || true
+
+# Build Constraint Dashboard (Next.js on port 3030)
+RUN cd integrations/mcp-constraint-monitor/dashboard && \
+    CONSTRAINT_DASHBOARD_PORT=3030 CONSTRAINT_API_PORT=3031 \
+    ./node_modules/.bin/next build 2>/dev/null || true
+
+# Pre-warm Node fastembed cache so embedding-listener doesn't need to fetch
+# from storage.googleapis.com on first boot. fastembed pings the bucket on
+# every init() — without proxy egress (NO_PROXY=qdrant,redis,...) the lookup
+# fails ENOTFOUND and the listener crashes into supervisord FATAL.
+# Use HTTP_PROXY from the build env if present so this works on networks
+# requiring a corporate proxy.
+WORKDIR /coding
+RUN mkdir -p /coding/local_cache && \
+    cd integrations/mcp-server-semantic-analysis && \
+    node --input-type=module -e "import('fastembed').then(m=>m.FlagEmbedding.init({model:m.EmbeddingModel.AllMiniLML6V2,cacheDir:'/coding/local_cache'})).then(()=>process.stderr.write('[Dockerfile] fastembed cache warmed\n')).catch(e=>{process.stderr.write('[Dockerfile] fastembed pre-warm failed: '+e.message+'\n');process.exit(0)})"
+
+# ============================================================
+# Stage 5: Production image
+# ============================================================
+FROM base AS production
+
+WORKDIR /coding
+
+# Copy Node.js modules and builds
+COPY --from=builder /coding/node_modules ./node_modules
+COPY --from=builder /coding/integrations ./integrations
+COPY --from=builder /coding/src ./src
+COPY --from=builder /coding/lib ./lib
+COPY --from=builder /coding/scripts ./scripts
+COPY --from=builder /coding/config ./config
+COPY --from=builder /coding/knowledge-management ./knowledge-management
+# Pre-warmed fastembed model cache (see "Pre-warm Node fastembed cache" in builder)
+COPY --from=builder /coding/local_cache ./local_cache
+
+# Copy Python virtual environments
+COPY --from=python-deps /coding/integrations/code-graph-rag/.venv ./integrations/code-graph-rag/.venv
+COPY --from=python-deps /coding/integrations/mcp-server-semantic-analysis/.embedding-venv ./integrations/mcp-server-semantic-analysis/.embedding-venv
+COPY integrations/code-graph-rag/ ./integrations/code-graph-rag/
+
+# Copy configuration files
+COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Copy .env.example as template
+COPY .env.example ./.env.example
+
+# Create data directories
+RUN mkdir -p /coding/.data /coding/.specstory /coding/.health
+
+# Environment variables for service ports
+ENV SEMANTIC_ANALYSIS_PORT=3848 \
+    BROWSER_ACCESS_PORT=3847 \
+    CONSTRAINT_MONITOR_PORT=3849 \
+    CODE_GRAPH_RAG_PORT=3850 \
+    VKB_PORT=8080 \
+    HEALTH_DASHBOARD_PORT=3032 \
+    HEALTH_DASHBOARD_WS_PORT=3033
+
+# Expose all service ports
+EXPOSE 3030 3031 3032 3033 3847 3848 3849 3850 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf", "-n"]

@@ -1,0 +1,87 @@
+@startuml
+!include _standard-style.puml
+
+title Conversation-Based Redirect Detection - Data Flow
+
+top to bottom direction
+
+package "Transcript Data Sources" {
+  [Transcript Entry] as TranscriptEntry
+  [Working Directory (cwd)] as WorkingDir
+  [Tool Call Data] as ToolCalls
+  [User Prompts] as UserPrompts
+}
+
+package "Context Tracking" {
+  [Working Directory Tracker] as DirTracker
+  [Conversation State] as ConvState
+  [Path Resolution Engine] as PathResolver
+}
+
+package "Analysis Engine" {
+  [Conversation Analyzer] as ConvAnalyzer
+  [Coding Activity Detector] as CodingDetector
+  [Relative Path Resolver] as RelativeResolver
+}
+
+package "Decision Logic" {
+  [Redirect Decision] as RedirectDecision
+  [File Routing Logic] as RoutingLogic
+  [Context-Aware Detection] as ContextDetection
+}
+
+package "Output Actions" {
+  [LSL File Creation] as LSLCreation
+  [Status Line Update] as StatusUpdate
+  [Redirect Flag Management] as RedirectFlag
+}
+
+' Data Flow
+TranscriptEntry --> ConvAnalyzer
+WorkingDir --> DirTracker 
+ToolCalls --> ConvAnalyzer
+UserPrompts --> ConvAnalyzer
+
+' Context Resolution
+DirTracker --> ConvState
+ConvState --> PathResolver
+ConvAnalyzer --> RelativeResolver
+
+' Enhanced Detection Logic
+ConvAnalyzer --> CodingDetector
+RelativeResolver --> CodingDetector
+ConvState --> ContextDetection
+
+' Decision Process
+CodingDetector --> RedirectDecision
+ContextDetection --> RedirectDecision
+RedirectDecision --> RoutingLogic
+
+' Output Actions
+RoutingLogic --> LSLCreation
+RoutingLogic --> StatusUpdate
+RoutingLogic --> RedirectFlag
+
+note right of PathResolver
+  **v3.0 Innovation**
+  Resolves relative paths using
+  working directory context
+  from transcript metadata
+end note
+
+note right of CodingDetector
+  **Multi-layer Detection**
+  1. Current dir contains '/coding'
+  2. Resolved paths reference coding  
+  3. Persistent context throughout session
+end note
+
+note right of RedirectFlag
+  **Dynamic Flag Management**
+  • Real-time flag activation
+  • Automatic 3-minute timeout
+  • No persistent ghost flags
+  • Clear visual feedback
+end note
+
+@enduml

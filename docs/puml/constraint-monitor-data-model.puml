@@ -1,0 +1,178 @@
+@startuml constraint-monitor-data-model
+!include _standard-style.puml
+
+
+title Constraint Monitor Data Model & Storage
+
+top to bottom direction
+
+package "Qdrant (Docker Vector Database)" as qdrant_pkg {
+  entity "constraint_events" {
+    --
+    id : UUID <<PK>>
+    --
+    event_uuid : STRING
+    session_id : STRING
+    agent : STRING
+    event_type : STRING
+    constraint_id : STRING
+    violation_severity : INT
+    embedding : VECTOR[384]
+    content : TEXT
+    timestamp : TIMESTAMP
+    resolution : TEXT
+  }
+  
+  entity "violation_patterns" {
+    --
+    id : UUID <<PK>>
+    --
+    pattern_type : STRING
+    embedding : VECTOR[384]
+    frequency : INT
+    success_rate : FLOAT
+    avg_resolution_time : INT
+    context_keywords : TEXT[]
+  }
+}
+
+package "DuckDB (Analytics)" as duckdb_pkg {
+  entity "events" {
+    --
+    uuid : STRING <<PK>>
+    --
+    session_id : STRING
+    agent : STRING
+    event_type : STRING  
+    constraint_id : STRING
+    violation_severity : INT
+    timestamp : TIMESTAMP
+    content : TEXT
+    processed : BOOLEAN
+  }
+  
+  entity "violations" {
+    --
+    id : BIGINT <<PK>>
+    --
+    event_uuid : STRING <<FK>>
+    constraint_id : STRING
+    severity : STRING
+    message : TEXT
+    resolved : BOOLEAN
+    resolution_time : INT
+    intervention_applied : BOOLEAN
+  }
+  
+  entity "sessions" {
+    --
+    session_id : STRING <<PK>>
+    --
+    agent : STRING
+    start_time : TIMESTAMP
+    end_time : TIMESTAMP
+    total_events : INT
+    violations_count : INT
+    compliance_score : FLOAT
+  }
+  
+  entity "compliance_metrics" {
+    --
+    date : DATE <<PK>>
+    hour : INT <<PK>>
+    --
+    total_events : INT
+    violation_count : INT
+    compliance_percentage : FLOAT
+    intervention_count : INT
+  }
+}
+
+package "Redis (Cache)" as redis_pkg {
+  entity "analysis_cache" {
+    --
+    key : STRING <<PK>>
+    --
+    content_hash : STRING
+    analysis_result : JSON
+    embedding : VECTOR[384]
+    ttl : INT
+    created_at : TIMESTAMP
+  }
+  
+  entity "violation_queue" {
+    --
+    violation_id : STRING <<PK>>
+    --
+    event_data : JSON
+    priority : INT
+    status : STRING
+    created_at : TIMESTAMP
+    expires_at : TIMESTAMP
+  }
+}
+
+package "SQLite (Configuration)" as sqlite_pkg {
+  entity "constraints" {
+    --
+    id : STRING <<PK>>
+    --
+    type : STRING
+    severity : STRING
+    matcher : TEXT
+    message : TEXT
+    correction_action : STRING
+    enabled : BOOLEAN
+    created_at : TIMESTAMP
+  }
+  
+  entity "adapters" {
+    --
+    name : STRING <<PK>>
+    --
+    agent_type : STRING
+    config : JSON
+    enabled : BOOLEAN
+    last_heartbeat : TIMESTAMP
+  }
+}
+
+' Relationships
+events ||--o{ violations : "event_uuid"
+sessions ||--o{ events : "session_id"
+events }o--|| compliance_metrics : "aggregated"
+
+constraint_events ||--|| events : "uuid"
+violation_patterns ||--o{ constraint_events : "pattern_match"
+
+analysis_cache ||--|| constraint_events : "cached_analysis"
+violation_queue }o--|| violations : "queued_violation"
+
+constraints ||--o{ violations : "constraint_id"
+
+' Performance notes
+note right of constraint_events
+  <b>Qdrant Performance</b>
+  • HNSW index on embedding
+  • Quantization enabled
+  • <3ms similarity queries
+  • Auto-replication for HA
+end note
+
+note right of events  
+  <b>DuckDB Performance</b>
+  • Columnar storage
+  • Parallel query execution
+  • <5ms analytical queries
+  • Automatic optimization
+end note
+
+note right of analysis_cache
+  <b>Redis Performance</b>  
+  • In-memory storage
+  • <1ms cache hits
+  • LRU eviction policy
+  • Pub/sub for real-time updates
+end note
+
+@enduml

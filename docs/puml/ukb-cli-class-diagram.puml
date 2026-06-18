@@ -1,0 +1,190 @@
+@startuml ukb-cli-class-diagram
+!include _standard-style.puml
+
+title UKB Unified CLI Class Diagram (v2.0)
+
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor<<cli>> #FFE8F4
+  BackgroundColor<<command>> #E8F4FD
+  BackgroundColor<<core>> #E8F5E8
+  BackgroundColor<<client>> #FFF9E6
+  BackgroundColor<<util>> #F0F0F0
+}
+
+class UKBCli <<cli>> {
+  - checkpointManager: TeamCheckpointManager
+  - gapAnalyzer: GapAnalyzer
+  - configManager: ConfigManager
+  --
+  + constructor()
+  + parseArgs(argv: string[]): ParsedArgs
+  + run(): Promise<void>
+  + showHelp(): void
+  + showVersion(): void
+  + defaultCommand(): Promise<void>
+  + statusCommand(): Promise<void>
+  + checkpointCommand(): Promise<void>
+  + entityCommand(action: string, args: any): Promise<void>
+  + relationCommand(action: string, args: any): Promise<void>
+}
+
+class VkbApiClient <<client>> {
+  - baseUrl: string
+  - timeout: number
+  - logger: Logger
+  --
+  + constructor(baseUrl: string, options: Options)
+  + isServerAvailable(): Promise<boolean>
+  + getEntities(params: QueryParams): Promise<Entity[]>
+  + searchEntities(query: string, params: QueryParams): Promise<Entity[]>
+  + createEntity(entity: EntityData, params: SaveParams): Promise<Entity>
+  + updateEntity(name: string, updates: Partial<Entity>, params: SaveParams): Promise<Entity>
+  + deleteEntity(name: string, params: SaveParams): Promise<void>
+  + getRelations(params: QueryParams): Promise<Relation[]>
+  + createRelation(relation: RelationData, params: SaveParams): Promise<Relation>
+  + deleteRelation(from: string, to: string, params: SaveParams): Promise<void>
+}
+
+class TeamCheckpointManager <<core>> {
+  - checkpointsDir: string
+  - configManager: ConfigManager
+  --
+  + getLastCheckpoint(projectKey: string): Promise<Checkpoint>
+  + saveCheckpoint(projectKey: string, data: CheckpointData): Promise<void>
+  + clearCheckpoint(projectKey: string): Promise<void>
+  + getAllCheckpoints(): Promise<Map<string, Checkpoint>>
+}
+
+class GapAnalyzer <<core>> {
+  - checkpointManager: TeamCheckpointManager
+  - configManager: ConfigManager
+  --
+  + identifyGaps(projectKey: string): Promise<Gap[]>
+  + shouldProcess(item: string, lastCheckpoint: Date): boolean
+  + calculateMissing(checkpoint: Checkpoint): number
+}
+
+class WorkflowOrchestrator <<core>> {
+  - apiClient: VkbApiClient
+  - gapAnalyzer: GapAnalyzer
+  - checkpointManager: TeamCheckpointManager
+  --
+  + executeIncrementalUpdate(projectKey: string): Promise<Result>
+  + executeFullUpdate(projectKey: string): Promise<Result>
+  + executeWithRetry(operation: Function, maxRetries: number): Promise<any>
+}
+
+class ConfigManager <<util>> {
+  - configPath: string
+  - config: Configuration
+  --
+  + get(key: string, defaultValue?: any): any
+  + set(key: string, value: any): void
+  + getServerUrl(): string
+  + getProjectKey(): string
+  + save(): Promise<void>
+  + load(): Promise<void>
+}
+
+class Logger <<util>> {
+  - level: string
+  - colors: boolean
+  --
+  + error(message: string, meta?: object): void
+  + warn(message: string, meta?: object): void
+  + info(message: string, meta?: object): void
+  + debug(message: string, meta?: object): void
+}
+
+package "Command Handlers" <<command>> {
+  class EntityCommand {
+    - codingRepo: string
+    - config: object
+    - graphDB: GraphDatabaseService
+    --
+    + list(options: object): Promise<Entity[]>
+    + show(name: string, options: object): Promise<Entity>
+    + create(entity: EntityData, options: object): Promise<Entity>
+    + update(name: string, updates: Partial<Entity>, options: object): Promise<Entity>
+    + delete(name: string, options: object): Promise<void>
+    + search(query: string, options: object): Promise<Entity[]>
+    + close(): Promise<void>
+  }
+
+  class RelationCommand {
+    - codingRepo: string
+    - config: object
+    - graphDB: GraphDatabaseService
+    --
+    + list(options: object): Promise<Relation[]>
+    + show(from: string, to: string, options: object): Promise<Relation[]>
+    + create(relation: RelationData, options: object): Promise<Relation>
+    + update(from: string, to: string, updates: object, options: object): Promise<Relation>
+    + delete(from: string, to: string, options: object): Promise<void>
+    + findRelated(entity: string, options: object): Promise<object[]>
+    + close(): Promise<void>
+  }
+
+  class RoutingDecision {
+    - apiClient: VkbApiClient
+    --
+    + checkServerAvailability(): Promise<boolean>
+    + route(operation: Operation): Promise<Result>
+  }
+}
+
+class Entity {
+  + name: string
+  + entityType: string
+  + observations: string[]
+  + significance: number
+  + created: string
+  + updated: string
+}
+
+class Relation {
+  + from: string
+  + to: string
+  + relationType: string
+  + significance: number
+  + created: string
+}
+
+class Checkpoint {
+  + projectKey: string
+  + lastRun: string
+  + processedCount: number
+  + metadata: object
+}
+
+' Relationships
+UKBCli --> TeamCheckpointManager : uses
+UKBCli --> GapAnalyzer : uses
+UKBCli --> ConfigManager : uses
+UKBCli --> EntityCommand : delegates
+UKBCli --> RelationCommand : delegates
+
+EntityCommand --> VkbApiClient : uses
+EntityCommand --> RoutingDecision : uses
+EntityCommand ..> Entity : manages
+
+RelationCommand --> VkbApiClient : uses
+RelationCommand --> RoutingDecision : uses
+RelationCommand ..> Relation : manages
+
+RoutingDecision --> VkbApiClient : checks
+
+WorkflowOrchestrator --> VkbApiClient : uses
+WorkflowOrchestrator --> GapAnalyzer : uses
+WorkflowOrchestrator --> TeamCheckpointManager : uses
+
+TeamCheckpointManager --> ConfigManager : uses
+TeamCheckpointManager ..> Checkpoint : manages
+
+GapAnalyzer --> TeamCheckpointManager : uses
+GapAnalyzer --> ConfigManager : uses
+
+VkbApiClient --> Logger : uses
+
+@enduml

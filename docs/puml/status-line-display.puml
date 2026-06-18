@@ -1,0 +1,64 @@
+@startuml
+!include _standard-style.puml
+!theme plain
+title Status Line Display States
+
+top to bottom direction
+
+rectangle "Status Line Components" {
+  rectangle "Constraint\nMonitoring" as Constraint {
+    label "🛡️ 8.5" as Shield
+  }
+  
+  rectangle "Experimentation\nMode" as Experiment {
+    label "🔍EX" as Search
+  }
+  
+  rectangle "Semantic\nAnalysis" as Semantic {
+    label "🧠 ✅" as Brain
+  }
+  
+  rectangle "Content\nRedirection" as Redirect {
+    label "🔀→coding" as Arrow
+  }
+  
+  rectangle "Network\nLocation" as NetLoc {
+    label "[N:VPN]" as NetBadge
+  }
+  
+  rectangle "Proxy\nStatus" as ProxyStat {
+    label "[P:ON]" as ProxyBadge
+  }
+  
+  rectangle "Session\nStatus" as Session {
+    rectangle "Normal State" {
+      label "📋1530-1630-session" as Normal
+    }
+    rectangle "Warning State" {
+      label "📋🟠1530-1630(5min)" as Warning
+    }
+    rectangle "Ended State" {  
+      label "📋🔴1530-1630(ended)" as Ended
+    }
+  }
+}
+
+rectangle "Data Sources" {
+  component "Combined Status Line\nScript" as StatusScript
+  database ".services-running.json" as Services
+  database ".redirect-status" as RedirectFile
+  database ".specstory/history" as History
+  database "Health coordinator\n:3034 /health/state" as CoordState
+}
+
+StatusScript -> Services : Check service health
+StatusScript -> RedirectFile : Check routing status
+StatusScript -> History : Find current session
+StatusScript -> Session : Calculate time remaining
+StatusScript -> CoordState : Network location\n+ proxy status
+
+' Status line updates every 5 seconds. Project detection via TRANSCRIPT_SOURCE_PROJECT, Current working directory, Coding repo directory
+
+' Timing Logic: Over 5 min (Normal display), Under 5 min (Orange warning), Past end (Red ended)
+
+@enduml

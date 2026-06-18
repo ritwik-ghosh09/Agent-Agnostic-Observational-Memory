@@ -1,0 +1,138 @@
+@startuml constraint-monitor-intervention
+!include _standard-style.puml
+
+
+title Real-time Constraint Intervention Sequence
+
+actor "User" as user
+participant "Claude Code" as claude
+participant "Pre-Hook" as prehook
+box "Constraint Monitor" #LightBlue
+  participant "HTTP API" as api
+  participant "Constraint Detector" as detector
+  participant "Qdrant DB\n(Docker)" as qdrant
+  participant "Live Guide Rails" as rails
+end box
+participant "WebSocket Dashboard" as dashboard
+
+== Pre-Action Constraint Check ==
+
+user -> claude : "Delete all files in /tmp"
+activate claude
+
+note right of claude : Claude prepares to\nexecute rm command
+
+claude -> prehook : check_constraints(action)
+activate prehook
+
+prehook -> api : POST /api/pre-check
+activate api
+note right of api : <2s timeout for\nreal-time response
+
+api -> detector : detectViolations(event)
+activate detector
+
+detector -> detector : pattern_matching()
+note right of detector : Quick pattern check:\n"destructive-file-ops"
+
+detector -> qdrant : searchSimilar(embedding)
+activate qdrant
+qdrant --> detector : similar_violations[]
+deactivate qdrant
+
+detector --> api : violations: ["destructive-action"]
+deactivate detector
+
+api -> rails : assessRisk(violations)
+activate rails
+
+rails -> rails : calculate_risk_score()
+note right of rails : High risk score: 9/10\nBulk file deletion
+
+rails --> api : risk: {level: "high", shouldBlock: true}
+deactivate rails
+
+api --> prehook : {shouldBlock: true, message: "Destructive action detected"}
+deactivate api
+
+prehook --> claude : BLOCK with message
+deactivate prehook
+
+claude --> user : "⚠️ Constraint violation: Bulk file deletion requires confirmation"
+deactivate claude
+
+note right of user
+  <b>User sees immediate feedback</b>
+  Total latency: <2s
+  • Pattern check: <10ms
+  • Vector search: <3ms  
+  • Risk assessment: <5ms
+  • Network + processing: <100ms
+end note
+
+== User Confirmation Flow ==
+
+user -> claude : "Yes, proceed with deletion"
+activate claude
+
+claude -> prehook : check_constraints(confirmed_action)
+activate prehook
+
+prehook -> api : POST /api/pre-check
+activate api
+
+api -> rails : injectConstraintContext(prompt, confirmed=true)
+activate rails
+
+rails -> rails : update_violation_queue()
+note right of rails : Mark violation as\nuser-acknowledged
+
+rails --> api : {shouldBlock: false, context_injected: true}
+deactivate rails
+
+api --> prehook : {shouldBlock: false}
+deactivate api
+
+prehook --> claude : ALLOW
+deactivate prehook
+
+claude -> claude : execute_action()
+claude --> user : "Files deleted successfully"
+
+note right of rails : Real-time dashboard\nupdates via WebSocket
+
+rails -> dashboard : violation_resolved event
+dashboard -> dashboard : update_metrics()
+
+deactivate claude
+
+== Post-Action Learning ==
+
+claude -> api : POST /api/events (conversation_captured)
+activate api
+
+api -> detector : analyzePattern(resolved_violation)
+activate detector
+
+detector -> qdrant : storeResolution(embedding, outcome)
+activate qdrant
+qdrant --> detector : stored
+deactivate qdrant
+
+detector --> api : pattern_learned
+deactivate detector
+
+api -> dashboard : learning_update
+dashboard -> dashboard : show_compliance_improvement()
+
+deactivate api
+
+note over user, dashboard
+  <b>System Learning</b>
+  • Violation patterns stored in Qdrant
+  • User preferences learned
+  • Future similar requests handled better
+  • Dashboard shows improved compliance
+end note
+
+@enduml

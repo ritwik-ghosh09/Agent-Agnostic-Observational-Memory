@@ -1,0 +1,227 @@
+import { Snowflake } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { AgentBadge } from '@/components/agent-badge'
+import { renderWithRedactionStyling } from '@/components/markdown-text'
+import { ClipboardButton } from '@/components/clipboard-button'
+
+const AGENT_BORDER_COLORS: Record<string, string> = {
+  claude: 'border-l-blue-500',
+  copilot: 'border-l-green-500',
+  opencode: 'border-l-cyan-500',
+  mastra: 'border-l-fuchsia-500',
+}
+
+interface LlmTokens {
+  input: number
+  output: number
+  total: number
+}
+
+export interface Observation {
+  id: string
+  content: string
+  agent: string
+  project: string
+  sessionId: string
+  timestamp: string
+  source: string
+  llmModel?: string
+  llmProvider?: string
+  llmTokens?: string | LlmTokens | null
+  llmLatencyMs?: number | null
+  quality?: 'high' | 'normal' | 'low'
+  /** Phase 35: 'cold' rows from JSON cold store, 'sqlite' from primary DB. */
+  _origin?: 'cold' | 'sqlite'
+}
+
+interface ObservationCardProps {
+  observation: Observation
+  isExpanded: boolean
+  onToggle: () => void
+  compact?: boolean
+}
+
+function formatTimestamp(iso: string, short = false): string {
+  try {
+    const d = new Date(iso)
+    if (short) {
+      return d.toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    }
+    return d.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return iso
+  }
+}
+
+function getSummary(content: string, maxLen = 120): string {
+  // Strip markdown formatting for preview
+  const clean = content.replace(/^#{1,3}\s+/gm, '').replace(/\*\*(.+?)\*\*/g, '$1')
+  const firstLine = clean.split('\n').find(l => l.trim().length > 0) || ''
+  if (firstLine.length <= maxLen) return firstLine
+  return firstLine.slice(0, maxLen) + '...'
+}
+
+/** HTML-escape so redaction tokens like <USER_ID_REDACTED> render as text
+ *  instead of being parsed as unknown HTML elements (and disappearing). */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+/** Render basic markdown to HTML (bold, headers, inline code, backtick blocks).
+ *  Escapes raw HTML first so user-supplied angle brackets — including redaction
+ *  tokens — survive the round trip and stay visible. Redaction tokens
+ *  (e.g. <USER_ID_REDACTED>) are styled as smaller light-blue inline spans
+ *  so paths/sentences containing them stay readable. */
+function renderMarkdown(text: string): string {
+  return escapeHtml(text)
+    .replace(/^### (.+)$/gm, '<strong class="text-sm">$1</strong>')
+    .replace(/^## (.+)$/gm, '<strong class="text-base">$1</strong>')
+    .replace(/^# (.+)$/gm, '<strong class="text-lg">$1</strong>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 bg-muted rounded text-xs font-mono">$1</code>')
+    .replace(/^- /gm, '• ')
+    .replace(/^(Intent|Approach|Artifacts|Result|Outcome|Status):/gm, '<strong>$1:</strong>')
+    // Style redaction tokens AFTER the escapeHtml pass turned `<X>` into `&lt;X&gt;`.
+    .replace(/&lt;([A-Z][A-Z0-9_]*_REDACTED)&gt;/g,
+      '<span class="text-[0.78em] text-sky-400/80">&lt;$1&gt;</span>')
+}
+
+function formatLlmTag(obs: Observation): string | null {
+  if (!obs.llmModel && !obs.llmProvider) return null
+  const model = obs.llmModel || '?'
+  const provider = obs.llmProvider || '?'
+  return `${model}@${provider}`
+}
+
+function parseTokens(raw: string | LlmTokens | null | undefined): LlmTokens | null {
+  if (!raw) return null
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw) } catch { return null }
+  }
+  return raw
+}
+
+export function ObservationCard({ observation, isExpanded, onToggle, compact }: ObservationCardProps) {
+  const borderColor = AGENT_BORDER_COLORS[observation.agent] || 'border-l-blue-500'
+  const llmTag = formatLlmTag(observation)
+  const tokens = parseTokens(observation.llmTokens)
+  const isLow = observation.quality === 'low'
+
+  if (compact && !isExpanded) {
+    // Single-line compact row
+    return (
+      <div
+        className={`flex items-center gap-2 px-3 py-1 cursor-pointer rounded hover:bg-accent/50 border-l-2 ${borderColor} ${isLow ? 'opacity-40' : ''}`}
+        onClick={onToggle}
+      >
+        <AgentBadge agent={observation.agent} />
+        <span className="text-[11px] text-muted-foreground whitespace-nowrap flex items-center gap-1">
+          {observation._origin === 'cold' && (
+            <Snowflake className="w-3 h-3 text-sky-400/80 shrink-0" aria-label="From cold storage"><title>Older than retention window — served from JSON cold store.</title></Snowflake>
+          )}
+          {formatTimestamp(observation.timestamp, true)}
+        </span>
+        {observation.project && (
+          <span className="text-[11px] text-muted-foreground/60 whitespace-nowrap">
+            {observation.project}
+          </span>
+        )}
+        <span className="text-[11px] text-foreground/70 truncate flex-1 min-w-0">
+          {renderWithRedactionStyling(getSummary(observation.content, 200), `summary-${observation.id}`)}
+        </span>
+        {llmTag && (
+          <span className="text-[10px] text-muted-foreground/40 font-mono whitespace-nowrap">
+            {llmTag}
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <Collapsible open={isExpanded} onOpenChange={onToggle}>
+      <Card
+        className={`transition-colors overflow-hidden ${isLow ? 'opacity-40' : ''} ${
+          isExpanded
+            ? `bg-accent border-l-[3px] ${borderColor}`
+            : 'hover:bg-accent/50'
+        }`}
+      >
+        <CollapsibleTrigger asChild>
+          <div className="px-4 py-3 cursor-pointer">
+            <div className="flex items-center gap-3 mb-0.5">
+              <AgentBadge agent={observation.agent} />
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                {observation._origin === 'cold' && (
+                  <Snowflake className="w-3.5 h-3.5 text-sky-400/80 shrink-0" aria-label="From cold storage"><title>Older than retention window — served from JSON cold store.</title></Snowflake>
+                )}
+                {formatTimestamp(observation.timestamp)}
+              </span>
+              {observation.project && (
+                <span className="text-xs text-muted-foreground">
+                  {observation.project}
+                </span>
+              )}
+              {llmTag && (
+                <span className="text-[10px] text-muted-foreground/60 font-mono ml-auto">
+                  {llmTag}
+                </span>
+              )}
+              {isExpanded && (
+                <ClipboardButton
+                  text={observation.content}
+                  className={llmTag ? '' : 'ml-auto'}
+                  title="Copy observation"
+                />
+              )}
+            </div>
+            {!isExpanded && (
+              <p className="text-sm text-foreground/80 truncate">
+                {renderWithRedactionStyling(getSummary(observation.content), `headline-${observation.id}`)}
+              </p>
+            )}
+          </div>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="pt-0 pb-4">
+            <div
+              className="whitespace-pre-wrap text-sm [&_strong]:font-semibold [&_code]:text-xs"
+              style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(observation.content) }}
+            />
+            {/* LLM details footer */}
+            {(llmTag || tokens) && (
+              <div className="mt-3 pt-2 border-t border-border/50 flex items-center gap-4 text-[11px] text-muted-foreground/60 font-mono">
+                {llmTag && <span>{llmTag}</span>}
+                {tokens && (
+                  <>
+                    <span>{tokens.input} in</span>
+                    <span>{tokens.output} out</span>
+                    <span>{tokens.total} total</span>
+                  </>
+                )}
+                {observation.llmLatencyMs && (
+                  <span>{observation.llmLatencyMs}ms</span>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
+  )
+}

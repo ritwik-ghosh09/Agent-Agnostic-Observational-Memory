@@ -1,0 +1,193 @@
+@startuml
+!include _standard-style.puml
+
+title Service Startup with PSM Integration
+
+actor User
+participant "launch-{agent}.sh" as LaunchScript
+participant "tmux-session-wrapper.sh" as TmuxWrapper
+participant "start-services.sh" as StartScript
+participant "Global Service\nCoordinator" as Coordinator
+participant "Process State\nManager" as PSM
+database ".live-process-\nregistry.json" as Registry
+participant "Constraint\nDashboard" as Dashboard
+participant "StatusLine\nHealth Monitor" as SLM
+
+== Claude Session Startup ==
+
+User -> LaunchScript : coding --claude / --copilot
+activate LaunchScript
+
+LaunchScript -> LaunchScript : generate SESSION_ID\nsetup trap handlers
+
+LaunchScript -> PSM : registerSession(SESSION_ID, $$)
+activate PSM
+PSM -> Registry : write session with lock
+Registry --> PSM : registered
+deactivate PSM
+
+LaunchScript -> StartScript : start all services
+activate StartScript
+
+== Pre-Startup Cleanup ==
+
+StartScript -> StartScript : cleanupDanglingProcesses()
+note right
+  **Crash Recovery**
+  1. Kill orphaned transcript monitors
+  2. Kill orphaned live-logging coordinators
+  3. Clean stale PSM entries
+  4. Ensure fresh start
+end note
+
+StartScript -> StartScript : pkill -f "enhanced-transcript-monitor.js"
+StartScript -> StartScript : pkill -f "live-logging-coordinator.js"
+
+StartScript -> PSM : cleanupStaleServices()
+activate PSM
+PSM -> Registry : remove dead PIDs
+Registry --> PSM : ✅ cleaned
+deactivate PSM
+
+== Service Startup ==
+
+StartScript -> PSM : isServiceRunning('vkb-server')
+activate PSM
+PSM -> Registry : check if exists
+Registry --> PSM : false
+deactivate PSM
+
+StartScript -> StartScript : spawn vkb-server
+StartScript --> StartScript : new PID
+
+note right
+  **VKB Lazy Initialization:**
+  1. Express server starts immediately
+  2. /health returns {status: 'starting'}
+  3. DB init runs in background
+  4. /health returns {status: 'ready'}
+end note
+
+StartScript -> StartScript : GET /health
+note right: Health check passes immediately\n(status: starting or ready)
+
+StartScript -> PSM : registerService('vkb-server', PID)
+activate PSM
+PSM -> Registry : write with lock
+Registry --> PSM : registered
+deactivate PSM
+
+StartScript --> LaunchScript : services started
+deactivate StartScript
+
+LaunchScript -> Coordinator : verify running
+Coordinator --> LaunchScript : ✅ healthy
+
+LaunchScript -> TmuxWrapper : source + tmux_session_wrapper
+activate TmuxWrapper
+TmuxWrapper -> TmuxWrapper : create tmux session\nconfigure status-right
+TmuxWrapper --> User : agent starts inside tmux\nwith unified status bar
+deactivate TmuxWrapper
+deactivate LaunchScript
+
+== Coordinator Manages Dashboard ==
+
+Coordinator -> Coordinator : ensureGlobalServices()
+activate Coordinator
+
+Coordinator -> PSM : isServiceRunning('constraint-dashboard')
+activate PSM
+PSM -> Registry : check if exists
+Registry --> PSM : false
+deactivate PSM
+
+Coordinator -> Dashboard : spawn service
+activate Dashboard
+Dashboard --> Coordinator : PID
+
+Coordinator -> PSM : registerService({name, PID, type: 'global'})
+activate PSM
+PSM -> Registry : write with lock
+Registry --> PSM : registered
+deactivate PSM
+
+Coordinator -> Dashboard : health check (port 3030)
+Dashboard --> Coordinator : ✅ responding
+
+Coordinator -> PSM : refreshHealthCheck('constraint-dashboard')
+activate PSM
+PSM -> Registry : update lastHealthCheck
+Registry --> PSM : updated
+deactivate PSM
+
+deactivate Coordinator
+
+== StatusLine Health Monitor Singleton ==
+
+Coordinator -> PSM : isServiceRunning('statusline-health-monitor')
+activate PSM
+PSM -> Registry : check if exists
+Registry --> PSM : false (not running)
+deactivate PSM
+
+Coordinator -> SLM : spawn daemon\n(--daemon --auto-heal)
+activate SLM
+SLM --> Coordinator : PID
+
+SLM -> PSM : registerService({name, type: 'global'})
+activate PSM
+PSM -> Registry : write with lock
+Registry --> PSM : registered
+deactivate PSM
+
+note right of SLM
+  **Singleton Pattern:**
+  - Checks PSM before start
+  - Blocks if already running
+  - --force to kill and take over
+  - Unregisters on shutdown
+end note
+
+SLM -> SLM : start health refresh\n(every 30s)
+
+== Session Cleanup ==
+
+User -> LaunchScript : Ctrl+C / exit
+activate LaunchScript
+
+LaunchScript -> LaunchScript : trap EXIT handler
+
+LaunchScript -> PSM : cleanupSession(SESSION_ID)
+activate PSM
+
+loop for each session service
+  PSM -> PSM : get service PID
+  PSM -> PSM : kill PID (SIGTERM → SIGKILL)
+  PSM -> Registry : unregister service
+end
+
+PSM -> Registry : remove session entry
+Registry --> PSM : cleaned
+deactivate PSM
+
+LaunchScript --> User : session ended
+deactivate LaunchScript
+
+note over StartScript, Registry
+  **PSM Integration Benefits:**
+  - Duplicate prevention via isServiceRunning()
+  - Session-aware tracking
+  - Atomic registration with file locking
+  - Auto-cleanup on session end
+  - Health check timestamps
+end note
+
+note over Coordinator, Dashboard
+  **Coordinator Benefits:**
+  - Services registered in PSM immediately
+  - Health checks update PSM timestamps
+  - Unified view with watchdog
+  - No registry conflicts
+end note
+
+@enduml

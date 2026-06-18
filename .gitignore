@@ -1,0 +1,290 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Machine-specific MCP config (contains absolute paths)
+claude-code-mcp-docker.json
+
+# Playwright MCP server artifacts (page snapshots, console logs)
+.playwright-mcp/
+
+# Editor directories and files
+.idea
+.vscode/*
+!.vscode/settings.json
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+/logs/
+# Note: Use /logs/ (with leading slash) to only match top-level logs directory.
+# Classification logs now live in the private history repo at
+# .specstory/history/logs/classification/ (covered by line 53).
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+
+# Backup files
+*.bak
+*.backup
+
+# Local configuration (includes .claude/settings.local.json with platform-specific paths)
+*.local
+.claude/settings.local.json
+
+# Claude Code Agent-tool isolation worktrees (transient — created per-agent,
+# deleted automatically when the agent makes no changes; only the path/branch
+# is reported on completion).
+.claude/worktrees/
+
+# Runtime heartbeat written by the consolidator while it's processing — pid +
+# timestamps + last error message. Refreshed every few seconds; not source.
+.observations/consolidation-heartbeat.json
+
+# Cache directories
+.cache/
+__pycache__/
+.serena/cache/
+
+# Prevent future staging/committing of these large files
+.specstory/archive/
+.obsolete/workflow-archives/specstory-archive/2025-10-05_0800-0900_g9b30a.md
+
+# Session-history is private — verbatim Claude transcripts that may contain
+# secrets, internal paths, or stakeholder names. Lives in a separate private
+# repo (see install.sh + bin/init-history.sh, and CODING_HISTORY_REPO in
+# .env). The folder is created locally by init-history.sh so LSL services
+# don't crash on a fresh public checkout, but its contents are never
+# committed to this repo.
+.specstory/history/
+
+# Knowledge base data (if you want to exclude the actual data)
+# Uncomment the line below if you don't want to track the knowledge base content
+# /knowledge-management/coding-knowledge-base/
+
+# claude mcp servers etc. (fw-250601)
+node_modules/
+dist/
+
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+
+# Python virtual environments
+venv/
+**/venv/
+integrations/mcp-server-semantic-analysis/venv/
+
+# MCP configuration (contains processed paths and secrets)
+claude-code-mcp.json.bak
+claude-code-mcp.json.template
+claude-code-mcp-processed.json
+
+# Installation artifacts
+install.log
+.activate
+
+# VSCode extension build artifacts
+integrations/vscode-km-copilot/*.vsix
+
+# Process ID files and lock files
+*.pid
+*.lock
+.pids/
+
+# Legacy shared memory files (deprecated - now using .data/knowledge-export/)
+# shared-memory*.json
+
+# CoPilot fallback service runtime data
+.coding-tools/
+
+# Cross-agent session state (runtime, per-project)
+.coding/
+
+# Version tracking files (synchronization agent backups)
+.versions/
+
+# Service status and runtime files
+.services-running.json
+vkb-server.log
+semantic-analysis.log
+
+# MCP Constraint Monitor now standalone - no local ignore patterns needed
+
+# Browserbase MCP server (cloned from public repo, not a submodule)
+integrations/mcp-server-browserbase/
+
+# Live logging runtime data
+.mcp-sync/
+.transcript-monitor-health
+.global-lsl-registry.json
+.specstory/trajectory/live-state.json
+
+# Centralized health monitoring files
+.health/
+
+# Workflow checkpoints (timestamps that change frequently but don't need git tracking)
+.data/workflow-checkpoints.json
+.data/workflow-progress.json
+.data/workflow-runner-progress.json
+
+# Workflow execution configs (per-run configs with unique IDs)
+.data/workflow-configs/
+
+# LLM usage cost tracking (runtime, written by BudgetTracker)
+.data/llm-usage-costs.json
+.data/llm-usage-costs.json.tmp
+
+# Batch processing runtime state
+.data/batch-*.json
+.data/ukb-*.json
+.data/ukb-trace-reports/
+.data/step-timing-statistics.json
+
+# Ontology suggestions (runtime-generated, not needed in git)
+.data/ontologies/suggestions/
+
+# Code graph RAG index (binary, regenerated on indexing)
+.data/code-graph-index/
+
+# Workflow execution reports and logs (generated on each UKB run, not needed in git)
+.data/workflow-reports/
+.data/trace-history/
+.data/workflow-logs/
+
+# 4-Layer Monitoring Architecture runtime files
+.global-service-registry.json
+.mcp-sync/session-registry.json
+*-report-*.json
+.specstory/validation-report.json
+.specstory/change-log.json
+.specstory/logs/*
+# Classification logs moved into the private history repo at
+# .specstory/history/logs/classification/ (covered by .specstory/history/ at line 53).
+# .specstory/logs/ itself remains for runtime artifacts (system.log, metrics-*.json).
+.logs/
+scripts/monitoring-*.log
+scripts/watchdog-*.log
+*-health-*.json
+
+# Browser access logs
+integrations/browser-access/logs/
+
+# Database files
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# MCP Memory LevelDB (volatile runtime data)
+# Ignore binary database files, but track insight diagrams
+.data/knowledge-graph/*
+!.data/knowledge-graph/insights/
+.data/knowledge-graph/insights/*
+!.data/knowledge-graph/insights/puml/
+!.data/knowledge-graph/insights/images/
+.data/knowledge.db
+.data/knowledge.db-shm
+.data/knowledge.db-wal
+.data/backups/
+
+# Track knowledge exports (git-reviewable JSON)
+!.data/
+!.data/knowledge-export/
+!.data/observation-export/
+!.data/llm-proxy-export/
+!.data/knowledge-config.json
+
+# Per-machine local — proxy settings (dashboard's Settings dialog persists
+# routing choices here; should NOT be shared across clones).
+.data/llm-proxy/llm-settings.json
+
+# PlantUML validation errors (transient, regenerated on diagram validation)
+knowledge-management/insights/plantuml_errors.json
+
+# Package lock files (optional - some prefer to track these)
+package-lock.json
+**/package-lock.json
+
+# Build and compiled files
+build/
+dist/
+*.tsbuildinfo
+
+# Compiled TypeScript output (should only be in dist/)
+src/**/*.js
+src/**/*.d.ts
+!src/**/*.test.js
+!src/**/*.spec.js
+!src/retrieval/**/*.js
+!src/hooks/**/*.js
+
+# Editor and IDE files (.vscode/ already ignored above with explicit exception
+# for settings.json so the workspace SCM ignore-list ships with the repo)
+.vscode/launch.json
+
+# Temporary and swap files
+*.tmp
+*.temp
+.tmp/
+# Process state registry (volatile runtime data)
+.live-process-registry.json
+.process-state/
+
+# Windows artifacts
+nul
+
+# Duplicate memory-visualizer directory (proper location is integrations/memory-visualizer)
+/memory-visualizer/
+.data/session-shutdowns.json
+
+# Test: This comment mentions .data/knowledge-export/ and .data/knowledge-graph/
+# If constraint is file-path-only, this edit should succeed!
+# Adding another test line to verify constraint is still working
+# Final test after proper service restart - mentions .data/knowledge-export/ again
+# SUCCESS: After fixing filePath passing bug, constraint now works correctly!
+
+# Runtime-generated Docker configs
+docker/config/
+
+# MkDocs build output
+site/
+
+# Coding infrastructure runtime files (auto-added by coding startup)
+.constraint-monitor.yaml
+.browser-profiles/
+
+# Coding infrastructure runtime files (auto-added by coding startup)
+logs/
+!.specstory/history/logs/
+!.specstory/logs/
+
+# Observation memory (mastra plugin)
+# Track config, ignore DB files (already covered by *.db rule)
+!.observations/
+!.observations/config.json
+.observations/*.db
+.observations/*.db-shm
+.observations/*.db-wal
+.observations/*.db.corrupted*
+.observations/*.db.recovered*
+.observations/*.db.partial*
+.observations/*.db.empty*
+
+# OpenCode plugin local state
+.opencode/
+
+# fastembed ONNX model cache
+local_cache/
+
+# Per-machine sentinels for cadence-guarded consolidator passes
+.data/last-compaction-*.iso
+.data/last-verification-*.iso

@@ -1,0 +1,79 @@
+@startuml semantic-analysis-data-compact
+!include _standard-style.puml
+
+title Data Architecture - Core Schemas
+
+class Entity {
+  +id: string
+  +name: string
+  +entityType: EntityType
+  +significance: number (1-10)
+  +observations: string[]
+  +metadata: EntityMetadata
+}
+
+class Relation {
+  +id: string
+  +from: string
+  +to: string
+  +relationType: RelationType
+  +metadata: RelationMetadata
+}
+
+class AnalysisResult {
+  +analysisType: AnalysisType
+  +timestamp: Date
+  +source: string
+  +significance: number
+  +insights: Insight[]
+  +entities: Entity[]
+  +relations: Relation[]
+}
+
+class SearchResult {
+  +query: string
+  +url: string
+  +title: string
+  +relevanceScore: number
+  +source: SearchProvider
+}
+
+enum EntityType {
+  Pattern
+  Insight
+  Technology
+  Reference
+  ArchitecturalPattern
+  WorkflowPattern
+}
+
+enum RelationType {
+  uses
+  implements
+  extends
+  references
+  dependsOn
+  relatedTo
+}
+
+' Relationships
+Entity --> EntityType
+Relation --> RelationType
+AnalysisResult --> Entity
+AnalysisResult --> Relation
+
+note top of Entity
+  **Core Knowledge Entity**
+  • Compatible with UKB format
+  • Rich metadata for context
+  • Significance scoring
+end note
+
+note top of AnalysisResult
+  **Standard Analysis Output**
+  • From all agents
+  • Ready for knowledge graph
+  • Source attribution
+end note
+
+@enduml

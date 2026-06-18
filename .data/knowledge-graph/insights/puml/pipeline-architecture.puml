@@ -1,0 +1,30 @@
+@startuml
+!include /coding/docs/puml/_standard-style.puml
+
+package "Pipeline Components" {
+  component "Pipeline Coordinator" as coordinator <<agent>>
+  component "Code Analyzer" as codeAnalyzer <<agent>>
+  component "Knowledge Graph Constructor" as kgConstructor <<agent>>
+  component "EntityValidator" as entity Validator <<agent>>
+  component "Ontology Manager" as ontologyManager <<agent>>
+  component "Observation Generation Agent" as observationAgent <<agent>>
+  component "Deduplication Agent" as deduplicationAgent <<agent>>
+  component "Persistence Agent" as persistenceAgent <<agent>>
+}
+
+package "Data Storage" {
+  database "Memgraph" as memgraph <<storage>>
+  database "Tree-sitter AST" as treeSitter <<storage>>
+}
+
+coordinator --> codeAnalyzer : uses
+codeAnalyzer --> kgConstructor : uses
+kgConstructor --> memgraph : uses
+kgConstructor --> treeSitter : uses
+observationAgent --> codeAnalyzer : uses
+deduplicationAgent --> entity Validator : uses
+persistenceAgent --> ontologyManager : uses
+ontologyManager --> memgraph : uses
+observationAgent --> ontologyManager : uses
+
+@enduml

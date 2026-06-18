@@ -1,0 +1,55 @@
+@startuml
+!include _standard-style.puml
+
+title Health System - 6-Layer Architecture (9 Classes)
+
+left to right direction
+
+package "Layer 0" {
+  component [System\nWatchdog] as SMW <<infra>>
+}
+
+package "Layer 1" {
+  component [Global Service\nCoordinator] as GSC <<core>>
+  component [Global LSL\nCoordinator] as GLC <<core>>
+}
+
+package "Layer 2" {
+  component [Monitoring\nVerifier] as MV <<infra>>
+}
+
+package "Layer 3" {
+  component [Health\nVerifier] as HV <<infra>>
+}
+
+package "Layer 4" {
+  component [StatusLine\nHealth Monitor] as SHM <<core>>
+}
+
+package "Layer 5" {
+  component [Enhanced\nTranscript Monitor] as ETM <<core>>
+  component [Live Logging\nCoordinator] as LLC <<util>>
+}
+
+package "Core" {
+  component [Process State\nManager] as PSM <<storage>>
+}
+
+' Layer flow (left to right)
+SMW CONTROL_LINE GSC
+GSC CONTROL_LINE GLC
+GLC CONTROL_LINE ETM
+MV ..> HV
+HV DATA_LINE SHM
+SHM SYNC_LINE ETM
+ETM ..> LLC
+
+' PSM connections
+PSM -up-> SMW
+PSM -up-> GSC
+PSM -up-> GLC
+PSM -up-> HV
+PSM -up-> SHM
+PSM -up-> ETM
+
+@enduml

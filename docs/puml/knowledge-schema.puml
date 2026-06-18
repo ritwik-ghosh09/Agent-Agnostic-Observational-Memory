@@ -1,0 +1,82 @@
+@startuml knowledge-schema
+!include _standard-style.puml
+
+title Knowledge Base Schema
+
+class "Shared Memory" {
+  +metadata: Metadata
+  +entities: Entity[]
+  +relations: Relation[]
+}
+
+class Metadata {
+  +version: string
+  +created: date
+  +last_updated: date
+  +contributors: string[]
+  +total_entities: number
+  +total_relations: number
+}
+
+class Entity {
+  +name: string
+  +entityType: EntityType
+  +observations: string[]
+  +significance: number (1-10)
+  +created: date
+}
+
+enum EntityType {
+  System (green)
+  Project (blue)
+  TransferableKnowledge
+  TechnicalInsight
+  CodingInsight
+  Technology
+  Component
+  Feature
+  Architecture
+}
+
+class Relation {
+  +from: string
+  +to: string
+  +relationType: RelationType
+  +created: date
+}
+
+enum RelationType {
+  contains
+  implements
+  uses
+  derived_from
+  implemented_in
+  generated_insight
+  benefits_from
+  aggregates_insights_from
+}
+
+class CodingKnowledge {
+  +entityType: System
+  +color: green
+  +purpose: Central hub for\ntransferable knowledge
+}
+
+class ConditionalLoggingPattern {
+  +entityType: TransferableKnowledge
+  +transferable: true
+  +reusable: across projects
+}
+
+"Shared Memory" *-- Metadata
+"Shared Memory" *-- Entity
+"Shared Memory" *-- Relation
+Entity --> EntityType
+Relation --> RelationType
+CodingKnowledge --|> Entity
+ConditionalLoggingPattern --|> Entity
+
+note right of CodingKnowledge : Central green hub\nContains transferable patterns
+note right of ConditionalLoggingPattern : Example transferable\nknowledge pattern
+
+@enduml

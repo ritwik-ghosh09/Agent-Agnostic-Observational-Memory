@@ -1,0 +1,191 @@
+@startuml ukb-cli-sequence-insight-processing
+!include _standard-style.puml
+
+title Incremental Workflow Sequence Diagram (v2.0)
+
+actor User
+participant "UKBCli" as CLI
+participant "WorkflowOrchestrator" as WO
+participant "TeamCheckpointManager" as CM
+participant "GapAnalyzer" as GA
+participant "VkbApiClient" as Client
+participant "VKB Server API" as API
+database "GraphDB" as DB
+database "Checkpoint Files" as CheckpointDB
+
+== Incremental Update Workflow ==
+
+User -> CLI: ukb
+note right
+  Default command runs
+  incremental update
+end note
+activate CLI
+
+CLI -> CLI: parseArgs()
+CLI -> WO: executeIncrementalUpdate(projectKey)
+activate WO
+
+WO -> CM: getLastCheckpoint(projectKey)
+activate CM
+
+CM -> CheckpointDB: Read checkpoint file
+activate CheckpointDB
+CheckpointDB --> CM: checkpoint data or null
+deactivate CheckpointDB
+
+CM --> WO: {lastRun: timestamp, processedCount: N}
+deactivate CM
+
+WO -> GA: identifyGaps(projectKey, checkpoint)
+activate GA
+
+GA -> GA: Calculate time since last run
+GA -> GA: Identify unprocessed items
+GA -> GA: Calculate missing count
+
+GA --> WO: {gaps: [...], missingCount: M}
+deactivate GA
+
+alt Gaps Found
+  WO -> Client: isServerAvailable()
+  activate Client
+
+  Client -> API: GET /api/health
+  activate API
+  API --> Client: {status: "ok"}
+  deactivate API
+
+  Client --> WO: true
+  deactivate Client
+
+  loop for each gap item
+    WO -> Client: createEntity() or createRelation()
+    activate Client
+
+    Client -> API: POST /api/entities or /api/relations
+    activate API
+
+    API -> DB: Add to graph
+    activate DB
+    DB --> API: success
+    deactivate DB
+
+    API --> Client: {entity/relation}
+    deactivate API
+
+    Client --> WO: success
+    deactivate Client
+  end
+
+  WO -> CM: saveCheckpoint(projectKey, {timestamp, processedCount})
+  activate CM
+
+  CM -> CheckpointDB: Write checkpoint file
+  activate CheckpointDB
+  CheckpointDB --> CM: success
+  deactivate CheckpointDB
+
+  CM --> WO: checkpoint saved
+  deactivate CM
+
+  WO --> CLI: {processed: M, success: true}
+  deactivate WO
+
+  CLI -> User: ✅ Incremental update complete\n   Processed M items
+  deactivate CLI
+
+else No Gaps
+  WO --> CLI: {processed: 0, message: "No updates needed"}
+  deactivate WO
+
+  CLI -> User: ℹ️  No new items to process\n   Last run: timestamp
+  deactivate CLI
+end
+
+== Status Query Workflow ==
+
+User -> CLI: ukb status
+activate CLI
+
+CLI -> CM: getAllCheckpoints()
+activate CM
+
+CM -> CheckpointDB: Read all checkpoint files
+activate CheckpointDB
+CheckpointDB --> CM: checkpoint data
+deactivate CheckpointDB
+
+CM --> CLI: Map<projectKey, checkpoint>
+deactivate CM
+
+CLI -> Client: isServerAvailable()
+activate Client
+
+Client -> API: GET /api/health
+activate API
+API --> Client: {status: "ok"}
+deactivate API
+
+Client --> CLI: true
+deactivate Client
+
+CLI -> Client: getEntities({count: true})
+activate Client
+
+Client -> API: GET /api/entities?count=true
+activate API
+
+API -> DB: Count entities
+activate DB
+DB --> API: count
+deactivate DB
+
+API --> Client: {total: N}
+deactivate API
+
+Client --> CLI: entity count
+deactivate Client
+
+CLI -> Client: getRelations({count: true})
+activate Client
+
+Client -> API: GET /api/relations?count=true
+activate API
+
+API -> DB: Count relations
+activate DB
+DB --> API: count
+deactivate DB
+
+API --> Client: {total: M}
+deactivate API
+
+Client --> CLI: relation count
+deactivate Client
+
+CLI -> CLI: Format status output
+
+CLI -> User: VKB Status:\n  Server: Running (port 8080)\n  Entities: N\n  Relations: M\n  Last update: timestamp\n  Projects tracked: K
+deactivate CLI
+
+== Checkpoint Management ==
+
+User -> CLI: ukb checkpoint clear
+activate CLI
+
+CLI -> CM: clearCheckpoint(projectKey)
+activate CM
+
+CM -> CheckpointDB: Delete checkpoint file
+activate CheckpointDB
+CheckpointDB --> CM: success
+deactivate CheckpointDB
+
+CM --> CLI: checkpoint cleared
+deactivate CM
+
+CLI -> User: ✅ Checkpoint cleared for project
+deactivate CLI
+
+@enduml

@@ -1,0 +1,134 @@
+@startuml ukb-cli-architecture
+!include _standard-style.puml
+
+title UKB Unified CLI Architecture (v2.0)
+
+top to bottom direction
+
+skinparam componentStyle rectangle
+skinparam component {
+  BackgroundColor<<cli>> #FFE8F4
+  BackgroundColor<<commands>> #E8F4FD
+  BackgroundColor<<core>> #E8F5E8
+  BackgroundColor<<server>> #FFF9E6
+  BackgroundColor<<routing>> #FFE4E1
+  FontSize 12
+  FontColor #000000
+}
+skinparam note {
+  BackgroundColor #FFFACD
+  FontSize 10
+  FontColor #000000
+}
+skinparam arrow {
+  FontSize 10
+  FontColor #000000
+}
+
+package "UKB Unified CLI" {
+
+  package "CLI Layer" <<cli>> {
+    [UKBCli Class] as CLI
+    [Argument Parser] as Parser
+    [Help System] as Help
+
+    note right of CLI
+      Entry point: lib/ukb-unified/cli.js
+      Commands: default, analyze, status,
+      checkpoint, config, entity, relation,
+      search, validate, help
+    end note
+  }
+
+  package "Command Handlers" <<commands>> {
+    [Entity Commands] as EntityCmd
+    [Relation Commands] as RelationCmd
+    [Status Command] as StatusCmd
+    [Checkpoint Command] as CheckpointCmd
+
+    note bottom of EntityCmd
+      Operations: list, show, create,
+      update, delete, search
+      Uses intelligent routing
+    end note
+  }
+
+  package "Core Services" <<core>> {
+    [VkbApiClient] as ApiClient
+    [TeamCheckpointManager] as Checkpoint
+    [GapAnalyzer] as GapAnalyzer
+    [WorkflowOrchestrator] as Orchestrator
+    [ConfigManager] as Config
+
+    note right of ApiClient
+      HTTP client for VKB Server
+      Methods: getEntities, createEntity,
+      deleteEntity, createRelation, etc.
+    end note
+
+    note bottom of Checkpoint
+      Tracks last successful run
+      Enables incremental processing
+    end note
+  }
+
+  package "Intelligent Routing" <<routing>> {
+    [Server Availability Check] as ServerCheck
+    [Route Decision Logic] as RouteDecision
+
+    note bottom of RouteDecision
+      Smart routing strategy:
+      1. Check if VKB server running
+      2. If yes: Use HTTP API (lock-free)
+      3. If no: Direct database access
+    end note
+  }
+}
+
+package "VKB Server" <<server>> {
+  [REST API Endpoints] as API
+  [Health Check] as Health
+
+  database "GraphDB Storage" as DB {
+    [Graphology Graph] as Graph
+    [LevelDB Persistence] as LevelDB
+  }
+
+  note right of API
+    Endpoints: /api/entities,
+    /api/relations, /api/health
+    Port: 8080 (default)
+  end note
+}
+
+actor User
+
+User --> CLI : Run ukb command
+CLI --> Parser : Parse arguments
+Parser --> EntityCmd : Entity operations
+Parser --> RelationCmd : Relation operations
+Parser --> StatusCmd : Status query
+Parser --> CheckpointCmd : Checkpoint management
+
+EntityCmd --> ApiClient : Use API client
+RelationCmd --> ApiClient : Use API client
+StatusCmd --> ApiClient : Query status
+CheckpointCmd --> Checkpoint : Manage checkpoints
+
+EntityCmd --> RouteDecision : Route request
+RelationCmd --> RouteDecision : Route request
+
+ApiClient --> ServerCheck : Check availability
+ServerCheck --> RouteDecision : Server status
+
+RouteDecision --> API : When server running
+RouteDecision --> DB : When server stopped
+
+API --> DB : Persist/query data
+Graph --> LevelDB : Serialize graph
+
+Checkpoint --> Config : Load config
+GapAnalyzer --> Checkpoint : Read last run
+Orchestrator --> GapAnalyzer : Identify gaps
+
+@enduml

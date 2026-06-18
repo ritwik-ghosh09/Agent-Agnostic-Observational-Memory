@@ -1,0 +1,29 @@
+@startuml
+!include /coding/docs/puml/_standard-style.puml
+
+package "Data Storage" {
+  component "Graphology" as graph <<storage>>
+  component "LevelDB" as leveldb <<storage>>
+  database "GraphDatabase" as graphdb
+}
+
+package "Manual Learning" {
+  component "ManualLearning" as manual <<core>>
+  component "GraphDatabaseAdapter" as gda <<api>>
+}
+
+package "Utilities" {
+  component "UtilitiesModule" as utils <<core>>
+  component "Checkpoint System" as checkpoint <<core>>
+  component "OntologyClassificationModule" as oc <<core>>
+}
+
+manual --> gda : uses
+gda --> graphdb : updates
+graphdb --> graph : relies on
+graphdb --> leveldb : relies on
+manual --> checkpoint : uses
+manual --> oc : uses
+gda --> utils : uses
+
+@enduml

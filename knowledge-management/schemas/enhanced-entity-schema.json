@@ -1,0 +1,204 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Enhanced Knowledge Base Entity Schema",
+  "description": "Schema for structured knowledge base entities with improved observation tracking",
+  "definitions": {
+    "observation": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["problem", "solution", "metric", "insight", "application", "warning", "code_example"]
+        },
+        "content": {
+          "type": "string",
+          "description": "The observation content"
+        },
+        "date": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Additional metadata for the observation"
+        }
+      },
+      "required": ["type", "content", "date"]
+    },
+    "problem": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "symptoms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "impact": {
+          "type": "string",
+          "enum": ["critical", "high", "medium", "low"]
+        }
+      },
+      "required": ["description"]
+    },
+    "solution": {
+      "type": "object",
+      "properties": {
+        "approach": {
+          "type": "string"
+        },
+        "implementation": {
+          "type": "string"
+        },
+        "code_example": {
+          "type": "string"
+        },
+        "key_insights": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["approach", "implementation"]
+    },
+    "context": {
+      "type": "object",
+      "properties": {
+        "applicability": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "technologies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "performance": {
+          "type": "object",
+          "properties": {
+            "before": {
+              "type": "string"
+            },
+            "after": {
+              "type": "string"
+            },
+            "improvement": {
+              "type": "string"
+            }
+          }
+        },
+        "complexity": {
+          "type": "string",
+          "enum": ["trivial", "simple", "moderate", "complex", "expert"]
+        }
+      }
+    },
+    "references": {
+      "type": "object",
+      "properties": {
+        "code_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "documentation": {
+          "type": "string"
+        },
+        "external": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "related_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "significance": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "author": {
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        },
+        "created": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "last_used": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "usage_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "success_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": ["significance", "created"]
+    }
+  },
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Unique identifier for the entity"
+    },
+    "entityType": {
+      "type": "string",
+      "enum": ["System", "TransferablePattern", "WorkflowPattern", "Project", "Directive", "CodeSnippet"]
+    },
+    "metadata": {
+      "$ref": "#/definitions/metadata"
+    },
+    "problem": {
+      "$ref": "#/definitions/problem"
+    },
+    "solution": {
+      "$ref": "#/definitions/solution"
+    },
+    "context": {
+      "$ref": "#/definitions/context"
+    },
+    "references": {
+      "$ref": "#/definitions/references"
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/observation"
+      }
+    },
+    "legacy_observations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Backward compatibility for string observations"
+    }
+  },
+  "required": ["name", "entityType", "metadata"]
+}

@@ -1,0 +1,29 @@
+@startuml
+!include /coding/docs/puml/_standard-style.puml
+
+package "Insights Sub-Component" {
+  component "InsightGenerator" as ig <<agent>>
+  component "Pattern Catalog" as pc <<storage>>
+  component "Insight Ranker" as ir <<agent>>
+  component "Insight Cache" as ic <<storage>>
+  component "Insight API" as ia <<api>>
+}
+
+package "Knowledge Reporting" {
+  component "KnowledgeReportAuthor" as kra <<agent>>
+  component "Knowledge Report Template" as krt <<core>>
+}
+
+package "Code Analysis" {
+  component "CodeAnalyzer" as ca <<agent>>
+}
+
+ig --> ca : uses
+ig --> pc : stores
+ir --> ig : ranks
+ic --> ig : caches
+ia --> ig : exposes
+kra --> ig : uses
+kra --> krt : uses
+
+@enduml

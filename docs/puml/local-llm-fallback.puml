@@ -1,0 +1,58 @@
+@startuml local-llm-fallback
+!include _standard-style.puml
+
+title Local LLM Fallback Chain
+
+start
+
+:LLM Mode = Local;
+
+partition "Try Docker Model Runner (DMR)" {
+  :Check DMR availability;
+  if (DMR available?) then (yes)
+    :Call DMR API\n(localhost:12434);
+    if (DMR success?) then (yes)
+      :Return DMR response;
+      stop
+    else (no)
+      :Log DMR failure;
+    endif
+  else (no)
+    :Log DMR unavailable;
+  endif
+}
+
+partition "Fallback to llama.cpp Direct" {
+  if (llama.cpp server running?) then (yes)
+    :Call llama.cpp API\n(configurable port);
+    if (llama.cpp success?) then (yes)
+      :Return llama.cpp response;
+      stop
+    else (no)
+      :Log llama.cpp failure;
+    endif
+  else (no)
+    :llama.cpp not configured;
+  endif
+}
+
+partition "Final Fallback to Public" {
+  :Log "No local LLM available";
+  :Use tier-based cloud provider;
+  :Return cloud API response;
+}
+
+stop
+
+note right
+  **Port Configuration**
+  DMR: 12434 (from .env.ports)
+  llama.cpp: custom (if configured)
+
+  **Provider Priority**
+  1. DMR (Docker Desktop 4.40+)
+  2. llama.cpp direct (manual setup)
+  3. Cloud APIs (Copilot > Groq > Claude Code > Anthropic > OpenAI)
+end note
+
+@enduml

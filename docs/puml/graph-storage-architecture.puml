@@ -1,0 +1,88 @@
+@startuml
+!include _standard-style.puml
+
+title Graph Storage Architecture\n(Agent-Agnostic Knowledge Management)
+
+top to bottom direction
+
+package "Knowledge Management System" {
+  [UKB CLI] <<cli>>
+  [VKB Server] <<api>>
+  [Knowledge Workflows] <<core>>
+}
+
+package "Graph Storage Layer" {
+  database "Graphology\n(In-Memory)" as graphology <<storage>> {
+    note right
+      • Fast graph operations
+      • Multi-graph support
+      • Rich algorithms
+    end note
+  }
+
+  database "Level v10.0.0\n(Persistent Storage)" as level <<storage>> {
+    note right
+      • Key-value persistence
+      • Atomic operations
+      • File-based storage
+    end note
+  }
+
+  [GraphDatabaseService] <<core>>
+}
+
+package "Client Access" {
+  actor "Claude Code" as claude <<agent>>
+  actor "Copilot" as copilot <<agent>>
+  actor "Cursor" as cursor <<agent>>
+  actor "Any AI Agent" as agent <<agent>>
+}
+
+' Git-tracked JSON exports (MANDATORY bidirectional sync)
+file ".data/knowledge-export/*.json\n(Git-Tracked - MANDATORY)" as json
+
+' Data flow
+[UKB CLI] -down-> [Knowledge Workflows] : Create/Query
+[VKB Server] -down-> [Knowledge Workflows] : HTTP API
+[Knowledge Workflows] -down-> [GraphDatabaseService] : Entity/Relation ops
+
+[GraphDatabaseService] -down-> graphology : In-memory graph
+graphology -down-> level : Persist to disk
+[GraphDatabaseService] <-right-> json : MANDATORY auto-sync\n(5s debounce)
+
+' Client access
+claude -up-> [UKB CLI] : Command line
+copilot -up-> [VKB Server] : HTTP API
+cursor -up-> [VKB Server] : HTTP API
+agent -up-> [UKB CLI] : CLI interface
+
+' Team isolation
+note right of [GraphDatabaseService]
+  **Node ID Pattern**
+  ${team}:${entityName}
+
+  Examples:
+  • coding:Pattern1
+  • project:Solution1
+end note
+
+' Benefits
+note left of graphology
+  **Benefits**
+  ✓ Agent-agnostic
+  ✓ No MCP dependency
+  ✓ Works with any AI
+  ✓ Team isolation
+  ✓ Persistent storage
+end note
+
+note right of json
+  **MANDATORY Bidirectional Sync**
+  REQUIRED for team collaboration
+  Auto-export: 5s after changes
+  Auto-import: on startup
+  Cross-project persistence
+  .data/knowledge-export/*.json
+end note
+
+@enduml

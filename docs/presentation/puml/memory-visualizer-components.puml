@@ -1,0 +1,85 @@
+@startuml memory-visualizer-components
+!include _standard-style.puml
+
+title Memory Visualizer - Component Structure
+
+left to right direction
+
+left to right direction
+
+left to right direction
+
+' Presentation styling
+skinparam defaultFontSize 28
+skinparam packageFontSize 30
+skinparam componentFontSize 26
+skinparam arrowThickness 6
+skinparam nodesep 70
+skinparam ranksep 90
+skinparam noteFontSize 24
+skinparam legendFontSize 24
+
+package "Memory Visualizer Application" {
+
+  component [App.tsx] as APP #FFE6CC
+
+  package "Knowledge Graph\nModule" #E6F3FF {
+    component [KnowledgeGraph] as KG
+    component [GraphVisualization] as GRAPH
+    component [NodeDetails] as DETAILS
+  }
+
+  package "Filtering\nModule" #FFE6E6 {
+    component [TypeFilters] as TYPE_FILTER
+    component [SearchFilter] as SEARCH
+    component [TeamFilter] as TEAM_FILTER
+    component [SourceFilter] as SOURCE_FILTER
+  }
+
+  package "Rendering\nComponents" #E6FFE6 {
+    component [MarkdownViewer] as MARKDOWN
+    component [MermaidDiagram] as MERMAID
+  }
+
+  package "State\nManagement" #FFF4E6 {
+    component [Redux Store] as STORE
+    component [Graph Slice] as SLICE
+  }
+
+  package "API Layer" #F0E6FF {
+    component [DatabaseClient] as CLIENT
+  }
+
+  package "Utilities" #E6E6FF {
+    component [Graph Helpers] as HELPERS
+  }
+}
+
+' Relationships - simplified for clarity
+APP --> KG
+APP --> STORE
+
+KG --> GRAPH
+KG --> DETAILS
+KG --> TYPE_FILTER
+KG --> SEARCH
+KG --> TEAM_FILTER
+KG --> SOURCE_FILTER
+
+GRAPH --> HELPERS
+GRAPH --> STORE
+
+DETAILS --> MARKDOWN
+DETAILS --> MERMAID
+DETAILS --> STORE
+
+TYPE_FILTER --> STORE
+SEARCH --> STORE
+TEAM_FILTER --> STORE
+SOURCE_FILTER --> STORE
+
+STORE --> SLICE
+SLICE --> CLIENT
+CLIENT --> HELPERS
+
+@enduml

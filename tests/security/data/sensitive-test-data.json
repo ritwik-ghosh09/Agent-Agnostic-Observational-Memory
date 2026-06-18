@@ -1,0 +1,420 @@
+{
+  "exchanges": [
+    {
+      "id": "exchange-0",
+      "category": "creditCard",
+      "content": "This exchange contains sensitive creditCard: 4532015112830366",
+      "rawPattern": "4532015112830366",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-1",
+      "category": "creditCard_context",
+      "content": "User mentioned their creditCard is 4532015112830366 in the documentation.",
+      "rawPattern": "4532015112830366",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-2",
+      "category": "creditCard",
+      "content": "This exchange contains sensitive creditCard: 5555555555554444",
+      "rawPattern": "5555555555554444",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-3",
+      "category": "creditCard_context",
+      "content": "User mentioned their creditCard is 5555555555554444 in the documentation.",
+      "rawPattern": "5555555555554444",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-4",
+      "category": "creditCard",
+      "content": "This exchange contains sensitive creditCard: 371449635398431",
+      "rawPattern": "371449635398431",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-5",
+      "category": "creditCard_context",
+      "content": "User mentioned their creditCard is 371449635398431 in the documentation.",
+      "rawPattern": "371449635398431",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-6",
+      "category": "creditCard",
+      "content": "This exchange contains sensitive creditCard: 6011111111111117",
+      "rawPattern": "6011111111111117",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-7",
+      "category": "creditCard_context",
+      "content": "User mentioned their creditCard is 6011111111111117 in the documentation.",
+      "rawPattern": "6011111111111117",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-8",
+      "category": "ssn",
+      "content": "This exchange contains sensitive ssn: 123-45-6789",
+      "rawPattern": "123-45-6789",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-9",
+      "category": "ssn_context",
+      "content": "User mentioned their ssn is 123-45-6789 in the documentation.",
+      "rawPattern": "123-45-6789",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-10",
+      "category": "ssn",
+      "content": "This exchange contains sensitive ssn: 987-65-4321",
+      "rawPattern": "987-65-4321",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-11",
+      "category": "ssn_context",
+      "content": "User mentioned their ssn is 987-65-4321 in the documentation.",
+      "rawPattern": "987-65-4321",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-12",
+      "category": "ssn",
+      "content": "This exchange contains sensitive ssn: 456-78-9012",
+      "rawPattern": "456-78-9012",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-13",
+      "category": "ssn_context",
+      "content": "User mentioned their ssn is 456-78-9012 in the documentation.",
+      "rawPattern": "456-78-9012",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-14",
+      "category": "email",
+      "content": "This exchange contains sensitive email: user@company.com",
+      "rawPattern": "user@company.com",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-15",
+      "category": "email_context",
+      "content": "User mentioned their email is user@company.com in the documentation.",
+      "rawPattern": "user@company.com",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-16",
+      "category": "email",
+      "content": "This exchange contains sensitive email: sensitive.email@domain.org",
+      "rawPattern": "sensitive.email@domain.org",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-17",
+      "category": "email_context",
+      "content": "User mentioned their email is sensitive.email@domain.org in the documentation.",
+      "rawPattern": "sensitive.email@domain.org",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-18",
+      "category": "email",
+      "content": "This exchange contains sensitive email: private@personal.net",
+      "rawPattern": "private@personal.net",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-19",
+      "category": "email_context",
+      "content": "User mentioned their email is private@personal.net in the documentation.",
+      "rawPattern": "private@personal.net",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-20",
+      "category": "apiKeys",
+      "content": "This exchange contains sensitive apiKeys: sk_test_1234567890abcdef",
+      "rawPattern": "sk_test_1234567890abcdef",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-21",
+      "category": "apiKeys_context",
+      "content": "User mentioned their apiKeys is sk_test_1234567890abcdef in the documentation.",
+      "rawPattern": "sk_test_1234567890abcdef",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-22",
+      "category": "apiKeys",
+      "content": "This exchange contains sensitive apiKeys: ghp_1234567890abcdefghijklmnop",
+      "rawPattern": "ghp_1234567890abcdefghijklmnop",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-23",
+      "category": "apiKeys_context",
+      "content": "User mentioned their apiKeys is ghp_1234567890abcdefghijklmnop in the documentation.",
+      "rawPattern": "ghp_1234567890abcdefghijklmnop",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-24",
+      "category": "apiKeys",
+      "content": "This exchange contains sensitive apiKeys: xoxb-1234-5678-9012-abcdef",
+      "rawPattern": "xoxb-1234-5678-9012-abcdef",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-25",
+      "category": "apiKeys_context",
+      "content": "User mentioned their apiKeys is xoxb-1234-5678-9012-abcdef in the documentation.",
+      "rawPattern": "xoxb-1234-5678-9012-abcdef",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-26",
+      "category": "phone",
+      "content": "This exchange contains sensitive phone: +1-555-123-4567",
+      "rawPattern": "+1-555-123-4567",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-27",
+      "category": "phone_context",
+      "content": "User mentioned their phone is +1-555-123-4567 in the documentation.",
+      "rawPattern": "+1-555-123-4567",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-28",
+      "category": "phone",
+      "content": "This exchange contains sensitive phone: (555) 987-6543",
+      "rawPattern": "(555) 987-6543",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-29",
+      "category": "phone_context",
+      "content": "User mentioned their phone is (555) 987-6543 in the documentation.",
+      "rawPattern": "(555) 987-6543",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-30",
+      "category": "phone",
+      "content": "This exchange contains sensitive phone: 555.456.7890",
+      "rawPattern": "555.456.7890",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-31",
+      "category": "phone_context",
+      "content": "User mentioned their phone is 555.456.7890 in the documentation.",
+      "rawPattern": "555.456.7890",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-32",
+      "category": "ipAddress",
+      "content": "This exchange contains sensitive ipAddress: 192.168.1.100",
+      "rawPattern": "192.168.1.100",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-33",
+      "category": "ipAddress_context",
+      "content": "User mentioned their ipAddress is 192.168.1.100 in the documentation.",
+      "rawPattern": "192.168.1.100",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-34",
+      "category": "ipAddress",
+      "content": "This exchange contains sensitive ipAddress: 10.0.0.1",
+      "rawPattern": "10.0.0.1",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-35",
+      "category": "ipAddress_context",
+      "content": "User mentioned their ipAddress is 10.0.0.1 in the documentation.",
+      "rawPattern": "10.0.0.1",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-36",
+      "category": "ipAddress",
+      "content": "This exchange contains sensitive ipAddress: 172.16.0.50",
+      "rawPattern": "172.16.0.50",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-37",
+      "category": "ipAddress_context",
+      "content": "User mentioned their ipAddress is 172.16.0.50 in the documentation.",
+      "rawPattern": "172.16.0.50",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-38",
+      "category": "filePaths",
+      "content": "This exchange contains sensitive filePaths: /home/user/.ssh/id_rsa",
+      "rawPattern": "/home/user/.ssh/id_rsa",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-39",
+      "category": "filePaths_context",
+      "content": "User mentioned their filePaths is /home/user/.ssh/id_rsa in the documentation.",
+      "rawPattern": "/home/user/.ssh/id_rsa",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-40",
+      "category": "filePaths",
+      "content": "This exchange contains sensitive filePaths: C:\\Users\\Admin\\secret.txt",
+      "rawPattern": "C:\\Users\\Admin\\secret.txt",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-41",
+      "category": "filePaths_context",
+      "content": "User mentioned their filePaths is C:\\Users\\Admin\\secret.txt in the documentation.",
+      "rawPattern": "C:\\Users\\Admin\\secret.txt",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-42",
+      "category": "filePaths",
+      "content": "This exchange contains sensitive filePaths: /etc/passwd",
+      "rawPattern": "/etc/passwd",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-43",
+      "category": "filePaths_context",
+      "content": "User mentioned their filePaths is /etc/passwd in the documentation.",
+      "rawPattern": "/etc/passwd",
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-44",
+      "category": "attack_encodingBypass",
+      "content": "Bypass attempt: user%40company.com",
+      "rawPattern": "user%40company.com",
+      "isAttackVector": true,
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-45",
+      "category": "attack_encodingBypass",
+      "content": "Bypass attempt: 555&#45;123&#45;4567",
+      "rawPattern": "555&#45;123&#45;4567",
+      "isAttackVector": true,
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-46",
+      "category": "attack_encodingBypass",
+      "content": "Bypass attempt: c2Vuc2l0aXZlZGF0YQ==",
+      "rawPattern": "c2Vuc2l0aXZlZGF0YQ==",
+      "isAttackVector": true,
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-47",
+      "category": "attack_encodingBypass",
+      "content": "Bypass attempt: \\x75\\x73\\x65\\x72\\x40\\x63\\x6f\\x6d\\x70\\x61\\x6e\\x79\\x2e\\x63\\x6f\\x6d",
+      "rawPattern": "\\x75\\x73\\x65\\x72\\x40\\x63\\x6f\\x6d\\x70\\x61\\x6e\\x79\\x2e\\x63\\x6f\\x6d",
+      "isAttackVector": true,
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-48",
+      "category": "attack_unicodeBypass",
+      "content": "Bypass attempt: սser@company.com",
+      "rawPattern": "սser@company.com",
+      "isAttackVector": true,
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-49",
+      "category": "attack_unicodeBypass",
+      "content": "Bypass attempt: 555‐123‐4567",
+      "rawPattern": "555‐123‐4567",
+      "isAttackVector": true,
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-50",
+      "category": "attack_unicodeBypass",
+      "content": "Bypass attempt: 192․168․1․100",
+      "rawPattern": "192․168․1․100",
+      "isAttackVector": true,
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-51",
+      "category": "attack_caseBypass",
+      "content": "Bypass attempt: USER@COMPANY.COM",
+      "rawPattern": "USER@COMPANY.COM",
+      "isAttackVector": true,
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-52",
+      "category": "attack_caseBypass",
+      "content": "Bypass attempt: User@Company.Com",
+      "rawPattern": "User@Company.Com",
+      "isAttackVector": true,
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-53",
+      "category": "attack_caseBypass",
+      "content": "Bypass attempt: uSeR@cOmPaNy.CoM",
+      "rawPattern": "uSeR@cOmPaNy.CoM",
+      "isAttackVector": true,
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-54",
+      "category": "attack_fragmentationBypass",
+      "content": "Bypass attempt: user@comp any.com",
+      "rawPattern": "user@comp any.com",
+      "isAttackVector": true,
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-55",
+      "category": "attack_fragmentationBypass",
+      "content": "Bypass attempt: 555- 123-4567",
+      "rawPattern": "555- 123-4567",
+      "isAttackVector": true,
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    },
+    {
+      "id": "exchange-56",
+      "category": "attack_fragmentationBypass",
+      "content": "Bypass attempt: 192.168. 1.100",
+      "rawPattern": "192.168. 1.100",
+      "isAttackVector": true,
+      "timestamp": "2025-09-14T14:18:38.439Z"
+    }
+  ],
+  "metadata": {
+    "timestamp": "2025-09-14T14:18:38.439Z",
+    "testCase": "security-validation"
+  }
+}

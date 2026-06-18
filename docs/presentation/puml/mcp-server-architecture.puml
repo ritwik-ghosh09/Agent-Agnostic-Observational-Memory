@@ -1,0 +1,96 @@
+@startuml mcp-server-architecture
+!include _standard-style.puml
+
+' Presentation-optimized version (landscape, larger fonts, minimal notes)
+
+skinparam defaultFontSize 14
+skinparam titleFontSize 20
+skinparam packageFontSize 16
+skinparam componentFontSize 13
+skinparam ArrowThickness 2
+
+title MCP Semantic Analysis - 14-Agent Architecture
+
+left to right direction
+
+package "MCP Server" as SERVER {
+  component "MCP\nProtocol" as MCP <<infra>>
+  component "Tool Layer\n(12 Tools)" as TOOLS <<api>>
+
+  package "Orchestration" as COORD_PKG #FFE6CC {
+    component "Coordinator" as COORDINATOR <<agent>>
+  }
+
+  package "Core Analysis (6)" as ANALYSIS_PKG #E6F3FF {
+    component "Git\nHistory" as GIT <<agent>>
+    component "Vibe\nHistory" as VIBE <<agent>>
+    component "Code\nIntelligence" as INTEL <<agent>>
+    component "Semantic\nAnalysis" as SEMANTIC <<agent>>
+    component "Web\nSearch" as WEB <<agent>>
+    component "Insight\nGeneration" as INSIGHT <<agent>>
+  }
+
+  package "Quality (3)" as QUALITY_PKG #FFE6E6 {
+    component "QA" as QA <<agent>>
+    component "Content\nValidation" as CONTENT <<agent>>
+    component "Observation\nGen" as OBS <<agent>>
+  }
+
+  package "Infrastructure (3)" as INFRA_PKG #E6FFE6 {
+    component "Persistence" as PERSIST <<agent>>
+    component "Deduplication" as DEDUP <<agent>>
+    component "Git Staleness\nDetector" as STALE <<agent>>
+  }
+
+  package "Support" as SUPPORT_PKG #F0F0F0 {
+    component "Semantic\nAnalyzer" as ANALYZER <<infra>>
+  }
+}
+
+package "Storage" as STORAGE_PKG {
+  database "GraphDB\n(Graphology+\nLevelDB)" as GRAPHDB <<storage>> #D4EDDA
+  file "knowledge-export/\n<team>.json" as JSON <<storage>>
+}
+
+cloud "LLMs\n5-Tier Chain" as LLMS <<external>> #FFE6E6
+cloud "Data\nSources" as DATA_SOURCES <<external>> #E6F3FF
+
+' Main flow
+MCP --> TOOLS
+TOOLS --> COORDINATOR
+COORDINATOR --> GIT
+COORDINATOR --> VIBE
+COORDINATOR --> SEMANTIC
+COORDINATOR --> WEB
+COORDINATOR --> INTEL
+COORDINATOR --> INSIGHT
+COORDINATOR --> OBS
+COORDINATOR --> QA
+COORDINATOR --> CONTENT
+COORDINATOR --> PERSIST
+COORDINATOR --> DEDUP
+COORDINATOR --> STALE
+COORDINATOR ..> GRAPHDB : "Init"
+
+' LLM connections
+VIBE ..> ANALYZER
+INTEL ..> ANALYZER
+SEMANTIC ..> ANALYZER
+WEB ..> ANALYZER
+INSIGHT ..> ANALYZER
+OBS ..> ANALYZER
+QA ..> ANALYZER
+ANALYZER ..> LLMS
+
+' Storage connections
+PERSIST --> GRAPHDB
+DEDUP --> GRAPHDB
+CONTENT --> GRAPHDB
+GRAPHDB --> JSON
+
+' Data sources
+GIT --> DATA_SOURCES
+VIBE --> DATA_SOURCES
+STALE --> DATA_SOURCES
+
+@enduml

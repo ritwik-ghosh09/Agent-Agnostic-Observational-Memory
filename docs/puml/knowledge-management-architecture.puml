@@ -1,0 +1,60 @@
+@startuml knowledge-management-architecture
+!include _standard-style.puml
+
+!define RECTANGLE class
+
+title Knowledge Flow: MCP → GraphDB → Git Storage
+
+actor Developer
+participant "Claude Code" as CLAUDE
+participant "MCP Semantic Analysis" as MCP
+participant "GraphDB" as GRAPHDB
+participant "coding.json" as JSON
+participant "Git Repository" as GIT
+
+== Phase 1: Manual Knowledge Capture ==
+
+Developer -> CLAUDE: Types "ukb" at Claude prompt
+note right: Triggers MCP semantic\nanalysis workflow
+
+CLAUDE -> MCP: execute_workflow or\ncreate_ukb_entity_with_insight
+note right: MCP Server routes to\nCoordinatorAgent
+
+MCP -> MCP: CoordinatorAgent executes\n14-agent workflow (11 with LLM)
+MCP -> MCP: Direct function calls\n(no MQTT/RPC)
+
+== Phase 2: GraphDB Storage ==
+
+MCP -> GRAPHDB: Direct entity writes
+note right: PersistenceAgent stores\nto Graphology + LevelDB
+
+GRAPHDB -> GRAPHDB: Auto-persist to LevelDB (1s)
+GRAPHDB -> GRAPHDB: Auto-export (5s debounced)
+
+GRAPHDB -> JSON: Export to JSON
+note right: .data/knowledge-export/\ncoding.json (git-tracked)
+
+== Phase 3: Version Control ==
+
+JSON -> GIT: Git commit
+note right: Version-controlled\nknowledge evolution
+
+== Cross-Session Access ==
+
+Developer -> CLAUDE: New session
+CLAUDE -> GRAPHDB: GraphDB auto-loads
+note right: Persistent storage via\nLevelDB
+
+GRAPHDB -> JSON: Read latest export
+JSON -> CLAUDE: Knowledge available
+
+== Knowledge Sharing ==
+
+GIT -> GIT: Git push/pull
+note right: Team knowledge\nsharing via git
+
+Developer -> Developer: Run vkb server
+Developer -> Developer: Browse localhost:8080
+note right: Interactive GraphDB\nvisualization
+
+@enduml

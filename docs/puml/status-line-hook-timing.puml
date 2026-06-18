@@ -1,0 +1,80 @@
+@startuml
+!include _standard-style.puml
+
+title Status Line Hook Integration - Timing Diagram
+
+actor "Claude User" as User
+participant "Claude Code" as Claude
+participant "PostToolUse Hook" as Hook
+participant "Status Line Script" as StatusScript
+participant "Transcript Monitor" as Monitor
+participant "Status Display" as Display
+participant "Background Process" as Background
+
+== Initial Setup ==
+
+User -> Claude : Start Claude Code session
+Claude -> Hook : Initialize PostToolUse hook
+note right of Hook : Hook configured to trigger\nafter every tool use
+Hook -> StatusScript : Register status line script
+StatusScript -> Background : Check if background process needed
+note right of Background : **Key Decision**: No background process\nneeded with hook integration
+
+== Tool Use Event Cycle ==
+
+loop Every Tool Use
+    User -> Claude : Execute tool (Read, Write, Bash, etc.)
+    Claude -> Claude : Process tool execution
+    Claude -> Hook : Trigger PostToolUse hook
+    note right of Hook : **Event-Driven**: Triggered by\nClaude Code after each tool use
+    
+    Hook -> StatusScript : Execute status line update
+    note right of StatusScript : **Real-Time**: Status updated\nimmediately after tool use
+    
+    StatusScript -> StatusScript : Analyze transcript for redirect
+    StatusScript -> StatusScript : Check constraint status
+    StatusScript -> StatusScript : Verify semantic analysis
+    
+    StatusScript -> Display : Update status line display
+    note right of Display : **Visual Feedback**: User sees\nstatus change immediately
+    
+    Display --> User : Show updated status
+    
+    == Background vs Hook Comparison ==
+    
+    note over Background : **OLD: Background Process**\n❌ Continuous polling\n❌ Resource intensive\n❌ Delayed updates\n❌ Complex setup
+    
+    note over Hook : **NEW: Hook Integration**\n✅ Event-driven updates\n✅ Resource efficient\n✅ Immediate feedback\n✅ Native Claude Code integration
+end
+
+== Redirect Detection Timing ==
+
+User -> Claude : Work on coding-related file
+Claude -> Hook : Tool use completed
+Hook -> StatusScript : Check for redirect
+StatusScript -> StatusScript : Detect coding activity
+StatusScript -> Display : Show →coding indicator
+note right of Display : **Immediate**: Redirect indicator\nappears within ~100ms of tool use
+
+... 3 minutes later ...
+
+StatusScript -> StatusScript : Check redirect timeout
+StatusScript -> Display : Hide →coding indicator
+note right of Display : **Automatic**: Indicator disappears\nafter 3-minute timeout
+
+== Error Handling ==
+
+alt Hook execution fails
+    Hook -> StatusScript : Execution error
+    StatusScript -> Display : Show error status
+    Display --> User : ❌ Status line error
+    
+    StatusScript -> Background : Fallback to background process
+    note right of Background : **Fallback**: Only used if\nhook system fails
+else Normal operation
+    Hook -> StatusScript : Successful execution
+    StatusScript -> Display : Normal status
+    Display --> User : ✅ Normal status display
+end
+
+@enduml

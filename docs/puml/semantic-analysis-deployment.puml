@@ -1,0 +1,90 @@
+@startuml semantic-analysis-deployment
+!include _standard-style.puml
+
+title Semantic Analysis System - Deployment Architecture
+
+top to bottom direction
+
+package "Development Deployment" {
+  node "Development Machine" as DevMachine {
+    component [Coding Agent] as CC
+    component [MCP Server] as MCP
+
+    frame "14-Agent System" {
+      component [GitHistoryAgent] as Git
+      component [VibeHistoryAgent] as Vibe
+      component [SemanticAnalysisAgent] as SA
+      component [WebSearchAgent] as WS
+      component [InsightGenerationAgent] as Insight
+      component [ObservationGenerationAgent] as Obs
+      component [QualityAssuranceAgent] as QA
+      component [PersistenceAgent] as Persist
+      component [DeduplicationAgent] as Dedup
+      component [CoordinatorAgent] as Coord
+    }
+
+    frame "Storage" {
+      database [GraphDB\nGraphology + LevelDB] as GraphDB
+      component [Graph Exporter] as Exporter
+      database [coding.json\n.data/knowledge-export/] as SharedMemory
+      folder [.specstory/history] as History
+      folder [.data/knowledge-graph/] as KGStorage
+    }
+
+    frame "External Services" {
+      cloud [Groq] as GroqAPI
+      cloud [Gemini] as GeminiAPI
+      cloud [Custom LLM] as CustomLLM
+      cloud [Claude API] as ClaudeAPI
+      cloud [OpenAI API] as OpenAIAPI
+      cloud [Search Engines] as SearchEngines
+    }
+  }
+
+  ' Development machine connections (direct function calls)
+  CC --> MCP
+  MCP --> Coord
+
+  Coord --> Git
+  Coord --> Vibe
+  Coord --> SA
+  Coord --> WS
+  Coord --> Insight
+  Coord --> Obs
+  Coord --> QA
+  Coord --> Persist
+  Coord --> Dedup
+
+  Coord --> GraphDB : initializes
+  Persist --> GraphDB : stores entities
+  GraphDB --> KGStorage : LevelDB
+  GraphDB --> Exporter : auto-export 30s
+  Exporter --> SharedMemory : writes JSON
+
+  Git --> History
+  Vibe --> History
+  CC --> History
+
+  SA --> GroqAPI
+  SA --> GeminiAPI
+  SA --> CustomLLM
+  SA --> ClaudeAPI
+  SA --> OpenAIAPI
+  Vibe --> GroqAPI
+  Insight --> GroqAPI
+  Obs --> GroqAPI
+  QA --> GroqAPI
+  Dedup --> OpenAIAPI
+  WS --> SearchEngines
+}
+
+note top of DevMachine
+  **Development Deployment:**
+  • Single machine, all agents in one process
+  • GraphDB with LevelDB persistence
+  • Direct function calls (no MQTT/RPC)
+  • Auto-export to git-tracked JSON
+  • LLM fallback chain: Groq → Gemini → Custom → Anthropic → OpenAI
+end note
+
+@enduml

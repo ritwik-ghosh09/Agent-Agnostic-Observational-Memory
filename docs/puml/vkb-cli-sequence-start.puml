@@ -1,0 +1,130 @@
+@startuml vkb-cli-sequence-start
+!include _standard-style.puml
+
+title VKB Server Startup Sequence\n(Lazy Initialization Pattern)
+
+actor User
+participant "coding\n(bash)" as coding
+participant "start-services-\nrobust.js" as starter
+participant "vkb-cli.js" as vkbcli
+participant "VKBServer" as server
+participant "Express\nServer" as express
+participant "StartupState" as state
+participant "DatabaseManager" as dbmgr
+participant "DataProcessor" as dataproc
+
+User -> coding: coding / claude-mcp
+activate coding
+coding -> starter: startServices()
+activate starter
+
+== Phase 1: Fast Server Start (1-2 seconds) ==
+
+starter -> vkbcli: spawn VKB server
+activate vkbcli
+
+vkbcli -> server: new VKBServer()
+activate server
+server -> server: parse config,\ncreate components
+
+vkbcli -> server: start()
+
+server -> state: createStartupState()
+activate state
+state -> state: status = 'starting'
+state --> server: startupState
+
+note right of state
+  **Startup States:**
+  • starting - Express alive, init in progress
+  • ready - Fully initialized
+  • error - Init failed (still serves cached data)
+end note
+
+server -> express: startExpressServer()
+activate express
+express -> express: register API routes
+express -> express: register /health endpoint
+express -> express: register /ready endpoint
+express -> express: bind to port 8080
+express --> server: HTTP server instance
+
+server --> vkbcli: {success, pid, url}
+
+== Phase 2: Health Check (Immediate Pass) ==
+
+starter -> express: GET /health
+activate express
+express -> state: toJSON()
+state --> express: {status: 'starting', ready: false}
+express --> starter: 200 OK
+deactivate express
+
+note over starter
+  **Health check passes immediately**
+  Server is alive (liveness check)
+  even though initialization continues
+end note
+
+starter --> coding: ✅ VKB started
+deactivate starter
+
+== Phase 3: Background Initialization (Non-blocking) ==
+
+server ->> server: initializeInBackground()
+note right: Runs async, does\nnot block startup
+
+server -> dbmgr: initialize()
+activate dbmgr
+dbmgr -> dbmgr: connect Qdrant
+dbmgr -> dbmgr: connect SQLite
+dbmgr -> dbmgr: connect GraphDB
+dbmgr --> server: initialized
+deactivate dbmgr
+
+server -> state: updateDetail('databaseManagerReady', true)
+
+server -> dataproc: prepareData()
+activate dataproc
+dataproc -> dataproc: validate paths
+dataproc -> dataproc: export from GraphDB
+dataproc -> dataproc: write memory.json
+dataproc --> server: success
+deactivate dataproc
+
+server -> state: updateDetail('dataProcessorReady', true)
+server -> state: setReady()
+state -> state: status = 'ready'
+
+note over state
+  **Total startup time:**
+  ~200-500ms for HTTP server
+  ~5-15s for full initialization
+
+  Health checks pass immediately!
+end note
+
+== Readiness Check (After Full Init) ==
+
+User -> express: GET /ready
+activate express
+express -> state: toJSON()
+state --> express: {status: 'ready', ready: true}
+express --> User: 200 OK
+deactivate express
+
+deactivate state
+deactivate server
+deactivate vkbcli
+deactivate coding
+
+note over coding, dataproc
+  **Lazy Initialization Benefits:**
+  • Health checks pass within 1-2 seconds
+  • No timeout failures during slow DB init
+  • Server responds immediately for liveness
+  • /ready endpoint for readiness checks
+  • Graceful degradation on init errors
+end note
+
+@enduml

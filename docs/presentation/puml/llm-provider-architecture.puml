@@ -1,0 +1,34 @@
+@startuml llm-provider-architecture
+!include _standard-style.puml
+
+' Presentation mode: horizontal pipeline
+skinparam DefaultFontSize 14
+skinparam ArrowThickness 2
+skinparam RectangleBorderThickness 2
+skinparam NoteFontSize 12
+skinparam DefaultTextAlignment center
+
+left to right direction
+
+title Unified LLM Provider Architecture
+
+rectangle "LLM Service" <<core>> as SVC
+rectangle "Cache +\nCircuit Breaker" <<infra>> as INFRA
+
+rectangle "**Subscription** (Zero Cost)\n\nClaude Code  |  Copilot\n<size:11>Quota tracked, exponential backoff</size>" <<cli>> as SUB
+rectangle "**Cloud API** (Per-Token)\n\nGroq  |  Anthropic  |  OpenAI\n<size:11>Circuit breaker per provider</size>" <<api>> as API
+rectangle "**Local** (Free)\n\nDMR  |  Ollama\n<size:11>Always available fallback</size>" <<infra>> as LOCAL
+
+SVC --> INFRA
+INFRA --> SUB : try first
+INFRA --> API : fallback
+INFRA --> LOCAL : last resort
+
+note bottom of SVC
+  **Parallelized Tier-Based Routing**
+  All Tiers: Copilot (primary), Groq, Claude Code, Anthropic, OpenAI, Gemini
+  **Copilot scales with parallelism** (0.77s @10 concurrent)
+  **$0 until quota exhausted**
+end note
+
+@enduml

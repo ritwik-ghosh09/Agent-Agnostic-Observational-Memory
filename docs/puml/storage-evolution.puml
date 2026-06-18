@@ -1,0 +1,84 @@
+@startuml
+!include _standard-style.puml
+
+title Current Knowledge Storage Architecture
+
+top to bottom direction
+
+rectangle "Graph Storage System" as current #E8F5E8 {
+  database "Graphology\n(In-Memory)" as graphology
+  database "LevelDB\n(Persistent)" as level
+  file "coding.json\nresi.json\nui.json\n(Git-Tracked)" as json
+
+  graphology <-down-> level : bi-directional sync\n(1s auto-persist)
+  level <-right-> json : bi-directional sync\n(5s debounced export,\nimport on startup)
+
+  note bottom of graphology
+    **In-Memory Graph**
+    • Fast graph operations
+    • Multi-graph support
+    • Rich algorithms
+    • Event-driven updates
+  end note
+
+  note bottom of level
+    **Persistent Storage**
+    • Key-value storage
+    • Atomic operations
+    • File-based
+    • .data/knowledge-graph/
+  end note
+
+  note bottom of json
+    **Git-Tracked Exports**
+    • Auto-export on changes (5s)
+    • Auto-import on startup
+    • Team collaboration via git
+    • .data/knowledge-export/*.json
+  end note
+}
+
+' Components
+package "Core Services" as services #E8F4FD {
+  component "GraphDatabaseService" as graphdb <<core>>
+  component "GraphKnowledgeExporter" as exporter <<sync>>
+  component "GraphKnowledgeImporter" as importer <<sync>>
+}
+
+graphdb -down-> graphology : manages
+exporter -down-> json : exports
+importer -down-> json : imports
+
+note right of services
+  **Service Architecture**
+
+  GraphDatabaseService:
+  • Primary graph interface
+  • Event emitter (entity:stored, etc.)
+  • Team-scoped operations
+
+  GraphKnowledgeExporter:
+  • Auto-export (default: true)
+  • Debounced (5s after changes)
+  • Event-driven triggers
+
+  GraphKnowledgeImporter:
+  • Auto-import on startup
+  • Newest-wins conflict resolution
+  • Team isolation
+end note
+
+' Current features
+note left of current
+  **Key Features**
+  ✓ Agent-agnostic
+  ✓ No MCP dependency
+  ✓ Native graph operations
+  ✓ Team isolation (team:entity)
+  ✓ Fast graph traversals
+  ✓ Automatic bidirectional sync
+  ✓ Git-tracked collaboration
+  ✓ Backward compatible API
+end note
+
+@enduml

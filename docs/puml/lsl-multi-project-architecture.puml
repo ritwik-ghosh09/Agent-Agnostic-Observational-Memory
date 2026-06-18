@@ -1,0 +1,94 @@
+@startuml lsl-multi-project-architecture
+!include _standard-style.puml
+
+title LSL Multi-Project Monitoring System
+
+!define RECTANGLE class
+
+actor "User" as user
+box "Coding Infrastructure" #LightBlue
+  participant "Global LSL\nCoordinator" as glc <<infra>>
+  participant "Launch Script" as launch <<util>>
+end box
+
+box "Project: curriculum-alignment" #LightGreen
+  participant "Enhanced Transcript\nMonitor (78406)" as etm1 <<core>>
+  database "Claude Transcript\n.jsonl" as trans1 <<external>>
+  database "Local LSL Files\n.specstory/history/" as lsl1 <<storage>>
+end box
+
+box "Project: nano-degree" #LightYellow  
+  participant "Enhanced Transcript\nMonitor (78100)" as etm2 <<core>>
+  database "Claude Transcript\n.jsonl" as trans2 <<external>>
+  database "Local LSL Files\n.specstory/history/" as lsl2 <<storage>>
+end box
+
+box "Shared Services" #LightPink
+  participant "ReliableCoding\nClassifier" as rcc <<core>>
+  database "coding/.specstory/\nhistory/" as coding_lsl <<storage>>
+end box
+
+== Project Startup ==
+user -> launch : coding --project curriculum-alignment
+launch -> glc : ensure monitoring
+glc -> etm1 : spawn process with ENV:\nTRANSCRIPT_SOURCE_PROJECT=/path/to/curriculum-alignment
+
+user -> launch : coding --project nano-degree  
+launch -> glc : ensure monitoring
+glc -> etm2 : spawn process with ENV:\nTRANSCRIPT_SOURCE_PROJECT=/path/to/nano-degree
+
+== Real-Time Monitoring ==
+loop Every 60 seconds
+  etm1 -> trans1 : monitor & refresh transcript path
+  trans1 -> etm1 : new exchanges
+  
+  etm2 -> trans2 : monitor & refresh transcript path
+  trans2 -> etm2 : new exchanges
+end
+
+== Content Classification & Routing ==
+etm1 -> rcc : classify exchange content
+rcc -> rcc : session continuation filter
+rcc -> rcc : keyword analysis
+alt Coding Infrastructure Content
+  rcc -> etm1 : CODING_INFRASTRUCTURE
+  etm1 -> coding_lsl : 2025-09-25_1800-1900_g9b30a_from-curriculum-alignment.md
+else Project-Specific Content  
+  rcc -> etm1 : NOT_CODING_INFRASTRUCTURE
+  etm1 -> lsl1 : 2025-09-25_1800-1900_g9b30a.md
+end
+
+etm2 -> rcc : classify exchange content
+rcc -> rcc : session continuation filter
+rcc -> rcc : keyword analysis
+alt Coding Infrastructure Content
+  rcc -> etm2 : CODING_INFRASTRUCTURE
+  etm2 -> coding_lsl : 2025-09-25_1900-2000_g9b30a_from-nano-degree.md
+else Project-Specific Content
+  rcc -> etm2 : NOT_CODING_INFRASTRUCTURE  
+  etm2 -> lsl2 : 2025-09-25_1900-2000_g9b30a.md
+end
+
+== Health Monitoring ==
+loop Every 30 seconds
+  glc -> etm1 : check health file
+  etm1 -> glc : process metrics & activity
+  glc -> etm2 : check health file
+  etm2 -> glc : process metrics & activity
+  
+  note over glc
+    Health Check Results:
+    - curriculum-alignment: 11 exchanges, healthy
+    - nano-degree: 18 exchanges, healthy
+  end note
+end
+
+note over user, coding_lsl
+  **Key Benefits:**
+  • Each project monitors its own Claude transcript
+  • Independent health monitoring & recovery
+  • Smart content routing prevents false redirections
+  • Zero data loss through robust process management
+end note
+
+@enduml

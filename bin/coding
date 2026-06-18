@@ -1,0 +1,320 @@
+#!/bin/bash
+
+# Coding Agent Unified Launcher
+# Supports both Claude Code (with MCP) and GitHub CoPilot (with fallbacks)
+
+set -e
+
+# Disable terminal focus reporting immediately to prevent ^[[I / ^[[O escape sequences
+# leaking into output during the startup phase
+printf '\e[?1004l' 2>/dev/null || true
+
+# Default values
+AGENT=""
+FORCE_AGENT=""
+ARGS=()
+VERBOSE=false
+DRY_RUN=false
+CONFIG_FILE=""
+PROJECT_DIR=""
+FORCE_CLEAN=false
+
+# Helper functions
+log() {
+  if [ "$VERBOSE" = true ]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+  fi
+}
+
+error() {
+  echo "Error: $1" >&2
+  exit 1
+}
+
+# Force-clean all coding-related processes and ports for a clean start
+force_clean() {
+  echo "[Force] Killing all coding-related processes for a clean start..."
+
+  # Coding-specific ports (from .env.ports)
+  local CODING_PORTS="3030 3031 3032 3033 3847 3848 3849 3850 8080 9090 12435"
+
+  # 1. Stop Docker containers first (graceful)
+  local docker_dir
+  docker_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/docker"
+  if [ -f "$docker_dir/docker-compose.yml" ] && command -v docker &>/dev/null; then
+    echo "[Force] Stopping Docker coding containers..."
+    docker compose -f "$docker_dir/docker-compose.yml" down 2>/dev/null || true
+  fi
+
+  # 2. Kill the global process supervisor and health monitors (they respawn children)
+  local supervisor_pids
+  supervisor_pids=$(pgrep -f 'global-process-supervisor\.js' 2>/dev/null || true)
+  if [ -n "$supervisor_pids" ]; then
+    echo "[Force] Killing global process supervisor(s): $supervisor_pids"
+    echo "$supervisor_pids" | xargs kill -9 2>/dev/null || true
+  fi
+
+  local monitor_pids
+  monitor_pids=$(pgrep -f 'statusline-health-monitor\.js' 2>/dev/null || true)
+  if [ -n "$monitor_pids" ]; then
+    echo "[Force] Killing health monitor(s): $monitor_pids"
+    echo "$monitor_pids" | xargs kill -9 2>/dev/null || true
+  fi
+
+  local lsl_pids
+  lsl_pids=$(pgrep -f 'global-lsl-coordinator\.js\|live-logging-coordinator\.js' 2>/dev/null || true)
+  if [ -n "$lsl_pids" ]; then
+    echo "[Force] Killing LSL coordinator(s): $lsl_pids"
+    echo "$lsl_pids" | xargs kill -9 2>/dev/null || true
+  fi
+
+  # 3. Kill anything listening on coding ports
+  local killed_any=false
+  for port in $CODING_PORTS; do
+    local pids
+    pids=$(lsof -ti ":$port" 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+      echo "[Force] Killing process(es) on port $port: $pids"
+      echo "$pids" | xargs kill -9 2>/dev/null || true
+      killed_any=true
+    fi
+  done
+
+  # 4. Kill any remaining coding-repo node processes (but NOT VS Code, NOT this script)
+  local coding_repo
+  coding_repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  local remaining
+  remaining=$(pgrep -f "$coding_repo/(scripts|integrations|src|lib)/.*\.(js|ts)" 2>/dev/null || true)
+  if [ -n "$remaining" ]; then
+    echo "[Force] Killing remaining coding node processes: $remaining"
+    echo "$remaining" | xargs kill -9 2>/dev/null || true
+  fi
+
+  # 5. Brief wait for ports to release
+  sleep 1
+
+  # 6. Verify ports are free
+  local blocked_ports=""
+  for port in $CODING_PORTS; do
+    if lsof -ti ":$port" &>/dev/null; then
+      blocked_ports="$blocked_ports $port"
+    fi
+  done
+
+  if [ -n "$blocked_ports" ]; then
+    echo "[Force] ⚠️  Ports still in use after cleanup:$blocked_ports"
+    echo "[Force] You may need to manually check: lsof -i :<port>"
+  else
+    echo "[Force] ✅ All coding ports are free"
+  fi
+
+  echo "[Force] Clean slate ready. Continuing with startup..."
+}
+
+show_help() {
+  cat << EOF
+Coding Agent Unified Launcher
+
+USAGE:
+  coding-agent [OPTIONS] [COMMAND_ARGS...]
+
+OPTIONS:
+  --agent AGENT      Force specific agent (any name with config/agents/<name>.sh)
+  --claude           Force Claude Code (same as --agent claude)
+  --copilot, --copi  Force CoPilot (same as --agent copilot)
+  --opencode         Force OpenCode (same as --agent opencode)
+  --mastra           Force Mastracode (same as --agent mastra)
+  --force            Kill ALL coding-related processes for a clean start
+  --copilot-stop     Stop all CoPilot fallback services
+  --config FILE      Use specific config file
+  --project DIR      Set target project directory (default: current dir)
+  --verbose          Enable verbose logging
+  --dry-run          Run startup logic but stop before launching agent
+  --help             Show this help
+
+EXAMPLES:
+  coding-agent --lsl-status           # Show LSL system status
+  coding-agent --lsl-validate         # Run LSL system validation  coding-agent                    # Use best available agent
+  coding-agent --copilot          # Force CoPilot
+  coding-agent --copilot-stop     # Stop CoPilot services
+  coding-agent --claude           # Force Claude Code
+  coding-agent --mastra           # Force Mastracode
+  coding-agent --project /path/to/project  # Work in specific project
+  coding-agent suggest "add tests" # Pass command to agent
+
+AGENTS:
+  claude     Claude Code with MCP servers (memory, browser, logging)
+  copilot    GitHub CoPilot with fallback services
+  mastra     Mastracode with observational memory (mastra.ai)
+  <name>     Any agent with a config at config/agents/<name>.sh
+
+For more information, see docs/agent-agnostic-implementation-plan.md
+EOF
+}
+
+# Get script directory (needed early for --copilot-stop)
+# Resolve symlinks to get the actual script location
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --agent)
+      FORCE_AGENT="$2"
+      shift 2
+      ;;
+    --copilot|--copi)
+      FORCE_AGENT="copilot"
+      shift
+      ;;
+    --force)
+      FORCE_CLEAN=true
+      shift
+      ;;
+    --copilot-stop)
+      exec node "$SCRIPT_DIR/../lib/services/stop-services.js" --agent copilot --verbose
+      ;;
+    --claude)
+      FORCE_AGENT="claude"
+      shift
+      ;;
+    --opencode)
+      FORCE_AGENT="opencode"
+      shift
+      ;;
+    --mastra)
+      FORCE_AGENT="mastra"
+      shift
+      ;;
+    --config)
+      CONFIG_FILE="$2"
+      shift 2
+      ;;
+    --project)
+      PROJECT_DIR="$2"
+      shift 2
+      ;;
+    --verbose)
+      VERBOSE=true
+      shift
+      ;;
+    --dry-run)
+      DRY_RUN=true
+      shift
+      ;;
+    --lsl-status)
+      exec node "$SCRIPT_DIR/../scripts/live-logging-coordinator.js" --status
+      ;;
+    --lsl-validate)
+      exec node "$SCRIPT_DIR/../tests/integration/full-system-validation.test.js"
+      ;;
+    --help|-h)
+      show_help
+      exit 0
+      ;;
+    *)
+      ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+# Script directory already defined above
+
+# Force-clean if requested (before anything else)
+if [ "$FORCE_CLEAN" = true ]; then
+  force_clean
+fi
+
+# Detect Node.js
+if ! command -v node &> /dev/null; then
+  error "Node.js is required but not found in PATH"
+fi
+
+# Use forced agent if specified
+if [ -n "$FORCE_AGENT" ]; then
+  AGENT="$FORCE_AGENT"
+  log "Using forced agent: $AGENT"
+else
+  # Auto-detect best available agent
+  log "Detecting best available agent..."
+  AGENT=$(node "$SCRIPT_DIR/../lib/agent-detector.js" --best)
+  
+  if [ "$AGENT" = "null" ] || [ -z "$AGENT" ]; then
+    error "No supported agent found. Please install Claude Code or GitHub CoPilot CLI."
+  fi
+  
+  log "Detected agent: $AGENT"
+fi
+
+# Resolve the repo path early (needed for config lookup)
+CODING_REPO_PATH="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Validate agent: check for config file in config/agents/
+AGENT_CONFIG="$CODING_REPO_PATH/config/agents/${AGENT}.sh"
+if [ ! -f "$AGENT_CONFIG" ]; then
+  # List available agents from config/agents/*.sh
+  AVAILABLE=$(ls "$CODING_REPO_PATH/config/agents/"*.sh 2>/dev/null | xargs -I{} basename {} .sh | tr '\n' ', ' | sed 's/,$//')
+  error "Unsupported agent: $AGENT. No config at config/agents/${AGENT}.sh. Available: ${AVAILABLE:-none}"
+fi
+
+# Capture the directory where coding was invoked from (before any cd operations)
+INVOKED_FROM_DIR="$(pwd)"
+
+# Validate and set project directory
+if [ -n "$PROJECT_DIR" ]; then
+  # Explicit project directory was specified with --project
+  if [ ! -d "$PROJECT_DIR" ]; then
+    error "Project directory does not exist: $PROJECT_DIR"
+  fi
+  PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"  # Get absolute path
+  log "Using explicit project directory: $PROJECT_DIR"
+else
+  # No explicit project specified, use the directory where coding was invoked
+  PROJECT_DIR="$INVOKED_FROM_DIR"
+  
+  # Check if we're in the coding repo itself
+  if [ "$PROJECT_DIR" = "$CODING_REPO_PATH" ]; then
+    log "Working in coding repository itself"
+  else
+    log "Working in project: $(basename "$PROJECT_DIR") (from: $PROJECT_DIR)"
+  fi
+fi
+
+# Export dry-run and force flags for launch scripts
+export CODING_DRY_RUN="$DRY_RUN"
+export CODING_FORCE_CLEAN="$FORCE_CLEAN"
+
+# Set environment variables for agent adapter system
+export CODING_AGENT="$AGENT"
+export CODING_TOOLS_PATH="$SCRIPT_DIR/.."
+export CODING_REPO="$SCRIPT_DIR/.."
+export CODING_PROJECT_DIR="$PROJECT_DIR"
+
+# Ensure private session-history dirs exist. These trees (history/, logs/,
+# archive/) are .gitignore'd in 'coding' and live in a separate private
+# repo configured via install.sh. LSL services that write to them crash
+# if the dirs don't exist on a fresh public checkout.
+if [ -x "$SCRIPT_DIR/init-history.sh" ]; then
+  "$SCRIPT_DIR/init-history.sh" 2>/dev/null || true
+fi
+export CODING_AGENT_ADAPTER_PATH="$SCRIPT_DIR/../lib/agent-api/adapters"
+export CODING_HOOKS_CONFIG="$SCRIPT_DIR/../config/hooks-config.json"
+export CODING_TRANSCRIPT_FORMAT="$AGENT"
+
+# Launch appropriate agent
+# Prefer agent-specific launcher if it exists, otherwise use generic launcher
+AGENT_LAUNCHER="$SCRIPT_DIR/../scripts/launch-${AGENT}.sh"
+if [ -x "$AGENT_LAUNCHER" ]; then
+  log "Launching $AGENT via agent-specific launcher..."
+  exec "$AGENT_LAUNCHER" "${ARGS[@]}"
+else
+  log "Launching $AGENT via generic launcher..."
+  exec "$SCRIPT_DIR/../scripts/launch-generic.sh" "$AGENT_CONFIG" "${ARGS[@]}"
+fi

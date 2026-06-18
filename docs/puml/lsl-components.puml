@@ -1,0 +1,117 @@
+@startuml lsl-components
+!include _standard-style.puml
+
+title Live Session Logging System Components
+
+top to bottom direction
+
+package "Enhanced Transcript Monitor" {
+  component [Transcript Path\nRefresh] as tpr <<util>>
+  component [Exchange\nExtraction] as extract <<core>>
+  component [Configurable\nRedactor] as redactor <<security>>
+  component [Health File\nGeneration] as health <<util>>
+  component [Session Boundary\nDetection] as session <<util>>
+}
+
+package "Global LSL Coordinator" {
+  component [Project Registry\nManagement] as registry <<infra>>
+  component [Monitor Process\nLifecycle] as lifecycle <<infra>>
+  component [Health Monitoring] as healthmon <<infra>>
+  component [Process Recovery] as recovery <<infra>>
+}
+
+package "Classification System" {
+  component [Conversation Bias\nTracker (Layer 0)] as biastrack <<core>>
+  component [Session Continuation\nFilter] as sessionfilter <<util>>
+  component [Path Analyzer\n(Layer 1)] as pathanalyzer <<util>>
+  component [Keyword Matcher\n(Layer 2)] as keywords <<util>>
+  component [Embedding Classifier\n(Layer 3)] as embedding <<core>>
+  component [Semantic Analyzer\n(Layer 4)] as semantic <<api>>
+  component [Performance\nMonitor] as perfmon <<util>>
+}
+
+package "File Management" {
+  component [LSL File Manager] as filemanager <<core>>
+  component [User Hash\nGenerator] as userhash <<util>>
+  component [Content Router] as router <<core>>
+  component [Session File\nCreation] as sessionfile <<storage>>
+}
+
+package "Data Sources" {
+  database "Claude Transcripts\n~/.claude/projects/" as transcripts <<external>>
+  file "Coding Keywords\nDictionary" as keyworddb <<storage>>
+  database "Project Registry\n.global-lsl-registry.json" as projregistry <<storage>>
+}
+
+package "Output Files" {
+  database "Local Project\n.specstory/history/" as localfiles <<storage>>
+  database "Coding Infrastructure\ncoding/.specstory/history/" as codingfiles <<storage>>
+  component "Health Coordinator\nstate.lsl[sid:project]" as healthcoord <<api>>
+}
+
+' Enhanced Transcript Monitor relationships
+tpr SYNC_LINE transcripts : monitors
+extract SYNC_LINE transcripts : reads
+health SYNC_LINE healthcoord : POST lsl_heartbeat
+session SYNC_LINE sessionfile : manages
+
+' Global Coordinator relationships
+registry SYNC_LINE projregistry : manages
+lifecycle CONTROL_LINE tpr : spawns/controls
+healthmon DATA_LINE healthcoord : reads state.lsl
+recovery CONTROL_LINE lifecycle : triggers restart
+
+' Classification System relationships
+extract SYNC_LINE sessionfilter : pre-filter
+sessionfilter SYNC_LINE pathanalyzer : analyze
+pathanalyzer SYNC_LINE keywords : keyword check
+keywords SYNC_LINE embedding : vector similarity
+embedding OPTIONAL_LINE semantic : fallback
+keywords DATA_LINE keyworddb : loads
+perfmon DATA_LINE keywords : monitors
+perfmon DATA_LINE embedding : monitors
+perfmon DATA_LINE semantic : monitors
+
+' File Management relationships
+extract SYNC_LINE redactor : sanitize content
+pathanalyzer SYNC_LINE router : route decision
+redactor SYNC_LINE router : redacted content
+router SYNC_LINE filemanager : route to storage
+filemanager SYNC_LINE userhash : generate names
+filemanager DATA_LINE localfiles : writes local
+filemanager DATA_LINE codingfiles : writes coding
+
+note top of sessionfilter
+  **Session Continuation Detection**
+  Prevents false positives:
+  - "This session is being continued..."
+  - Summary structure indicators
+  - Conversation boundary patterns
+end note
+
+note right of perfmon
+  **Performance Metrics**
+  - Layer timings
+  - Cache hit rates  
+  - Classification accuracy
+  - Resource usage
+end note
+
+note bottom of transcripts
+  **Real-time Monitoring**
+  - .jsonl file watching
+  - Periodic path refresh (60s)
+  - Streaming processing
+  - Exchange-level granularity
+end note
+
+note right of redactor
+  **Security Sanitization (ConfigurableRedactor)**
+  - 13 pattern types: API keys, JWT, DB URLs, emails
+  - Applied during formatting (live) & pre-write (post-session)
+  - Config: .specstory/config/redaction-patterns.json
+  - Severity levels: low, medium, high, critical
+  - Redacts all content types before storage
+end note
+
+@enduml

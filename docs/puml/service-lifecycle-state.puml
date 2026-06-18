@@ -1,0 +1,87 @@
+@startuml
+!include _standard-style.puml
+
+title Service Lifecycle State Diagram
+
+[*] --> Unregistered
+
+state "Unregistered" as Unregistered {
+  state "Service Not Tracked" as NotTracked
+}
+
+state "Registered" as Registered {
+  state "Running" as Running #90EE90
+  state "Unhealthy" as Unhealthy #FFE4B5
+  state "Failed" as Failed #FFB6C1
+  state "Recovering" as Recovering #87CEEB
+}
+
+state "Session Services" as SessionBound {
+  state "Session Active" as SessionActive #E0FFE0
+  state "Session Cleanup Pending" as SessionCleanup #FFE0E0
+}
+
+Unregistered --> Registered : registerService()
+note on link
+  Coordinator or start-services.sh
+  spawns process and registers
+  with PSM
+end note
+
+Registered --> Running : PID alive +\nhealth check passes
+Running --> Unhealthy : health check fails\nor PID dead
+Running --> SessionActive : if per-session service
+
+Unhealthy --> Recovering : coordinator triggers\nrecovery (< 5 attempts)
+Recovering --> Running : restart successful
+Recovering --> Failed : max attempts exceeded\n(5 failures)
+
+Running --> Unregistered : unregisterService()\nor session cleanup
+Failed --> Unregistered : manual cleanup
+
+SessionActive --> SessionCleanup : session ends\n(EXIT/INT/TERM signal)
+SessionCleanup --> Unregistered : cleanup script\nkills & unregisters
+
+state "Health Check Events" as HealthEvents {
+  Running : entry: lastHealthCheck = now
+  Running : every 15s: performHealthCheck()
+  Running : exit: save health status
+}
+
+state "Recovery Logic" as RecoveryLogic {
+  Recovering : restartCount++
+  Recovering : backoff = min(2^count * 1s, 30s)
+  Recovering : if count >= 5: goto Failed
+}
+
+state "Cleanup Actions" as CleanupActions {
+  Unregistered : SIGTERM → wait 2s → SIGKILL
+  Unregistered : unregister from PSM
+  Unregistered : remove from coordinator registry
+}
+
+note right of Running
+  **Healthy Criteria:**
+  - PID exists (kill -0)
+  - Health check < 90s old
+  - Port responding (if port-based)
+  - Health file fresh (if file-based)
+end note
+
+note right of Failed
+  **Failed State:**
+  - Max restarts exceeded
+  - Manual intervention needed
+  - Service shows in status as ❌
+  - Coordinator stops recovery
+end note
+
+note right of SessionCleanup
+  **Session Cleanup:**
+  - Triggered by trap handlers
+  - Kills all session services
+  - Unregisters from PSM
+  - Preserves global services
+end note
+
+@enduml

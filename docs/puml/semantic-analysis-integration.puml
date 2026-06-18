@@ -1,0 +1,181 @@
+@startuml semantic-analysis-integration
+!include _standard-style.puml
+
+title Semantic Analysis System - Integration Architecture
+
+top to bottom direction
+
+package "Coding Agent Integration Layer" {
+  component [Coding Agent] as CC
+  note right of CC
+    • Primary user interface
+    • Tool-based interaction
+    • Context-aware operations
+    • Session management
+  end note
+
+  component [MCP Server] as MCP
+  interface "Tool Interface" as ToolIface
+  note right of MCP
+    • Tool exposure layer
+    • Request routing
+    • Response aggregation
+    • Error handling
+  end note
+}
+
+package "14-Agent Semantic Analysis System" {
+  component [GitHistoryAgent] as Git
+  component [VibeHistoryAgent] as Vibe
+  component [SemanticAnalysisAgent] as SA
+  component [WebSearchAgent] as WS
+  component [InsightGenerationAgent] as Insight
+  component [ObservationGenerationAgent] as Obs
+  component [QualityAssuranceAgent] as QA
+  component [PersistenceAgent] as Persist
+  component [DeduplicationAgent] as Dedup
+  component [CoordinatorAgent] as Coord
+}
+
+package "Storage Architecture" {
+  database [GraphDB\nGraphology + LevelDB\n.data/knowledge-graph/] as GraphDB
+  component [Graph Exporter] as Exporter
+  database [coding.json\n.data/knowledge-export/] as SharedMemory
+
+  note right of GraphDB
+    • Primary storage layer
+    • In-memory graph (Graphology)
+    • Persistent storage (LevelDB)
+    • Ontology-based classification
+  end note
+
+  note right of SharedMemory
+    • Auto-exported from GraphDB
+    • 30-second intervals
+    • Git-tracked for collaboration
+    • Cross-session persistence
+  end note
+}
+
+package "External Integrations" {
+  component [Groq API] as GroqAPI
+  note right of GroqAPI
+    • Default LLM provider
+    • Low cost, low latency
+    • llama-3.3-70b-versatile
+    • Fast analysis
+  end note
+
+  component [Gemini API] as GeminiAPI
+  note right of GeminiAPI
+    • Fallback provider 1
+    • Low cost, good quality
+    • gemini-2.0-flash-exp
+    • Reliable fallback
+  end note
+
+  component [Custom LLM] as CustomLLM
+  note right of CustomLLM
+    • Fallback provider 2
+    • Custom endpoints
+    • Flexible configuration
+    • Self-hosted options
+  end note
+
+  component [Claude API] as ClaudeAPI
+  note right of ClaudeAPI
+    • Fallback provider 3
+    • Advanced reasoning
+    • High quality analysis
+    • claude-sonnet-4
+  end note
+
+  component [OpenAI API] as OpenAIAPI
+  note right of OpenAIAPI
+    • Fallback provider 4
+    • Embeddings (Dedup)
+    • Provider redundancy
+    • gpt-4-turbo-preview
+  end note
+
+  component [Search Engines] as SearchEngines
+  component [DuckDuckGo] as DDG
+  note right of SearchEngines
+    • Multi-source search
+    • Technical documentation
+    • Best practices
+    • Reference materials
+  end note
+
+  component [Git Repository] as GitRepo
+  component [.specstory/history] as SpecStory
+  note right of SpecStory
+    • Conversation capture
+    • Session logs
+    • Historical context
+    • Cross-project tracking
+  end note
+}
+
+' Claude Code Integration Flow
+CC --> MCP : tool calls
+MCP --> ToolIface
+ToolIface --> Coord : execute workflow
+
+' Coordinator orchestrates all agents
+Coord --> Git : workflow step 1
+Coord --> Vibe : workflow step 2
+Coord --> SA : workflow step 3
+Coord --> WS : workflow step 4
+Coord --> Insight : workflow step 5
+Coord --> Obs : workflow step 6
+Coord --> QA : workflow step 7
+Coord --> Persist : workflow step 8
+Coord --> Dedup : infrastructure
+
+' Storage architecture
+Coord --> GraphDB : initializes & provides
+Persist --> GraphDB : stores entities
+GraphDB --> Exporter : auto-export 30s
+Exporter --> SharedMemory : writes JSON
+
+' Agent External Connections (5-tier LLM fallback chain)
+SA --> GroqAPI : 1st provider
+SA --> GeminiAPI : 2nd provider
+SA --> CustomLLM : 3rd provider
+SA --> ClaudeAPI : 4th provider
+SA --> OpenAIAPI : 5th provider
+Vibe --> GroqAPI : LLM
+Insight --> GroqAPI : LLM
+Obs --> GroqAPI : LLM
+QA --> GroqAPI : LLM
+Dedup --> OpenAIAPI : embeddings
+
+WS --> DDG : web search
+WS --> SearchEngines : api search
+
+Git --> GitRepo : code analysis
+Git --> SpecStory : session logs
+Vibe --> SpecStory : conversation analysis
+
+package "Integration Patterns" {
+  rectangle "Workflow Orchestration" as WorkflowPattern {
+    [User Request] --> [MCP Tool Call]
+    [MCP Tool Call] --> [CoordinatorAgent]
+    [CoordinatorAgent] --> [Multi-Agent Workflow]
+    [Multi-Agent Workflow] --> [Result Aggregation]
+    [Result Aggregation] --> [GraphDB Update]
+    [GraphDB Update] --> [User Response]
+
+    note bottom
+      **Workflow Pattern:**
+      - Complex tasks use orchestration
+      - Coordinator manages all agents
+      - Results automatically captured
+      - GraphDB updated seamlessly
+      - No MQTT/RPC communication
+    end note
+  }
+}
+
+@enduml

@@ -1,0 +1,37 @@
+@startuml conversation-based-detection-flow
+!include _standard-style.puml
+
+title LSL v3.0 - Conversation-Based Redirect Detection
+
+start
+
+:Receive New Exchange;
+
+:Update Working Directory Context|
+note right : Check for cwd field in transcript
+
+if (Working Directory contains /coding?) then (yes)
+  :Mark as Coding Activity;
+  #lightgreen:foundCodingActivity = true;
+else (no)
+  repeat
+    :Analyze Next Tool Call;
+    :Resolve Relative Paths;
+    if (Contains coding paths?) then (yes)
+      :Mark as Coding Activity;
+      #lightgreen:foundCodingActivity = true;
+      break
+    endif
+  repeat while (More tool calls?)
+endif
+
+if (Found Coding Activity?) then (yes)
+  #lightgreen:Show coding Indicator;
+  :Update Status Daemon;
+else (no)
+  #lightcoral:Clear Indicator;
+endif
+
+stop
+
+@enduml

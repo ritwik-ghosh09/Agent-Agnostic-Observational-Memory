@@ -1,0 +1,478 @@
+# Process Monitoring System
+
+**Version**: 3.0
+**Last Updated**: 2025-10-15
+**Status**: Production
+
+## Overview
+
+The monitoring system provides unified process tracking, health monitoring, and automatic recovery for all coding project services. All process state is managed through the **Process State Manager (PSM)** as the single source of truth.
+
+## System Health Dashboard
+
+The System Health Dashboard provides real-time visual monitoring of all system components through a web interface accessible at `http://localhost:3032`.
+
+![System Health Dashboard](../images/health-monitor.png)
+
+**Dashboard Overview** (shown above):
+
+**Overall Status Panel** (Green):
+- **Status**: Healthy - All critical systems operational
+- **Last Verified**: 12m ago - Recent health check completion
+- **0 Total Violations** - No health check failures detected
+- **0 Critical Issues** - No blocking problems
+- **6 Checks Passed** - All monitored components healthy
+- **Auto-Healing Active** ⚡ - Automatic service restart enabled
+- **Stale Data** 🔴 - Data is >5 minutes old (verification recommended)
+
+**Monitored Components**:
+
+1. **Databases** (2/2 Healthy):
+   - **LevelDB** (Graph database) - OK
+   - **Qdrant** (Vector database) - OK
+
+2. **Services** (3/3 Healthy):
+   - **VKB Server** (Port 8080) - Knowledge visualization server healthy
+   - **Constraint Monitor** (Port 3031) - Code quality monitoring operational
+   - **Dashboard** (Port 3030) - Constraint dashboard serving
+
+3. **Processes** (2/2 Healthy):
+   - **Process Registry** - PSM tracking operational
+   - **Stale PIDs** - No orphaned processes detected
+
+**Detailed Health Checks Table**:
+- `leveldb_lock_check` - Level DB locked by registered process (PID: 87197)
+- `qdrant_availability` - Qdrant vector database available
+- `vkb_server` - VKB server is healthy
+- `constraint_monitor` - Constraint monitor is healthy
+- `dashboard_server` - Dashboard server is healthy
+- `stale_pids` - No stale PIDs detected
+
+All checks performed 12 minutes ago, showing consistent healthy state across all monitored components.
+
+**Dashboard Features**:
+- Real-time monitoring with 5-second refresh via WebSocket
+- Manual "Run Verification" button for immediate health check
+- Direct link to Constraint Dashboard
+- Color-coded status indicators (green = healthy, yellow = warning, red = critical)
+- Detailed check results with timestamps
+- Auto-healing status tracking
+
+**Access**: The dashboard is automatically started with the coding environment and is available at:
+- Frontend: `http://localhost:3032`
+- API: `http://localhost:3033`
+
+## Architecture
+
+![Monitoring Architecture](../images/monitoring-architecture.png)
+
+### 9 Core Health System Classes
+
+The monitoring system is built on 9 interconnected classes across 6 architectural layers:
+
+![Health System Classes](../images/health-system-classes.png)
+
+| Layer | Class | File | Purpose |
+|-------|-------|------|---------|
+| Core | **ProcessStateManager** | `process-state-manager.js` | Unified registry with atomic locking |
+| 0 | **SystemMonitorWatchdog** | `system-monitor-watchdog.js` | Ultimate failsafe (cron/launchd) |
+| 1 | **GlobalServiceCoordinator** | `global-service-coordinator.js` | Service management daemon |
+| 1 | **GlobalLSLCoordinator** | `global-lsl-coordinator.js` | Multi-project LSL manager |
+| 2 | **MonitoringVerifier** | `monitoring-verifier.js` | Pre-session verification |
+| 3 | **HealthVerifier** | `health-verifier.js` | Core verification with auto-healing |
+| 4 | **StatusLineHealthMonitor** | `statusline-health-monitor.js` | Health aggregation daemon |
+| 5 | **EnhancedTranscriptMonitor** | `enhanced-transcript-monitor.js` | Per-project monitoring |
+| 5 | **LiveLoggingCoordinator** | `live-logging-coordinator.js` | Logging orchestration |
+
+### Core Components (Detailed)
+
+#### Core: Process State Manager (PSM)
+**File**: `scripts/process-state-manager.js`
+**Purpose**: Centralized process registry with atomic operations and health tracking
+**Registry**: `.live-process-registry.json`
+
+**Features**:
+- Atomic file operations with proper locking
+- Session-aware service tracking (global, per-project, per-session)
+- Automatic dead process cleanup
+- Health check timestamp management
+- **Used by ALL other health system classes**
+
+#### Layer 0: System Monitor Watchdog
+**File**: `scripts/system-monitor-watchdog.js`
+**Purpose**: Ultimate failsafe - monitors the monitor
+**Execution**: Via launchd every 60 seconds
+
+**Features**:
+- Monitors GlobalServiceCoordinator via PSM queries
+- Restarts coordinator if dead or stale
+- Registers restarts with PSM
+- Cannot be killed by user processes
+
+#### Layer 1: Global Service Coordinator
+**File**: `scripts/global-service-coordinator.js`
+**Purpose**: Service lifecycle management (start/stop/restart/health checks)
+
+**Features**:
+- Spawns and manages service processes
+- 15-second health checks with exponential backoff recovery
+- Integrates with PSM for all state tracking
+- Manages: constraint API, constraint dashboard, MCP servers
+
+#### Layer 1: Global LSL Coordinator
+**File**: `scripts/global-lsl-coordinator.js`
+**Purpose**: Multi-project transcript monitoring manager
+
+**Features**:
+- 30-second health checks on all registered projects
+- Auto-recovery of dead Enhanced Transcript Monitors
+- Maintains: `.global-lsl-registry.json`
+- "Plug'n'play" behavior for seamless session management
+
+#### Layer 2: Monitoring Verifier
+**File**: `scripts/monitoring-verifier.js`
+**Purpose**: Pre-session verification of all monitoring systems
+
+**Features**:
+- Runs before Claude session starts
+- Exit codes: 0=OK, 1=Critical (MUST NOT START), 2=Warning
+- Validates: watchdog, coordinator, project registration, service health
+
+#### Layer 3: Health Verifier
+**File**: `scripts/health-verifier.js`
+**Purpose**: Core verification engine with auto-healing
+
+**Features**:
+- 60-second periodic health checks
+- Checks: databases, services, processes
+- Generates health scores (0-100) per service
+- Triggers auto-healing via HealthRemediationActions
+
+#### Layer 4: StatusLine Health Monitor
+**File**: `scripts/statusline-health-monitor.js`
+**Purpose**: Health aggregation for Claude Code status bar
+
+**Features**:
+- 15-second update interval
+- **Only shows sessions with running transcript monitors**
+- Outputs to: `.logs/statusline-health-status.txt`
+- Auto-healing capabilities
+
+#### Layer 5: Enhanced Transcript Monitor
+**File**: `scripts/enhanced-transcript-monitor.js`
+**Purpose**: Real-time per-project transcript monitoring
+
+**Features**:
+- 2-second check interval for prompt detection
+- Writes health files to centralized `.health/` directory
+- Generates LSL files in `.specstory/history/`
+- Process state registration with PSM
+
+#### Layer 5: Live Logging Coordinator
+**File**: `scripts/live-logging-coordinator.js`
+**Purpose**: Orchestrates live logging components
+
+**Features**:
+- Manages LSLFileManager and operational logging
+- Multi-user support with user hash tracking
+- Performance metrics collection
+
+### Session Management
+**Files**: `scripts/launch-claude.sh`, `scripts/psm-register-session.js`, `scripts/psm-session-cleanup.js`
+**Purpose**: Automatic service lifecycle tied to Claude sessions
+
+**Features**:
+- Session registration on Claude startup
+- Trap handlers for cleanup (EXIT, INT, TERM)
+- Automatic service termination on session end
+
+## Service Types
+
+| Type | Scope | Lifecycle | Examples |
+|------|-------|-----------|----------|
+| `global` | System-wide singleton | Managed by coordinator/watchdog | `vkb-server`, `constraint-dashboard`, `global-service-coordinator` |
+| `per-project` | One instance per project | Managed by coordinator | `enhanced-transcript-monitor` |
+| `per-session` | Tied to Claude session | Auto-cleanup on session end | Custom session services |
+
+## Health Check Flow
+
+![Health Check Sequence](../images/monitoring-health-check-sequence.png)
+
+### Watchdog Health Check (Every 60s)
+```
+1. Watchdog → PSM: Query coordinator status
+2. PSM → Registry: Read .live-process-registry.json with lock
+3. PSM → Watchdog: Return service data
+4. Watchdog: Verify PID alive + health age < 120s
+5. If unhealthy: Kill stale → Spawn new → Register with PSM
+```
+
+### Coordinator Health Check (Every 15s)
+```
+For each managed service:
+1. Coordinator → PSM: Check service health
+2. PSM: Verify PID exists + health timestamp fresh
+3. If healthy: Coordinator → PSM: Refresh health timestamp
+4. If unhealthy: Attempt restart → Register new PID with PSM
+```
+
+## Service Lifecycle
+
+![Service Lifecycle States](../images/service-lifecycle-state.png)
+
+### State Transitions
+
+**Startup** (Unregistered → Running):
+```javascript
+// Spawn service
+const child = spawn('node', [scriptPath, ...args]);
+
+// Register with PSM
+await psm.registerService({
+  name: 'service-name',
+  pid: child.pid,
+  type: 'global', // or 'per-project', 'per-session'
+  script: 'scripts/service.js'
+});
+```
+
+**Health Monitoring** (Running ↔ Unhealthy):
+- Health checks via port, health file, or PID verification
+- Auto-restart with exponential backoff (1s, 2s, 4s, 8s, 16s, max 30s)
+- Max 5 restart attempts before marking as failed
+
+**Shutdown** (Running → Unregistered):
+- Graceful shutdown unregisters from PSM
+- Session cleanup terminates and unregisters all session services
+- Coordinator registers/unregisters itself with PSM
+
+## Session Management
+
+![Service Startup Integration](../images/service-startup-integration.png)
+
+### Session Lifecycle
+
+**1. Session Start** (`launch-claude.sh`):
+```bash
+SESSION_ID="claude-$$-$(date +%s)"
+export CLAUDE_SESSION_ID="$SESSION_ID"
+
+# Register session
+node scripts/psm-register-session.js "$SESSION_ID" "$$" "$PROJECT_PATH"
+
+# Setup cleanup
+trap cleanup_session EXIT INT TERM
+```
+
+**2. Session End** (Automatic):
+```bash
+cleanup_session() {
+  # PSM finds all services for session
+  # Terminates them (SIGTERM → SIGKILL after 2s)
+  # Unregisters from registry
+  node scripts/psm-session-cleanup.js "$SESSION_ID"
+}
+```
+
+## API Reference
+
+### Process State Manager API
+
+#### Service Registration
+```javascript
+await psm.registerService({
+  name: 'my-service',
+  pid: 12345,
+  type: 'global', // or 'per-project', 'per-session'
+  script: 'scripts/my-service.js',
+  projectPath: '/path/to/project', // optional for per-project
+  sessionId: 'session-123', // optional for per-session
+  metadata: { ... } // optional custom metadata
+});
+```
+
+#### Health Checks
+```javascript
+// Check if service is running
+const isRunning = await psm.isServiceRunning('my-service', 'global');
+
+// Get service details
+const service = await psm.getService('my-service', 'global');
+// Returns: { pid, script, type, startTime, lastHealthCheck, status, metadata }
+
+// Refresh health timestamp
+await psm.refreshHealthCheck('my-service', 'global');
+```
+
+#### Session Management
+```javascript
+// Register session
+await psm.registerSession('claude-12345-1234567890', {
+  pid: process.pid,
+  projectPath: '/path/to/project'
+});
+
+// Cleanup session (kills and unregisters all session services)
+const result = await psm.cleanupSession('claude-12345-1234567890');
+// Returns: { cleaned: 3, terminated: [{name, pid}, ...] }
+```
+
+#### System Health
+```javascript
+// Get overall health status
+const health = await psm.getHealthStatus();
+// Returns: {
+//   totalServices: 10,
+//   healthyServices: 9,
+//   unhealthyServices: 1,
+//   byServiceType: { global: 3, 'per-project': 6, 'per-session': 1 },
+//   details: [...]
+// }
+
+// Cleanup dead processes
+const cleaned = await psm.cleanupDeadProcesses();
+// Returns: number of processes cleaned
+```
+
+## Troubleshooting
+
+### Services Not Showing in PSM
+
+**Symptoms**: `psm status` shows 0 services but processes are running
+
+**Solution**:
+```bash
+# Check running processes
+ps aux | grep -E "(vkb-server|coordinator|dashboard)"
+
+# Register manually
+CODING_REPO=$(pwd) node scripts/psm-register.js <name> <pid> <type> <script>
+```
+
+### Coordinator Not Restarting
+
+**Symptoms**: Watchdog reports dead coordinator but doesn't restart
+
+**Solution**:
+```bash
+# Check watchdog logs
+tail -50 .logs/system-watchdog.log
+
+# Run watchdog manually
+node scripts/system-monitor-watchdog.js
+
+# Verify PSM access
+CODING_REPO=$(pwd) node scripts/process-state-manager.js status
+```
+
+### Session Cleanup Not Working
+
+**Symptoms**: Services remain after session ends
+
+**Solution**:
+```bash
+# Check for orphaned processes
+ps aux | grep -E "(transcript-monitor|custom-service)"
+
+# Manual cleanup
+CODING_REPO=$(pwd) node scripts/process-state-manager.js cleanup
+
+# Verify session registration
+cat .live-process-registry.json | jq '.sessions'
+```
+
+### Registry File Locked
+
+**Symptoms**: "EEXIST: file already exists" errors
+
+**Solution**:
+```bash
+# Check for stale locks
+ls -la .live-process-registry.json.lock
+
+# Remove ONLY if no PSM operations running
+rm -f .live-process-registry.json.lock
+
+# Verify no PSM processes active
+ps aux | grep process-state-manager
+```
+
+## Registry Structure
+
+**`.live-process-registry.json`**:
+```json
+{
+  "version": "3.0.0",
+  "lastChange": 1760456472581,
+  "sessions": {
+    "claude-12345-1234567890": {
+      "pid": 12345,
+      "projectPath": "/path/to/project",
+      "startTime": 1760456400000
+    }
+  },
+  "services": {
+    "global": {
+      "global-service-coordinator": {
+        "pid": 24834,
+        "script": "scripts/global-service-coordinator.js",
+        "type": "global",
+        "startTime": 1760456472581,
+        "lastHealthCheck": 1760456472581,
+        "status": "running",
+        "metadata": { "managedBy": "watchdog" }
+      }
+    },
+    "projects": {
+      "/path/to/project": {
+        "transcript-monitor": {
+          "pid": 25001,
+          "type": "per-project",
+          "script": "scripts/enhanced-transcript-monitor.js",
+          "projectPath": "/path/to/project",
+          "lastHealthCheck": 1760456500000,
+          "status": "running"
+        }
+      }
+    }
+  }
+}
+```
+
+## Diagrams
+
+All PlantUML source files and generated PNGs are located in:
+- **Source**: `docs/puml/monitoring-*.puml`
+- **Images**: `docs/images/monitoring-*.png`
+
+Available diagrams:
+- `monitoring-architecture.puml` - System architecture
+- `monitoring-health-check-sequence.puml` - Health check flow
+- `service-lifecycle-state.puml` - Service state transitions
+- `service-startup-integration.puml` - Service startup and session management
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `scripts/process-state-manager.js` | Core PSM implementation |
+| `scripts/global-service-coordinator.js` | Service lifecycle manager |
+| `scripts/system-monitor-watchdog.js` | Failsafe coordinator monitor |
+| `scripts/launch-claude.sh` | Session management entry point |
+| `scripts/start-services.sh` | Service startup script |
+| `scripts/monitoring-verifier.js` | Pre-startup health verification |
+| `.live-process-registry.json` | Process state registry (gitignored) |
+
+## Startup Sequence
+
+1. **Pre-startup Verification**: `monitoring-verifier.js` checks system health
+2. **Session Registration**: `launch-claude.sh` creates session in PSM
+3. **Service Startup**: Coordinator ensures required services are running
+4. **Health Monitoring**: Continuous health checks (15s coordinator, 60s watchdog)
+5. **Session Cleanup**: Trap handlers clean up services on exit
+
+---
+
+**See Also**:
+- [Process State Manager Source](../scripts/process-state-manager.js)
+- [Global Service Coordinator Source](../scripts/global-service-coordinator.js)

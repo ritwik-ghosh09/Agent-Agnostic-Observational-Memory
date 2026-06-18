@@ -1,0 +1,26 @@
+@startuml
+!include /coding/docs/puml/_standard-style.puml
+
+package "Dockerized Services" {
+  component "LLM Service" as llm <<core>>
+  component "Graph Database Adapter" as gda <<storage>>
+  component "Wave Agent" as wa <<agent>>
+  component "API Service Wrapper" as apiw <<api>>
+  component "Dashboard Service Wrapper" as dsw <<api>>
+  component "Service Starter" as ss <<core>>
+}
+
+package "Data Storage" {
+  database "LevelDB" as ldb
+  gda --> ldb : stores data in
+}
+
+llm --> gda : uses
+wa --> gda : stores data in
+wa --> llm : uses
+apiw --> llm : uses
+dsw --> llm : uses
+ss --> apiw : starts
+ss --> dsw : starts
+
+@enduml

@@ -1,0 +1,21 @@
+@startuml
+!include _standard-style.puml
+title LSL Simple File-Based Routing
+
+start
+
+:User Prompt Detected|
+
+:Check Tool Calls|
+
+if (Tool touches /coding/ directory?) then (yes)
+  :Route to Coding Project|
+  :Update Redirect Status|
+  stop
+else (no)
+  :Stay in Origin Project|
+  stop
+endif
+
+
+@enduml

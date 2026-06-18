@@ -1,0 +1,175 @@
+@startuml ukb-cli-sequence-entity-creation
+!include _standard-style.puml
+
+title Entity Creation Sequence Diagram (v2.0)
+
+actor User
+participant "UKBCli" as CLI
+participant "EntityCommand" as EC
+participant "RoutingDecision" as Router
+participant "VkbApiClient" as Client
+participant "VKB Server API" as API
+database "GraphDB\n(Graphology+LevelDB)" as DB
+
+== Entity Creation via CLI ==
+
+User -> CLI: ukb entity create <entity-data>
+activate CLI
+
+CLI -> CLI: parseArgs()
+CLI -> EC: create(entityData)
+activate EC
+
+EC -> Router: checkServerAvailability()
+activate Router
+
+Router -> Client: isServerAvailable()
+activate Client
+
+Client -> API: GET /api/health
+activate API
+API --> Client: {status: "ok"}
+deactivate API
+
+Client --> Router: true
+deactivate Client
+
+Router --> EC: serverRunning = true
+deactivate Router
+
+alt Server Running
+  EC -> Client: createEntity(entityData, {save: true})
+  activate Client
+
+  Client -> API: POST /api/entities\n{name, entityType, significance}
+  activate API
+
+  API -> API: Validate entity data
+  API -> API: Check for duplicates
+
+  alt Valid and No Duplicate
+    API -> DB: Add entity to graph
+    activate DB
+    DB -> DB: Graph operations
+    DB -> DB: Persist to LevelDB
+    DB --> API: success
+    deactivate DB
+
+    API --> Client: {entity, success: true}
+    deactivate API
+
+    Client --> EC: entity object
+    deactivate Client
+
+    EC --> CLI: entity object
+    deactivate EC
+
+    CLI -> User: ✅ Entity created: CachingPattern
+    deactivate CLI
+
+  else Duplicate Found
+    API --> Client: {error: "Entity already exists"}
+    Client --> EC: DuplicateError
+    EC --> CLI: Error
+    CLI -> User: ❌ Error: Entity already exists
+  end
+
+else Server Not Running
+  EC -> User: ⚠️  VKB Server not running\nStart server with: vkb server start
+  deactivate EC
+  deactivate CLI
+end
+
+== Entity List Operation ==
+
+User -> CLI: ukb entity list
+activate CLI
+
+CLI -> CLI: parseArgs()
+CLI -> EC: list({})
+activate EC
+
+EC -> Router: checkServerAvailability()
+activate Router
+Router -> Client: isServerAvailable()
+activate Client
+Client -> API: GET /api/health
+activate API
+API --> Client: {status: "ok"}
+deactivate API
+Client --> Router: true
+deactivate Client
+Router --> EC: serverRunning = true
+deactivate Router
+
+EC -> Client: getEntities()
+activate Client
+
+Client -> API: GET /api/entities
+activate API
+
+API -> DB: Query all entities
+activate DB
+DB --> API: entities array
+deactivate DB
+
+API --> Client: {entities: [...]}
+deactivate API
+
+Client --> EC: entities array
+deactivate Client
+
+EC -> EC: Format output
+EC --> CLI: formatted list
+deactivate EC
+
+CLI -> User: Display entities table
+deactivate CLI
+
+== Entity Deletion Operation ==
+
+User -> CLI: ukb entity delete "OldPattern"
+activate CLI
+
+CLI -> EC: delete("OldPattern")
+activate EC
+
+EC -> Router: checkServerAvailability()
+activate Router
+Router -> Client: isServerAvailable()
+activate Client
+Client -> API: GET /api/health
+activate API
+API --> Client: {status: "ok"}
+deactivate API
+Client --> Router: true
+deactivate Client
+Router --> EC: serverRunning = true
+deactivate Router
+
+EC -> Client: deleteEntity("OldPattern", {save: true})
+activate Client
+
+Client -> API: DELETE /api/entities/OldPattern
+activate API
+
+API -> DB: Remove entity from graph
+activate DB
+DB -> DB: Remove all related edges
+DB -> DB: Persist changes
+DB --> API: success
+deactivate DB
+
+API --> Client: {success: true}
+deactivate API
+
+Client --> EC: success
+deactivate Client
+
+EC --> CLI: success
+deactivate EC
+
+CLI -> User: ✅ Entity removed: OldPattern
+deactivate CLI
+
+@enduml

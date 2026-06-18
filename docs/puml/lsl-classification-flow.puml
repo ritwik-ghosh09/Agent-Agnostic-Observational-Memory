@@ -1,0 +1,108 @@
+@startuml lsl-classification-flow
+!include _standard-style.puml
+
+title LSL Five-Layer Classification Flow
+
+participant "Enhanced\nTranscript Monitor" as monitor
+participant "ReliableCoding\nClassifier" as classifier
+participant "Session Filter\n(Layer 0)" as session
+participant "PathAnalyzer\n(Layer 1)" as path
+participant "KeywordMatcher\n(Layer 2)" as keyword
+participant "EmbeddingClassifier\n(Layer 3)" as embedding
+participant "SemanticAnalyzer\n(Layer 4)" as semantic
+participant "LSL File Manager" as filemanager
+
+monitor -> classifier : classify(exchange)
+activate classifier
+
+classifier -> session : checkBias(recentHistory)
+activate session
+
+alt **Strong Bias + Neutral Prompt**
+    session --> classifier : { decision: biasTarget, confidence: 0.72 }
+    note right : Conversation bias\napplied to neutral\nprompt\n<1ms
+    classifier --> monitor : **Decision from Context (Layer 0)**
+    monitor -> filemanager : route based on bias
+else **No Bias OR Strong Signals**
+    deactivate session
+    classifier -> path : analyzePaths(exchange)
+    activate path
+
+    alt **Direct File Pattern Match**
+        path --> classifier : { isCoding: true, confidence: 0.95 }
+        note right : File operations on\ncoding infrastructure\n<1ms
+        classifier --> monitor : **CODING_INFRASTRUCTURE (Layer 1)**
+        monitor -> filemanager : redirect to coding project
+    else **No File Pattern Match**
+        deactivate path
+        classifier -> keyword : matchKeywords(exchange)
+        activate keyword
+
+        alt **Strong Keyword Match**
+            keyword --> classifier : { isCoding: true, confidence: 0.8 }
+            note right : Clear coding keywords\n<10ms
+            classifier --> monitor : **CODING_INFRASTRUCTURE (Layer 2)**
+            monitor -> filemanager : redirect to coding project
+        else **Weak/No Keyword Match**
+            deactivate keyword
+            classifier -> embedding : classifyByEmbedding(exchange)
+            activate embedding
+
+            alt **High Vector Similarity**
+                embedding --> classifier : { isCoding: true, confidence: 0.85 }
+                note right : Semantic similarity to\ncoding infrastructure\n<3ms
+                classifier --> monitor : **CODING_INFRASTRUCTURE (Layer 3)**
+                monitor -> filemanager : redirect to coding project
+            else **Low Vector Similarity**
+                embedding --> classifier : { isCoding: false, confidence: 0.6 }
+                note right : Definitive negative\nresult
+                classifier --> monitor : **NOT_CODING_INFRASTRUCTURE (Layer 3)**
+                monitor -> filemanager : keep in local project
+            else **Inconclusive Embedding**
+                embedding --> classifier : { isCoding: null, inconclusive: true }
+                deactivate embedding
+                classifier -> semantic : analyzeSemantics(exchange)
+                activate semantic
+                semantic --> classifier : { isCoding: true/false, confidence: 0.7 }
+                note right : LLM deep analysis\n<10ms
+                classifier --> monitor : **Final Decision (Layer 4)**
+                deactivate semantic
+                monitor -> filemanager : route based on decision
+            end
+        end
+    end
+end
+
+' Update bias tracker
+classifier -> session : addClassification(result)
+
+deactivate classifier
+
+note over classifier
+  **Five-Layer Performance:**
+  • Layer 0 (Session): <1ms
+  • Layer 1 (Path): <1ms
+  • Layer 2 (Keyword): <10ms
+  • Layer 3 (Embedding): <3ms
+  • Layer 4 (Semantic): <10ms
+  • **Total Pipeline: <30ms**
+end note
+
+note over session
+  **Conversation Context:**
+  • Sliding window (5 prompts)
+  • Temporal decay weighting
+  • Bias strength threshold: 0.65
+  • Only for neutral prompts
+end note
+
+note over embedding
+  **Vector Similarity Features:**
+  • Qdrant vector database
+  • 384-dimensional embeddings
+  • HNSW indexing + int8 quantization
+  • Repository content indexed
+  • LRU cache with TTL
+end note
+
+@enduml

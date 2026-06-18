@@ -1,0 +1,131 @@
+@startuml system-architecture
+!include _standard-style.puml
+
+title Knowledge Management System Architecture v2.0\nGraphDB + Ontology Integration
+
+top to bottom direction
+
+package "Knowledge Capture Layer" {
+  [Claude Transcripts] as transcripts
+  [Enhanced Transcript\nMonitor] as monitor
+  [Streaming Knowledge\nExtractor] as extractor
+  [UKB Command] as ukb
+  [UKB Database Writer] as writer
+}
+
+package "Ontology Classification Layer" {
+  [Ontology Manager] as ontomgr
+  [Ontology Classifier\n(5-Layer Pipeline)] as classifier
+  [Upper Ontology\n(cluster-reprocessing)] as upper
+  [Lower Ontologies\n(team-specific)] as lower
+
+  note right of classifier
+    **5-Layer Hybrid Pipeline:**
+    • Layer 0: Team Context Filter
+    • Layer 1: Pattern Analyzer
+    • Layer 2: Keyword Matcher
+    • Layer 3: Semantic Embeddings
+    • Layer 4: LLM Analyzer (fallback)
+  end note
+}
+
+package "Data Storage Layer" {
+  database "Graph Database\n(Graphology + LevelDB)" as graphdb {
+    [Entities]
+    [Relations]
+    [Ontology Metadata]
+  }
+
+  database "Qdrant\n(Docker Vector DB)" as qdrant {
+    [Fast Collection\n(384d)]
+    [Accurate Collection\n(1536d)]
+  }
+
+  database "SQLite" as sqlite {
+    [Extraction Metadata]
+    [Session History]
+  }
+
+  note right of graphdb
+    **Central Knowledge Store:**
+    • Graphology: In-memory graph
+    • LevelDB: Persistent storage
+    • Ontology per entity
+    • Team-scoped isolation
+    • Auto-persist (1s interval)
+  end note
+}
+
+package "Visualization Layer" {
+  [VKB Command] as vkb
+  [VKB-CLI (Node.js)] as vkbcli
+  [VKB Server] as vkbserver
+  [HTTP Server] as server
+  [Knowledge Visualizer\n(Ontology-aware)] as visualizer
+  [Web Browser] as browser
+}
+
+package "AI Agent Integration" {
+  [Claude Code] as claude
+  [Knowledge Retriever\n(Ontology-aware)] as retriever
+}
+
+package "LLM Provider Layer" {
+  [LLM CLI Proxy\n(host:12435)] as llmproxy
+  [Docker Model Runner\n(host:12434)] as dmr
+  [Cloud APIs\n(Groq, Anthropic, OpenAI)] as cloudapi
+}
+
+' === Online Learning Flow ===
+transcripts --> monitor : File changes
+monitor --> extractor : New exchanges
+extractor --> classifier : Knowledge text
+classifier --> ontomgr : Entity class lookup
+ontomgr --> upper : Upper ontology
+ontomgr --> lower : Team ontology
+classifier --> graphdb : Entity + Ontology
+extractor --> qdrant : Dual embeddings
+extractor --> sqlite : Metadata
+
+' === Manual Learning Flow ===
+claude --> ukb : Manual capture
+ukb --> writer : Entity/Relation
+writer --> graphdb : Direct writes
+
+' === Visualization Flow ===
+vkb --> vkbcli : Delegates to
+vkbcli --> vkbserver : Server management
+vkbserver --> server : Start/manage
+server --> graphdb : Query entities
+server --> visualizer : Serve data
+visualizer --> browser : Interactive viz
+
+' === LLM Provider Flow ===
+extractor --> llmproxy : CLI-based LLM\n(claude/copilot via proxy)
+extractor --> dmr : Local LLM\n(llama.cpp)
+extractor --> cloudapi : API-based LLM\n(Groq, Anthropic)
+
+' === Retrieval Flow ===
+claude --> retriever : Knowledge queries
+retriever --> graphdb : Ontology queries
+retriever --> qdrant : Semantic search
+retriever --> sqlite : Metadata filter
+
+note bottom of graphdb
+  **Unified Storage (v2.0):**
+  • Single source of truth
+  • No JSON intermediates
+  • Online + Manual same DB
+  • Optional JSON export
+end note
+
+note bottom of visualizer
+  **Ontology-aware Visualization:**
+  • Entity class coloring
+  • Confidence indicators
+  • Classification method
+  • Team filtering
+  • D3.js force-directed graph
+end note
+
+@enduml

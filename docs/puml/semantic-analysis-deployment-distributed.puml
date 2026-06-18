@@ -1,0 +1,57 @@
+@startuml semantic-analysis-deployment-distributed
+!include _standard-style.puml
+
+title Semantic Analysis System - Distributed Deployment
+
+top to bottom direction
+
+node "Control Node" as control {
+  component [Claude Code] as cc
+  component [MCP Server] as mcp
+  component [MQTT Broker] as mqtt_central
+  database [GraphDB + LevelDB] as storage
+}
+
+node "Agent Node 1" as node1 {
+  component [Semantic Analysis] as sa
+  component [Web Search] as ws
+  component [RPC Server] as rpc1
+}
+
+node "Agent Node 2" as node2 {
+  component [Knowledge Graph] as kg
+  component [Coordinator] as ca
+  component [RPC Server] as rpc2
+}
+
+cloud "External Services" as ext {
+  component [LLM APIs] as llm
+  component [Search APIs] as search
+}
+
+' Network connections
+cc --> mcp
+mcp --> mqtt_central
+
+sa --> mqtt_central : "remote"
+ws --> mqtt_central : "remote"
+kg --> mqtt_central : "remote"
+ca --> mqtt_central : "remote"
+
+mcp --> rpc1 : "remote RPC"
+mcp --> rpc2 : "remote RPC"
+
+kg --> storage : "network access"
+
+sa --> llm
+ws --> search
+
+note bottom
+  **Benefits:**
+  • Scalable processing
+  • Fault tolerance
+  • Resource distribution
+  • Agent specialization
+end note
+
+@enduml

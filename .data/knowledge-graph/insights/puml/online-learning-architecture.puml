@@ -1,0 +1,30 @@
+@startuml
+!include /coding/docs/puml/_standard-style.puml
+
+package "Data Extraction" {
+  component "Code Graph RAG" as cgr <<external>>
+  component "Git History" as gh <<external>>
+  component "LSL Sessions" as lsl <<external>>
+}
+
+package "Data Processing" {
+  component "Batch Analysis Pipeline" as bap <<core>>
+  component "InsightGenerationModule" as ig <<core>>
+  component "UKB Trace Report" as utr <<cli>>
+}
+
+package "Data Storage and Query" {
+  database "GraphDatabase" as gd <<storage>>
+  component "GraphDatabaseAdapter" as gda <<api>>
+}
+
+cgr --> bap : provides code analysis
+gh --> bap : provides git history
+lsl --> bap : provides LSL sessions
+bap --> ig : generates insights
+bap --> utr : uses UKB trace report
+ig --> gd : stores insights
+gda --> gd : queries database
+bap --> gda : uses adapter
+
+@enduml

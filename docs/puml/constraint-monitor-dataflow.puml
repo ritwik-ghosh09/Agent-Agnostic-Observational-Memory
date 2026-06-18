@@ -1,0 +1,106 @@
+@startuml constraint-monitor-dataflow
+!include _standard-style.puml
+
+
+title Constraint Monitoring Data Flow
+
+actor "User" as user
+participant "Claude Code" as claude
+participant "Pre-Hook" as prehook
+participant "Post-Hook" as posthook
+participant "Constraint Monitor" as monitor
+participant "Event Processor" as processor
+participant "Groq Engine" as groq
+participant "Constraint Detector" as detector
+participant "Qdrant DB\n(Docker)" as qdrant
+participant "Live Guide Rails" as rails
+participant "DuckDB" as duckdb
+
+== Real-time Constraint Checking ==
+
+user -> claude : user prompt
+activate claude
+
+claude -> prehook : check action constraints
+activate prehook
+prehook -> monitor : /api/pre-check
+activate monitor
+monitor -> detector : quick pattern check
+detector -> monitor : violations found
+monitor -> prehook : {shouldBlock: true, message: "..."}
+deactivate monitor
+prehook -> claude : block/allow action
+deactivate prehook
+
+alt Action Allowed
+  claude -> claude : execute action
+  claude -> posthook : capture conversation
+  activate posthook
+  posthook -> monitor : /api/events
+  posthook -> monitor : event data
+  deactivate posthook
+else Action Blocked
+  claude -> user : show constraint message
+  note right : User sees explanation\nand suggested correction
+end
+
+deactivate claude
+
+== Semantic Analysis Pipeline ==
+
+activate monitor
+monitor -> processor : process event
+activate processor
+
+group Semantic Analysis
+  processor -> groq : analyze interaction
+  activate groq
+  groq -> groq : chain-of-thought reasoning
+  groq -> processor : semantic insights
+  deactivate groq
+end
+
+group Pattern Detection
+  processor -> detector : detect violations
+  activate detector
+  detector -> qdrant : similarity search
+  activate qdrant
+  qdrant -> detector : similar violations
+  deactivate qdrant
+  detector -> processor : violation results
+  deactivate detector
+end
+
+processor -> duckdb : store metrics
+activate duckdb
+duckdb -> processor : ack
+deactivate duckdb
+
+alt Violations Detected
+  processor -> rails : handle violations
+  activate rails
+  rails -> rails : assess risk
+  rails -> rails : generate correction
+  rails -> monitor : intervention applied
+  deactivate rails
+end
+
+processor -> monitor : analysis complete
+deactivate processor
+deactivate monitor
+
+== Real-time Dashboard Updates ==
+
+monitor -> monitor : broadcast via WebSocket
+monitor -> user : dashboard updates
+
+note over user, duckdb
+  <b>Performance Targets</b>
+  • Pre-hook check: <2s (timeout)
+  • Semantic analysis: <50ms
+  • Vector search: <3ms  
+  • Total intervention: <10ms
+  • Dashboard update: real-time
+end note
+
+@enduml

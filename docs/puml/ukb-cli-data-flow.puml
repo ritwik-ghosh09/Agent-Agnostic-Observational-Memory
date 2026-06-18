@@ -1,0 +1,126 @@
+@startuml ukb-cli-data-flow
+!include _standard-style.puml
+
+title Knowledge Update Flow - MCP Integration
+
+skinparam activityShape rectangle
+skinparam activity {
+  BackgroundColor<<user>> #FFE8F4
+  BackgroundColor<<claude>> #E8F5E8
+  BackgroundColor<<mcp>> #FFE4E1
+  BackgroundColor<<workflow>> #FFF9E6
+  BackgroundColor<<storage>> #E8F4FD
+}
+
+|User Interaction|
+start
+:User types "ukb" in Claude chat;<<user>>
+note right
+  User input variations:
+  • "ukb" (triggers incremental)
+  • "ukb full" (triggers full analysis)
+  • "run ukb"
+  • "update knowledge base"
+
+  NOTE: "ukb" is NOT a shell command
+  It's a keyword that triggers Claude
+end note
+
+|Claude Decision|
+:Claude detects knowledge update request;<<claude>>
+
+if (Full or Incremental?) then (incremental)
+  :Claude calls MCP tool;<<claude>>
+  note right
+    mcp__semantic-analysis__execute_workflow
+    workflow_name: "incremental-analysis"
+  end note
+else (full)
+  :Claude calls MCP tool;<<claude>>
+  note right
+    mcp__semantic-analysis__execute_workflow
+    workflow_name: "complete-analysis"
+  end note
+endif
+
+|MCP Server Processing|
+:MCP receives workflow request;<<mcp>>
+
+:Load team checkpoint;<<workflow>>
+note right
+  .data/ukb-last-run.json
+  Git-tracked for team sync
+end note
+
+if (Incremental mode?) then (yes)
+  :Calculate gap since last run;<<workflow>>
+  note right
+    GapAnalyzer identifies:
+    • New commits since last run
+    • New session logs
+  end note
+else (no)
+  :Analyze entire history;<<workflow>>
+  note right
+    Process all commits
+    Process all sessions
+  end note
+endif
+
+|14-Agent Workflow|
+:CoordinatorAgent orchestrates;<<workflow>>
+note right
+  Sequential execution:
+  1. GitHistoryAgent
+  2. VibeHistoryAgent
+  3. SemanticAnalysisAgent
+  4. WebSearchAgent
+  5. InsightGenerationAgent
+  6. ObservationGenerationAgent
+  7. QualityAssuranceAgent
+  8. PersistenceAgent
+  9. DeduplicationAgent
+  10. CoordinatorAgent
+end note
+
+|Knowledge Storage|
+:PersistenceAgent stores to GraphDB;<<storage>>
+note right
+  • Graphology (in-memory)
+  • LevelDB (persistent)
+  • Auto-persist: 1s interval
+end note
+
+:GraphKnowledgeExporter exports JSON;<<storage>>
+note right
+  • .data/knowledge-export/coding.json
+  • Auto-export: 5s debounced
+  • Git-tracked for team sharing
+end note
+
+:Update team checkpoint;<<storage>>
+note right
+  .data/ukb-last-run.json
+  Records:
+  • lastSuccessfulRun timestamp
+  • lastCommit hash
+  • lastSession filename
+  • stats (entities/relations/insights)
+end note
+
+|Response to User|
+:MCP returns results to Claude;<<mcp>>
+
+:Claude displays summary to user;<<claude>>
+note right
+  Shows:
+  • Entities created
+  • Relations created
+  • Insights generated
+  • Commits/sessions analyzed
+  • Duration
+end note
+
+stop
+
+@enduml

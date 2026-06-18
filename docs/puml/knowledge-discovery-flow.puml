@@ -1,0 +1,44 @@
+@startuml knowledge-discovery-flow
+!include _standard-style.puml
+
+title Knowledge Discovery Flow - Semantic Analysis System
+
+start
+
+:Developer needs solution;
+
+if (Using Claude Code?) then (yes)
+  :Use MCP memory tools;
+  :mcp__memory__search_nodes();
+  if (Pattern found?) then (yes)
+    :Display results;
+    :Apply pattern;
+  else (no)
+    :Search web/docs;
+    :Implement solution;
+    :Capture new pattern;
+  endif
+else (no)
+  if (Using VKB Server?) then (yes)
+    :Use vkb web interface;
+    :HTTP API /api/entities;
+    if (Pattern found?) then (yes)
+      :View in browser;
+      :Apply pattern;
+    else (no)
+      :Manual search;
+      :Implement solution;
+      :Type "ukb" at Claude prompt;
+    endif
+  else (no)
+    :Direct GraphDB access;
+    :Query coding.json (.data/knowledge-export/);
+    :Manual pattern search;
+  endif
+endif
+
+:Solution implemented;
+
+stop
+
+@enduml

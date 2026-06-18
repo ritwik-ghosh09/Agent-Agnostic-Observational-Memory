@@ -1,0 +1,57 @@
+@startuml
+!include _standard-style.puml
+
+title Unified Message Extraction System
+
+top to bottom direction
+
+!define LIVE_COLOR #E8F5E8
+!define OFFLINE_COLOR #F3E5F5  
+!define UNIFIED_COLOR #FFF3E0
+!define OUTPUT_COLOR #E3F2FD
+
+package "Input Sources" {
+  [Live Transcript Stream] as live_stream <<LIVE_COLOR>>
+  [Historical Transcript Files] as history_files <<OFFLINE_COLOR>>
+}
+
+package "Unified Processing Core" {
+  [Message Extractor] as extractor <<UNIFIED_COLOR>>
+  [Content Filter] as filter <<UNIFIED_COLOR>>
+  [Text Normalizer] as normalizer <<UNIFIED_COLOR>>
+}
+
+package "Processing Pathways" {
+  [Live Session Monitor] as live_monitor <<LIVE_COLOR>>
+  [LSL Generator] as lsl_generator <<OFFLINE_COLOR>>
+}
+
+package "Output Destinations" {
+  [Real-time Session Files] as live_output <<OUTPUT_COLOR>>
+  [Historical LSL Files] as history_output <<OUTPUT_COLOR>>
+}
+
+' Data flow - unified processing
+live_stream --> extractor : Raw message content
+history_files --> extractor : Stored transcript data
+extractor --> filter : Extracted text content
+filter --> normalizer : Filtered messages
+normalizer --> live_monitor : Live processing path
+normalizer --> lsl_generator : Historical processing path
+
+' Output generation
+live_monitor --> live_output : Real-time LSL files
+lsl_generator --> history_output : Generated LSL files
+
+' Processing details
+note top of extractor : **Unified Extraction Logic**\nextractTextContent(content) {\n  if (typeof content === 'string') return content;\n  if (Array.isArray(content)) {\n    return content\n      .filter(item => item && item.type === 'text')\n      .map(item => item.text)\n      .filter(text => text && text.trim())\n      .join('\\n');\n  }\n  return '';\n}
+
+note right of filter : **Content Filtering**\n• Remove empty content\n• Filter by content type\n• Apply text validation\n• Maintain data integrity
+
+note left of live_monitor : **Live Processing Benefits**\n• Real-time session creation\n• Dynamic content routing\n• Immediate file generation\n• Status line integration
+
+note right of lsl_generator : **Historical Processing Benefits**\n• Batch transcript processing\n• Consistent format generation\n• Historical data recovery\n• Archive maintenance
+
+note bottom of normalizer : **Key Unification Achievement**\n\n**Before:** Separate codebases for live vs offline\n**After:** Single extraction logic ensures consistency\n\n**Benefits:**\n• Eliminated code duplication\n• Consistent formatting\n• Reduced maintenance burden\n• Proven reliability from LSL system
+
+@enduml

@@ -1,0 +1,124 @@
+@startuml lsl-5-layer-classification
+!include _standard-style.puml
+
+title 5-Layer Classification System - Decision Flow
+
+actor "Exchange\nContent" as Content
+participant "ReliableClassifier" as Classifier
+participant "Layer 0:\nSession Filter" as Session
+participant "Layer 1:\nPathAnalyzer" as Path
+participant "Layer 2:\nKeywordMatcher" as Keyword
+participant "Layer 3:\nEmbeddingClassifier" as Embedding
+database "Qdrant\n(Docker Vector DB)\n(183 files)" as Qdrant
+participant "Layer 4:\nSemanticAnalyzer" as Semantic
+participant "ClassificationLogger" as Logger
+
+Content -> Classifier: classify(exchange)
+activate Classifier
+
+note over Classifier
+  Confidence threshold: 0.6
+  Early exit when layer is confident
+end note
+
+' Layer 0: Session Filter (Conversation Bias)
+Classifier ->> Session: checkBias(recentHistory)
+activate Session
+Session --> Session: Calculate bias from\nsliding window (5 prompts)\n<1ms
+Session ->> Classifier: {hasBias, biasStrength, biasTarget}
+deactivate Session
+
+alt Has strong bias (strength ≥ 0.65) AND prompt is neutral
+  note right
+    Neutral = low signals in:
+    - Path confidence < 0.5
+    - Keyword score < 0.3
+    - Embedding diff < 0.15
+  end note
+  Classifier ->> Logger: logDecision(session-filter, result)
+  Classifier --> Content: CODING/LOCAL\n(Layer 0 - Context)
+else No bias OR strong signals present
+
+  ' Layer 1: Path Analysis
+  Classifier ->> Path: analyze(fileOps, paths)
+  activate Path
+  Path --> Path: Pattern matching\n<1ms
+  Path ->> Classifier: {isCoding, confidence, reason}
+  deactivate Path
+
+  alt Path confident (confidence > 0.6)
+    Classifier ->> Logger: logDecision(path, result)
+    Classifier --> Content: CODING/LOCAL\n(Layer 1)
+  else Path inconclusive
+
+    ' Layer 2: Keyword Matching
+    Classifier ->> Keyword: analyze(content, context)
+    activate Keyword
+    Keyword --> Keyword: Keyword search\n<10ms
+    Keyword ->> Classifier: {isCoding, confidence, reason}
+    deactivate Keyword
+
+    alt Keyword confident (confidence > 0.6)
+      Classifier ->> Logger: logDecision(path→keyword, result)
+      Classifier --> Content: CODING/LOCAL\n(Layer 2)
+    else Keyword inconclusive
+
+      ' Layer 3: Embedding Search
+      Classifier ->> Embedding: analyze(content, context)
+      activate Embedding
+
+      Embedding --> Embedding: generateEmbedding(content)\nTransformers.js (~50ms)
+      note right
+        Native JavaScript
+        Model: Xenova/all-MiniLM-L6-v2
+        Dimensions: 384
+        10-100x faster than Python
+      end note
+
+      Embedding ->> Qdrant: search(vector, limit=5)
+      activate Qdrant
+      note right
+        HNSW indexing
+        Cosine similarity
+        <3ms search time
+      end note
+      Qdrant --> Embedding: top 5 matches + scores
+      deactivate Qdrant
+
+      Embedding --> Embedding: Calculate avg similarity\nThreshold: 0.65
+      Embedding ->> Classifier: {isCoding, confidence, matches}
+      deactivate Embedding
+
+      alt Embedding confident (confidence > 0.6)
+        Classifier ->> Logger: logDecision(path→keyword→embedding, result)
+        Classifier --> Content: CODING/LOCAL\n(Layer 3)
+      else Embedding inconclusive
+
+        ' Layer 4: Semantic Analysis
+        Classifier ->> Semantic: analyze(content, context)
+        activate Semantic
+        Semantic --> Semantic: LLM analysis\n<10ms
+        Semantic ->> Classifier: {isCoding, confidence, reason}
+        deactivate Semantic
+
+        Classifier ->> Logger: logDecision(path→keyword→embedding→semantic, result)
+        Classifier --> Content: CODING/LOCAL\n(Layer 4)
+      end
+    end
+  end
+end
+
+' Update bias tracker for next classification
+Classifier ->> Session: addClassification(result)
+
+deactivate Classifier
+
+note over Logger
+  Logs stored in:
+  .specstory/logs/classification/
+  - JSONL (machine-readable)
+  - Markdown summary (human-readable)
+  - All 5 layers tracked
+end note
+
+@enduml

@@ -1,0 +1,66 @@
+@startuml coding-workflow-with-ai
+!include _standard-style.puml
+
+title Enhanced Coding Workflow with AI Agents
+
+actor Developer as dev
+participant "Claude Code" as claude
+participant "MCP Server" as mcp
+participant "Semantic Analysis\nAgent" as sa
+participant "Knowledge Graph\nAgent" as kg
+participant "GraphDB Storage" as storage
+participant "VKB Visualizer" as vkb
+
+== Session Start ==
+dev -> claude : Start coding session
+claude -> mcp : Load MCP tools
+mcp -> storage : Load knowledge base
+mcp -> claude : AI tools ready
+claude -> dev : Session ready with AI tools
+
+== Traditional Manual Flow ==
+dev -> claude : "Can you add a new pattern?"
+claude -> dev : "Use ukb --interactive"
+dev -> storage : ukb --interactive
+storage -> vkb : Auto-sync changes
+vkb -> dev : Updated visualization
+
+== Enhanced AI Flow ==
+dev -> claude : "Analyze this repository for patterns"
+claude -> mcp : analyze_repository tool
+mcp -> sa : Analyze code patterns
+sa -> sa : LLM analysis of commits
+sa -> kg : Create knowledge entities
+kg -> storage : Store new insights
+storage -> vkb : Auto-sync changes
+mcp -> claude : Analysis results
+claude -> dev : "Found 5 patterns, created entities"
+
+== Workflow Research ==
+dev -> claude : "How to optimize React performance?"
+claude -> mcp : search_web tool
+mcp -> sa : Search best practices
+sa -> kg : Create reference entities
+kg -> storage : Store references
+claude -> dev : Best practices + stored for future
+
+== Complex Analysis ==
+dev -> claude : "Complete analysis of this project"
+claude -> mcp : start_workflow
+mcp -> sa : Repository analysis
+mcp -> sa : Web research
+mcp -> kg : Entity creation
+mcp -> kg : Relationship mapping
+kg -> storage : Comprehensive update
+claude -> dev : "Complete analysis done, 15 new insights"
+
+note over dev, vkb
+  **Key Benefits:**
+  • AI does heavy analysis work
+  • Results automatically stored
+  • Traditional ukb still available
+  • Real-time visualization updates
+  • Cross-session knowledge retention
+end note
+
+@enduml

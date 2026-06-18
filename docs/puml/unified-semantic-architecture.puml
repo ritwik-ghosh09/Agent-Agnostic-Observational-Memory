@@ -1,0 +1,139 @@
+@startuml unified-semantic-architecture
+!include _standard-style.puml
+
+title Semantic Analysis & Knowledge Management Architecture
+
+top to bottom direction
+
+package "Clients" {
+  [Claude Code] <<external>> as claude
+  [GitHub CoPilot] <<external>> as copilot
+}
+
+package "API Layer" {
+  [MCP Server] <<api>> as mcp
+  [HTTP API] <<api>> as http
+}
+
+package "Orchestration" #FFFFCC {
+  [CoordinatorAgent\nOrchestrates ALL agents] <<agent>> as coord
+}
+
+package "Data Collection Agents" #E6F3FF {
+  [GitHistoryAgent] <<agent>> as git
+  [VibeHistoryAgent] <<agent>> as vibe
+  [WebSearchAgent] <<agent>> as web
+}
+
+package "Generation Agents" #E6FFE6 {
+  [ObservationGenerationAgent] <<agent>> as obs
+  [DocumentationLinkerAgent] <<agent>> as doclink
+}
+
+package "Infrastructure Agents" #F0F0F0 {
+  [PersistenceAgent] <<agent>> as per
+  [ContentValidationAgent] <<agent>> as content
+  [CodeGraphAgent] <<agent>> as codegraph
+}
+
+package "LLM-Powered Agents" #FFE6E6 {
+  [SemanticAnalysisAgent] <<agent>> as sem
+  [InsightGenerationAgent] <<agent>> as ins
+  [QualityAssuranceAgent] <<agent>> as qa
+  [OntologyClassificationAgent] <<agent>> as ontology
+}
+
+package "Deduplication" #E8F4FD {
+  [DeduplicationAgent] <<agent>> as dedup
+}
+
+package "Storage" {
+  database "Graphology DB\nLevelDB persistence" <<storage>> as graphdb
+  database "knowledge-export/<team>.json\nGit-tracked files" <<storage>> as files
+}
+
+package "LLM Provider Chain" {
+  cloud "Groq\nDefault" <<external>> as groq
+  cloud "Gemini\nFallback #1" <<external>> as gemini
+  cloud "Custom LLM\nFallback #2" <<external>> as custom
+  cloud "Anthropic Claude\nFallback #3" <<external>> as anthropic
+  cloud "OpenAI GPT\nFallback #4" <<external>> as openai
+}
+
+' Client connections
+claude -down-> mcp
+copilot -down-> http
+
+' API to coordinator
+mcp -down-> coord
+http -down-> coord
+
+' Coordinator orchestrates all 14 agents
+coord -down-> git
+coord -down-> vibe
+coord -down-> sem
+coord -down-> web
+coord -down-> ins
+coord -down-> obs
+coord -down-> qa
+coord -down-> per
+coord -down-> dedup
+coord -down-> ontology
+coord -down-> content
+coord -down-> codegraph
+coord -down-> doclink
+
+' LLM agents use provider chain
+sem ..> groq
+sem ..> gemini
+sem ..> custom
+sem ..> anthropic
+sem ..> openai
+ins ..> sem : "Delegates"
+
+' Persistence agent manages storage
+per -down-> graphdb
+per -down-> files
+
+note right of coord
+  **Coordinator orchestrates 14 agents**
+
+  Workflow execution:
+  1. Loads workflow definition
+  2. Executes steps sequentially
+  3. Resolves dependencies
+  4. Passes data via {{step.result}}
+  5. Returns aggregated results
+end note
+
+note right of per
+  **Knowledge Persistence**
+
+  Active targets:
+  • Graphology DB (LevelDB)
+  • knowledge-export/ (git)
+
+  GraphDB handles entity storage
+  and relationship management
+end note
+
+note right of groq
+  **4-Tier LLM Provider Chain**
+
+  Groq → Gemini → Custom → Anthropic → OpenAI
+
+  Used by 2 agents directly:
+  • SemanticAnalysisAgent (direct)
+  • SemanticAnalyzer (direct)
+
+  Used by 1 agent via delegation:
+  • InsightGenerationAgent (via SemanticAnalyzer)
+
+  Models:
+  • Groq: llama-3.3-70b-versatile
+  • Gemini: gemini-2.0-flash-exp
+  • Anthropic: claude-sonnet-4-20250514
+  • OpenAI: gpt-4-turbo-preview
+end note
+
+@enduml

@@ -1,0 +1,85 @@
+@startuml
+!include _standard-style.puml
+
+title Constraint Monitor Component Details
+
+' Vertical layout top-to-bottom
+top to bottom direction
+
+package "Capture Layer" as capture {
+  component [UniversalAgentMonitor] as monitor
+  component [ClaudeCodeAdapter] as claude_adapter
+  component [EventProcessor] as processor
+}
+
+package "Analysis Layer" as analysis {
+  component "GroqSemanticEngine" as groq
+  note right of groq : <50ms analysis\nmixtral-8x7b model
+
+  component "ConstraintDetector" as detector
+  note right of detector : Pattern matching +\nSemantic analysis
+}
+
+package "Storage Layer" as storage {
+  component "Qdrant Docker Database" as qdrant
+  note right of qdrant : <3ms queries\nHNSW + quantization\nRuns in Docker container
+
+  component "DuckDB Analytics" as duckdb
+  note right of duckdb : <5ms analytics\nColumnar storage
+
+  component "Redis Cache" as redis
+  note right of redis : Sub-millisecond\nanalysis cache
+}
+
+package "Intervention Layer" as intervention {
+  component [LiveGuideRails] as rails
+  component [RiskAssessor] as risk
+}
+
+package "API Layer" as api {
+  component [HTTPServer] as http
+  component [WebSocketServer] as ws
+  component [MCPServer] as mcp
+}
+
+' Connections - vertical flow
+claude_adapter -down-> monitor : events
+monitor -down-> processor : processed events
+
+' Capture to analysis
+processor -down-> groq : text for analysis
+processor -down-> detector : events to check
+
+' Analysis to storage
+groq -down-> qdrant : embeddings
+detector -down-> duckdb : violations
+groq -down-> redis : cache results
+
+' Storage queries
+detector <-left-> qdrant : similarity search
+rails <-left-> duckdb : metrics query
+groq <-left-> redis : cache lookup
+
+' Analysis to intervention
+detector -down-> rails : violations
+processor -down-> risk : risk assessment
+
+' Intervention to API
+rails -down-> http : interventions
+risk -down-> ws : risk scores
+
+' API connections
+http <--> mcp : tool calls
+ws <--> http : dashboard data
+
+' External interfaces
+cloud "File System" as fs
+cloud "Groq API" as groq_api
+cloud "Claude Code" as cc
+
+fs -down-> claude_adapter : transcript files
+groq_api -down-> groq : LLM inference
+cc -down-> http : hooks & MCP
+cc -down-> ws : dashboard
+
+@enduml

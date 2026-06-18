@@ -1,0 +1,73 @@
+@startuml
+!include _standard-style.puml
+title Constraint Monitor Integration with LSL System
+
+top to bottom direction
+
+rectangle "LSL System" {
+  component "Enhanced Transcript Monitor" as ETM
+  component "Combined Status Line" as StatusLine
+  file "LSL Session Files" as LSLFiles
+}
+
+rectangle "Constraint Monitoring" {
+  component "File Watcher\n(chokidar)" as Watcher  
+  component "Constraint Monitor\nIntegration" as CMI
+  component "MCP Constraint\nMonitor" as MCP
+  database "Violation History" as ViolationDB
+}
+
+rectangle "Development Environment" {
+  file "Source Code Files" as SourceFiles
+  file "PlantUML Files" as PUMLFiles
+  file "Configuration Files" as ConfigFiles
+}
+
+rectangle "Constraint Rules" {
+  component "Code Quality\nConstraints" as CodeConstraints
+  component "PlantUML\nConstraints" as PUMLConstraints  
+  component "Project-Specific\nConstraints" as ProjectConstraints
+}
+
+' Main flow
+SourceFiles --> Watcher : File changes
+PUMLFiles --> Watcher : File changes  
+ConfigFiles --> Watcher : File changes
+Watcher --> CMI : Change events
+CMI --> MCP : Check constraints
+MCP --> CodeConstraints : Apply rules
+MCP --> PUMLConstraints : Apply rules
+MCP --> ProjectConstraints : Apply rules
+
+' Violation handling
+MCP --> ViolationDB : Store violations
+MCP --> CMI : Return results
+CMI --> StatusLine : Update compliance score
+CMI --> ETM : Notify violations
+
+' Status integration
+StatusLine --> LSLFiles : Include compliance status
+ETM --> LSLFiles : Log constraint events
+
+' Real-time feedback
+CMI --> SourceFiles : Developer notification
+StatusLine --> SourceFiles : Live compliance display
+
+note right of MCP
+  Constraint Types:
+  • no-console-log
+  • no-hardcoded-paths
+  • plantuml-note-syntax
+  • plantuml-broken-skinparam
+  • plantuml-standard-include
+end note
+
+note left of StatusLine
+  Status Format:
+  🛡️ 8.5 🔍EX 🧠 ✅ 📋1730-1830
+  
+  🛡️ = Compliance Score
+  Ranges from 0.0 to 10.0
+end note
+
+@enduml

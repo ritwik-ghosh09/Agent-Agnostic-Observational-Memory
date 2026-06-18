@@ -1,0 +1,59 @@
+@startuml health-monitoring-overview
+!include _standard-style.puml
+
+title Health Monitoring System\n3-Layer Resilience
+
+left to right direction
+
+package "Master (Per-Prompt)" #E8F5E8 {
+  component [StatusLine\n(CombinedStatusLine)] as CSL <<display>>
+}
+
+package "Supervision (30s)" #E6F3FF {
+  component [GlobalProcessSupervisor] as GPS <<supervisor>>
+}
+
+package "Health Services" #FFF9E6 {
+  component [HealthVerifier\n(Docker-aware)] as HV <<verifier>>
+  component [StatusLineMonitor] as SHM <<monitor>>
+}
+
+package "Per-Project" #FFE8F4 {
+  component [TranscriptMonitor] as ETM <<per_project>>
+}
+
+database [PSM\nRegistry] as PSM <<storage>>
+
+database [Health\nFiles] as HF <<storage>>
+
+' Master supervision (ensures GPS running on every prompt)
+CSL -[#2E7D32,thickness=3]-> GPS : ensures running
+CSL --> SHM : ensures running
+
+' Global supervision flow
+GPS --> ETM : supervises
+GPS --> SHM : supervises
+GPS --> HV : supervises
+GPS --> HF : checks
+
+' Verification
+HV --> HF : verifies
+
+' Status display
+SHM --> HF : aggregates
+CSL --> SHM : displays
+
+' Per-project
+ETM --> HF : writes
+ETM --> PSM : registers
+
+' Core
+GPS --> PSM : uses
+
+legend bottom
+  StatusLine ensures GPS running on every prompt
+  GPS supervises all services (30s loop)
+  Docker mode: CGR uses cache-metadata fallback
+endlegend
+
+@enduml

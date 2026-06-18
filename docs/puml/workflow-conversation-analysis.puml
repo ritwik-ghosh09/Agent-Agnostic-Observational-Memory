@@ -1,0 +1,46 @@
+@startuml workflow-conversation-analysis
+!include _standard-style.puml
+
+title Conversation Analysis Workflow - Sequence Diagram
+
+actor User as U
+participant "Claude Code/CoPilot" as Client
+participant "Coordinator Agent" as Coord
+participant "Semantic Analysis Agent" as SA
+participant "Knowledge Graph Agent" as KG
+database "Knowledge Base" as KB
+
+U -> Client: analyze_conversation(file_path)
+Client -> Coord: Start conversation analysis
+Coord -> SA: Process conversation file
+
+note over SA: Text Processing
+SA -> SA: Parse conversation structure
+SA -> SA: Identify speakers and topics
+SA -> SA: Extract key decisions
+
+note over SA: Insight Extraction
+SA -> SA: Identify technical patterns
+SA -> SA: Extract decisions and rationale
+SA -> SA: Determine significance levels
+SA -> Coord: Return structured insights
+
+note over Coord: Knowledge Creation
+Coord -> KG: Create insight entities
+loop for each insight
+  KG -> KB: Store insight
+  KG -> KB: Create relationships
+end
+KG -> Coord: Confirm storage
+
+Coord -> Client: Return analysis results
+Client -> U: Display insights and entities
+
+U -> Client: search_knowledge("related topic")
+Client -> KG: Search request
+KG -> KB: Query knowledge
+KB -> KG: Return results
+KG -> Client: Formatted results
+Client -> U: Show related knowledge
+
+@enduml

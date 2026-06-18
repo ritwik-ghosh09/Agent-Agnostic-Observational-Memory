@@ -1,0 +1,1 @@
+{"nodes": [], "edges": [{"source": "30_claude_hook_adapter_phase", "target": "29_retrieval_service_phase", "relation": "references", "confidence": "EXTRACTED", "confidence_score": 1.0, "source_file": ".planning/milestones/v6.0-phases/30-claude-hook-adapter/30-01-SUMMARY.md", "source_location": "requires phase 29", "weight": 1.0}], "hyperedges": []}

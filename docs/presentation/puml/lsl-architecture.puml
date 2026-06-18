@@ -1,0 +1,82 @@
+@startuml lsl-architecture
+!include _standard-style.puml
+
+title LSL System - 4-Layer Monitoring + 5-Layer Classification
+
+left to right direction
+
+' Presentation styling
+skinparam defaultFontSize 28
+skinparam packageFontSize 30
+skinparam componentFontSize 26
+skinparam arrowThickness 6
+skinparam nodesep 70
+skinparam ranksep 90
+
+' Top row: Session + Monitoring
+package "Claude Session" {
+  [Launch] as Launch <<external>>
+  [Transcript] as Transcript <<external>>
+}
+
+package "4-Layer\nMonitoring" #FFE6E6 {
+  [Watchdog] as Watchdog <<infra>>
+  [Verifier] as Verifier <<infra>>
+}
+
+' Middle row: Core processing
+package "Transcript\nMonitor" {
+  [Analyzer] as Analyzer <<core>>
+}
+
+package "5-Layer Classifier" #E8F5E8 {
+  [L0-Session] as L0 <<core>>
+  [L1-Path] as L1 <<core>>
+  [L2-Keyword] as L2 <<core>>
+  [L3-Embedding] as L3 <<core>>
+  [L4-Semantic] as L4 <<agent>>
+}
+
+' Bottom row: Security + Routing + Storage
+package "Security" #FFF9E6 {
+  [Redactor] as Redactor <<security>>
+}
+
+package "Routing" {
+  [Router] as Router <<core>>
+}
+
+package "Storage" {
+  database "Project\nHistory" as ProjectHistory <<storage>>
+  database "Coding\nHistory" as CodingHistory <<storage>>
+}
+
+cloud "Groq API" as GroqAPI <<api>>
+component "Transformers.js\n(LOCAL)" as TransformersJS <<util>>
+
+' Simplified flow for presentation
+Launch --> Verifier
+Verifier --> Watchdog
+Verifier --> Analyzer
+
+Launch --> Transcript
+Transcript --> Analyzer
+
+Analyzer --> L0
+L0 --> L1
+L1 --> L2
+L2 --> L3
+L3 --> TransformersJS
+L3 --> L4
+
+L4 --> GroqAPI
+
+' Security: Redaction happens BEFORE routing
+Analyzer --> Redactor
+Redactor --> Router
+Router --> ProjectHistory
+Router --> CodingHistory
+
+Watchdog --> Analyzer
+
+@enduml

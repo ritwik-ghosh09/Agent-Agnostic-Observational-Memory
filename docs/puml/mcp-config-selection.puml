@@ -1,0 +1,43 @@
+@startuml mcp-config-selection
+!include _standard-style.puml
+
+title MCP Configuration Selection Flow
+
+actor "User" as user
+participant "bin/coding" as coding
+participant "launch-claude.sh" as launcher
+participant "claude-mcp-launcher.sh" as mcplauncher
+participant "Claude Code" as claude
+
+box "MCP Servers" #F5F5F5
+  participant "stdio-proxy.js" as proxy
+  participant "SSE Server\n(Docker)" as sse
+end box
+
+== MCP Config Selection ==
+
+user -> coding : coding --claude
+coding -> launcher : Execute
+launcher -> mcplauncher : exec claude-mcp
+
+mcplauncher -> mcplauncher : Use claude-code-mcp-docker.json
+note right
+  Config uses stdio-proxy
+  to connect to SSE servers in coding-services
+end note
+
+mcplauncher -> claude : Launch with MCP config
+
+== Communication ==
+
+claude -> proxy : stdio (JSON-RPC)
+proxy -> sse : HTTP/SSE (port 3848)
+sse --> proxy : SSE events
+proxy --> claude : stdio response
+
+note over proxy, sse
+  stdio-proxy.js bridges Claude Code's
+  stdio transport to the containerized SSE servers
+end note
+
+@enduml

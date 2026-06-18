@@ -1,0 +1,80 @@
+{
+  "name": "agent-agnostic-coding-tools",
+  "version": "2.0.0",
+  "description": "Unified coding tools that work with both Claude Code (MCP) and GitHub CoPilot (fallbacks)",
+  "main": "lib/agent-registry.js",
+  "type": "module",
+  "bin": {
+    "coding": "./bin/coding"
+  },
+  "scripts": {
+    "test": "NODE_OPTIONS='--experimental-vm-modules --no-warnings' jest",
+    "test:watch": "NODE_OPTIONS='--experimental-vm-modules --no-warnings' jest --watch",
+    "test:coverage": "NODE_OPTIONS='--experimental-vm-modules --no-warnings' jest --coverage",
+    "lint": "eslint lib/",
+    "install-deps": "npm install",
+    "setup": "./install.sh",
+    "db:init": "node scripts/init-databases.js",
+    "db:init:skip-qdrant": "node scripts/init-databases.js --skip-qdrant",
+    "docs:api": "typedoc",
+    "docs:api:serve": "npx http-server docs/api -p 8081"
+  },
+  "dependencies": {
+    "@qdrant/js-client-rest": "^1.17.0",
+    "@rapid/llm-proxy": "https://github.com/fwornle/rapid-llm-proxy/releases/download/v1.0.0/rapid-llm-proxy-1.0.0.tgz",
+    "@xenova/transformers": "^2.17.2",
+    "axios": "^1.10.0",
+    "better-sqlite3": "^11.7.0",
+    "chokidar": "^4.0.3",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.2",
+    "express": "^4.18.2",
+    "fastembed": "^2.1.0",
+    "glob": "^10.3.0",
+    "gpt-tokenizer": "^3.2.0",
+    "graphology": "^0.25.4",
+    "graphology-utils": "^2.5.2",
+    "ioredis": "^5.10.1",
+    "js-yaml": "^4.1.0",
+    "level": "^10.0.0",
+    "levelgraph": "^4.0.0",
+    "playwright": "^1.40.0",
+    "proper-lockfile": "^4.1.2",
+    "ws": "^8.16.0"
+  },
+  "optionalDependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@google/generative-ai": "^0.21.0",
+    "groq-sdk": "^0.31.0",
+    "openai": "^6.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/ajv": "^0.0.5",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.10.0",
+    "eslint": "^8.55.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.4.5",
+    "typedoc": "^0.28.14",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "keywords": [
+    "claude",
+    "copilot",
+    "ai",
+    "coding-tools",
+    "mcp",
+    "graph-database",
+    "browser-automation"
+  ],
+  "author": "Agent-Agnostic Coding Tools",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "."
+  }
+}

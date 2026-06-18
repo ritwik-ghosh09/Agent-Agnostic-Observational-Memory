@@ -1,0 +1,37 @@
+@startuml
+!include _standard-style.puml
+title Cross-Project Content Routing Data Flow
+
+top to bottom direction
+
+rectangle "<Project> Project" as NanoDegree {
+  component "Claude Session" as NanoSession
+  folder ".specstory/history" as NanoFiles {
+    file "1530-1630-session.md" as NanoLSL
+  }
+  file ".redirect-status" as RedirectStatus
+}
+
+rectangle "Coding Project" as Coding {
+  folder ".specstory/history" as CodingFiles {
+    file "1530-1630_from-<project>.md" as CodingLSL
+  }
+}
+
+component "Enhanced\nTranscript Monitor" as Monitor
+component "Content\nClassification" as Classifier
+database "Transcript Files\n~/.claude/projects/" as Transcripts
+
+NanoSession -> Transcripts : Generate transcript files
+Transcripts -> Monitor : Monitor in real-time
+Monitor -> Classifier : Analyze content type
+
+Classifier -> NanoFiles : <project> content
+Classifier -> CodingFiles : coding content
+Classifier -> RedirectStatus : Update routing status
+
+' Classification logic: File paths with /coding/, Tool operations on coding files, Git operations, Development workflows
+
+' Redirect Status: timestamp, tranche, target
+
+@enduml

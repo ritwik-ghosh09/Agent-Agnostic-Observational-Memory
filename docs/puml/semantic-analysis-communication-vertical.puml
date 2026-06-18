@@ -1,0 +1,71 @@
+@startuml semantic-analysis-communication-vertical
+!include _standard-style.puml
+
+title Semantic Analysis System - Communication Architecture
+
+top to bottom direction
+
+package "Client Layer" {
+  component [Coding Agent] as claude
+}
+
+package "Integration Layer" {
+  component [MCP Server] as mcp
+  note right of mcp
+    • 12 tools for Claude Code
+    • Direct function calls
+    • No MQTT/RPC servers
+  end note
+}
+
+package "Orchestration Layer" {
+  component [CoordinatorAgent] as coord
+  note right of coord
+    • Receives MCP requests
+    • Executes workflows
+    • Direct agent calls
+  end note
+}
+
+package "14-Agent System" {
+  component [GitHistoryAgent] as git
+  component [VibeHistoryAgent] as vibe
+  component [SemanticAnalysisAgent] as sa
+  component [WebSearchAgent] as ws
+  component [InsightGenerationAgent] as insight
+  component [ObservationGenerationAgent] as obs
+  component [QualityAssuranceAgent] as qa
+  component [PersistenceAgent] as persist
+  component [DeduplicationAgent] as dedup
+}
+
+package "Storage Layer" {
+  database [GraphDB] as graphdb
+  component [Graph Exporter] as exporter
+  database [coding.json\n.data/knowledge-export/] as storage
+}
+
+' Vertical connection flow
+claude --> mcp : MCP tool calls
+mcp --> coord : direct function call
+
+coord --> git : direct call
+coord --> vibe : direct call
+coord --> sa : direct call
+coord --> ws : direct call
+coord --> insight : direct call
+coord --> obs : direct call
+coord --> qa : direct call
+coord --> persist : direct call
+coord --> dedup : direct call
+
+coord --> graphdb : provides instance
+persist --> graphdb : stores entities
+graphdb --> exporter : auto-export 30s
+exporter --> storage : writes JSON
+
+' Return paths
+coord --> mcp : results
+mcp --> claude : tool response
+
+@enduml

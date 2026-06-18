@@ -1,0 +1,158 @@
+@startuml ukb-architecture
+!include _standard-style.puml
+
+title UKB (Update Knowledge Base) - Current Architecture
+
+top to bottom direction
+
+' Entry point
+package "CLI Entry Point" {
+  [lib/ukb-unified/cli.js] as cli
+  note right of cli
+    UKB Unified CLI (v2.0)
+    Smart incremental updates
+    Team checkpoint management
+  end note
+}
+
+' Core Services
+package "Core Services" {
+  [TeamCheckpointManager] as checkpoint
+  [GapAnalyzer] as gap
+  [WorkflowOrchestrator] as orchestrator
+  [DatabaseManager] as db_mgr
+}
+
+' Input processing
+package "Knowledge Extraction" {
+  [Git History Analyzer] as git_analyzer
+  [StreamingKnowledgeExtractor] as extractor
+  [Pattern Detector] as pattern
+  [Significance Scorer] as scorer
+}
+
+' Ontology integration
+package "Ontology Layer" {
+  [OntologyClassifier] as ontology
+  [4-Layer Classification] as layers
+}
+
+' Database layer
+package "Database Services" {
+  [GraphDatabaseService] as graph_db
+  [SQLite Service] as sqlite
+  [Qdrant Service] as qdrant
+}
+
+' Storage layer
+package "Persistent Storage" {
+  database "Graphology\n(In-Memory)" as graphology
+  database "LevelDB\n(.data/knowledge-graph/)" as leveldb
+  database "SQLite\n(.data/knowledge.db)" as sqlite_db
+  database "Qdrant\n(Vector DB)" as qdrant_db
+}
+
+' Synchronized JSON export
+package "Git-Tracked Export" {
+  [GraphKnowledgeExporter] as exporter
+  file "JSON Files\n(.data/knowledge-export/)" as json_export
+}
+
+' Visualization
+package "Visualization" {
+  [VKB Visualizer] as vkb
+  [Web UI (port 8080)] as web
+}
+
+' Core processing flow
+cli --> checkpoint
+cli --> gap
+cli --> orchestrator
+cli --> db_mgr
+orchestrator --> db_mgr
+orchestrator --> git_analyzer
+
+' Knowledge extraction
+git_analyzer --> extractor
+extractor --> pattern
+pattern --> scorer
+scorer --> extractor
+
+' Ontology classification
+extractor --> ontology
+ontology --> layers
+
+' Database management
+db_mgr --> graph_db
+db_mgr --> sqlite
+db_mgr --> qdrant
+
+checkpoint --> gap
+
+' Storage
+graph_db --> graphology
+graph_db --> leveldb
+sqlite --> sqlite_db
+qdrant --> qdrant_db
+
+' Automatic JSON export (REQUIRED - keeps all storage layers in sync)
+graph_db --> exporter : auto-export\n(5s debounce)
+exporter --> json_export : git-tracked\nsynchronization
+
+' Visualization
+leveldb --> vkb
+graphology --> vkb
+vkb --> web
+
+note right of checkpoint
+  **Team-wide Checkpoint**
+  • .data/ukb-last-run.json
+  • Git-tracked for team sync
+  • Enables incremental processing
+  • Tracks last commit & session
+end note
+
+note right of graph_db
+  **Primary Storage System**
+  • Graphology: In-memory graph
+  • LevelDB: Persistent storage
+  • Auto-persist: 1000ms
+  • Fail-fast on errors
+end note
+
+note right of extractor
+  **Knowledge Processing Pipeline**
+  • Pattern detection
+  • Significance scoring (1-10)
+  • Ontology classification
+  • MCP semantic analysis integration
+end note
+
+note right of ontology
+  **4-Layer Classification**
+  1. Heuristic patterns
+  2. Keyword matching
+  3. Semantic similarity
+  4. LLM classification
+
+  Confidence threshold: 0.7
+end note
+
+note right of exporter
+  **Automatic Synchronization**
+  • Debounced: 5000ms
+  • Team-based files
+  • Git-tracked exports
+  • REQUIRED for sync
+  • Keeps all layers in sync
+end note
+
+note bottom of db_mgr
+  **Multi-Database Orchestration**
+  • GraphDB (knowledge graph)
+  • SQLite (relational queries)
+  • Qdrant (vector search - optional)
+  • Health status monitoring
+end note
+
+@enduml

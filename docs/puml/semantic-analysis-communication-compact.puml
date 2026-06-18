@@ -1,0 +1,45 @@
+@startuml
+!include _standard-style.puml
+
+title Communication Patterns in Semantic Analysis System
+
+top to bottom direction
+
+package "Client" {
+  component [Coding Agent] as claude
+}
+
+package "MCP Layer" {
+  component [MCP Server] as mcp
+}
+
+package "Orchestration" {
+  component [CoordinatorAgent] as coord
+}
+
+package "14-Agent System" {
+  component [Analysis Agents] as analysis
+  component [Infrastructure Agents] as infra
+}
+
+package "Storage" {
+  database [GraphDB] as graphdb
+}
+
+claude --> mcp : tool calls
+mcp --> coord : direct call
+coord --> analysis : direct calls
+coord --> infra : direct calls
+coord --> graphdb : provides
+infra --> graphdb : stores
+coord --> mcp : results
+mcp --> claude : response
+
+note right of coord
+  **Direct Function Calls**
+  • No MQTT broker
+  • No JSON-RPC server
+  • Synchronous execution
+end note
+
+@enduml

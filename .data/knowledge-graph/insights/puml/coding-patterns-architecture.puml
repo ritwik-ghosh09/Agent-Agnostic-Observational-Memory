@@ -1,0 +1,24 @@
+@startuml
+!include /coding/docs/puml/_standard-style.puml
+
+package "CodingPatterns" {
+  component "GraphDatabase" as graph <<storage>>
+  component "GraphPersistenceModule" as gpm <<core>>
+  component "EntityValidator" as ev <<agent>>
+  component "BatchProcessingPipeline" as bpp <<core>>
+  component "BrowserAccess" as ba <<external>>
+  component "LlmServiceManager" as lsm <<api>>
+  component "WaveAgentController" as wac <<agent>>
+  component "CopiWrapper" as cw <<cli>>
+}
+
+graph --> gpm : uses
+gpm --> graph : stores
+ev --> graph : validates
+bpp --> ev : processes
+ba --> bpp : integrates
+lsm --> wac : manages
+wac --> lsm : uses
+cw --> ba : extends
+
+@enduml

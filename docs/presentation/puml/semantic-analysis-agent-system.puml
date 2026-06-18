@@ -1,0 +1,88 @@
+@startuml semantic-analysis-agent-system
+!include _standard-style.puml
+
+title "14-Agent Semantic Analysis System"
+
+top to bottom direction
+
+[Coding Agent] <<external>> as claude
+[MCP Server] <<api>> as mcp
+[Coordinator] <<agent>> as coord
+
+package "Phase 1: Collection" {
+  [Git History] <<agent>> as git
+  [Vibe History] <<agent>> as vibe
+}
+
+' Phase 1.5 removed - CodeIntelligenceAgent was fictional
+
+package "Phase 2: Analysis" {
+  [Semantic] <<agent>> as semantic
+  [Web Search] <<agent>> as web
+}
+
+package "Phase 3: Generation" {
+  [Insights] <<agent>> as insight
+  [Observations] <<agent>> as obs
+}
+
+package "Phase 4: Classification" {
+  [Ontology] <<agent>> as ontology
+  [Doc Linker] <<agent>> as doclink
+  [Code Graph] <<agent>> as codegraph
+}
+
+package "Phase 5: Quality" {
+  [QA + Filter] <<agent>> as qa
+  [Validation] <<agent>> as validate
+}
+
+package "Phase 6: Storage" {
+  [Persistence] <<agent>> as persist
+  [Deduplication] <<agent>> as dedup
+}
+
+cloud "LLM Chain" <<external>> as llm
+cloud "Embeddings" <<external>> as embed
+database "GraphDB" <<storage>> as db
+
+claude --> mcp
+mcp --> coord
+
+coord --> git
+coord --> vibe
+git --> semantic
+vibe --> semantic
+codegraph --> semantic
+semantic --> web
+web --> insight
+insight --> obs
+obs --> ontology
+ontology --> doclink
+semantic --> codegraph
+codegraph --> doclink
+doclink --> qa
+qa --> persist
+persist --> dedup
+dedup --> validate
+
+git --> llm
+vibe --> llm
+semantic --> llm
+web --> llm
+insight --> llm
+obs --> llm
+ontology --> llm
+doclink --> llm
+qa --> llm
+validate --> llm
+
+dedup --> embed
+persist --> db
+
+note right of coord
+  14 agents, 6 phases
+  11 use LLM
+end note
+
+@enduml

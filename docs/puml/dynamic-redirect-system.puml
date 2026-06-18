@@ -1,0 +1,53 @@
+@startuml
+!include _standard-style.puml
+
+title Dynamic Redirect Flag System
+
+!define MONITOR_COLOR #E8F5E8
+!define STATUS_COLOR #F3E5F5  
+!define TIMEOUT_COLOR #FFF3E0
+!define DISPLAY_COLOR #E3F2FD
+
+participant "Enhanced Transcript Monitor" as monitor <<MONITOR_COLOR>>
+participant "File Classification" as classify <<MONITOR_COLOR>>
+participant "Redirect Status File" as status_file <<STATUS_COLOR>>
+participant "Combined Status Line" as status_line <<STATUS_COLOR>>
+participant "Timeout Manager" as timeout <<TIMEOUT_COLOR>>
+participant "Visual Display" as display <<DISPLAY_COLOR>>
+
+== Content Routing Detection ==
+monitor -> classify : Analyze tool calls for coding directory
+classify -> classify : Check file paths:\n• /coding/scripts/\n• /Users/q284340/Agentic/coding/
+
+alt Coding Content Detected
+    classify -> status_file : Create/update .redirect-status
+    status_file -> status_file : Store:\n• timestamp\n• target: "coding"\n• tranche info
+    status_file -> display : **🔀→coding flag appears**
+else Non-Coding Content
+    classify -> monitor : Keep content in source project
+    note right of monitor : No redirect flag needed
+end
+
+== Status Line Processing ==
+loop Every 5 seconds
+    status_line -> status_file : Check for .redirect-status
+    status_file -> timeout : Provide timestamp
+    timeout -> timeout : Calculate age:\ncurrent_time - redirect_time
+    
+    alt Age < 180 seconds (3 minutes)
+        timeout -> display : Show 🔀→coding flag
+        note right of display : **Dynamic visibility**\nFlag shows during active redirection
+    else Age >= 180 seconds
+        timeout -> display : Hide 🔀→coding flag
+        note right of display : **Automatic timeout**\nFlag disappears after 3 minutes
+    end
+end
+
+== Key Benefits ==
+note over status_file : **Real-Time Feedback**\n• Shows active redirection immediately\n• Reflects current routing state\n• No persistent ghost flags
+
+note over timeout : **Dynamic Behavior**\n• 3-minute timeout balances responsiveness/stability\n• Prevents flag from staying visible indefinitely\n• Provides clear visual feedback about system state
+
+note over display : **User Experience**\n\n**Before:** Persistent flag causing confusion\n**After:** Dynamic flag showing only active state\n\n**Status Line Evolution:**\n• Normal: 🛡️ 8.5 🔍EX 📋1530-1630-session\n• Redirecting: 🛡️ 8.5 🔍EX 🔀→coding 📋1530-1630-session\n• Timeout: 🛡️ 8.5 🔍EX 📋1530-1630-session
+
+@enduml

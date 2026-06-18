@@ -1,0 +1,51 @@
+@startuml knowledge-capture-flow
+!include _standard-style.puml
+
+title Knowledge Capture Flow - Semantic Analysis System
+
+start
+
+:New knowledge identified;
+note right: Pattern, insight, or solution
+
+if (Semantic agents running?) then (yes)
+  partition "Automated Capture" {
+    if (Source type?) then (code)
+      :analyze_repository();
+      :Extract patterns from commits;
+      :Identify architectural decisions;
+    else (conversation)
+      :analyze_conversation();
+      :Extract insights;
+      :Identify key decisions;
+    endif
+    
+    :Agent processes with LLM;
+    :Determine significance;
+    :Create knowledge entities;
+  }
+else (no)
+  partition "Manual Capture via MCP" {
+    :User types "ukb" at Claude prompt;
+    :MCP semantic analysis tool called;
+    :execute_workflow or create_ukb_entity_with_insight;
+  }
+endif
+
+:GraphDB updated directly;
+:Auto-export to coding.json every 5s (debounced);
+
+if (Using Claude Code?) then (yes)
+  :GraphDB available immediately;
+  :MCP memory queries work;
+else (no)
+  :GraphDB persisted to LevelDB;
+  :JSON export for git tracking;
+endif
+
+:Knowledge available to team;
+note right: Git-tracked for sharing
+
+stop
+
+@enduml

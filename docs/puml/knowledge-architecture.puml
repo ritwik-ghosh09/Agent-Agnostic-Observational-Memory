@@ -1,0 +1,159 @@
+@startuml knowledge-architecture
+!include _standard-style.puml
+
+!define RECTANGLE class
+
+skinparam rectangle {
+    BackgroundColor LightBlue
+    BorderColor DarkBlue
+}
+
+skinparam database {
+    BackgroundColor LightGreen
+    BorderColor DarkGreen
+}
+
+skinparam cloud {
+    BackgroundColor LightYellow
+    BorderColor Orange
+}
+
+title Knowledge Management System Architecture v6.0\nGraphDB + Ontology + Context Injection
+
+rectangle "Knowledge Sources" as SOURCES {
+    [Live Sessions\n(Transcripts)]
+    [Git Commits]
+    [Manual Input\n(MCP Tools)]
+    [File Changes]
+}
+
+rectangle "Online Learning" as ONLINE {
+    [Enhanced Transcript\nMonitor] as MONITOR
+    [Streaming Knowledge\nExtractor] as EXTRACTOR
+    [Ontology Classifier\n(5-Layer Pipeline)] as ONTOLOGY
+
+    note right of MONITOR : Watches transcript files\nTriggers real-time extraction\nDebounced processing
+
+    note right of ONTOLOGY : Layer 0: Team Context\nLayer 1: Pattern Analysis\nLayer 2: Keyword Matching\nLayer 3: Embeddings\nLayer 4: LLM (fallback)
+}
+
+rectangle "Manual Learning" as MANUAL {
+    [MCP Semantic Analysis] as MCP
+    [14-Agent Workflow] as WORKFLOW
+
+    note right of MCP : User types "ukb" → MCP tools\nexecute_workflow\ncreate_ukb_entity_with_insight\nDirect GraphDB writes
+}
+
+rectangle "Unified Persistent Storage" as STORAGE {
+    rectangle "Graph Database\n(Graphology + LevelDB)" as GRAPHDB {
+        [Entities + Ontology]
+        [Relationships]
+        [Team Isolation]
+    }
+
+    rectangle "Qdrant (Docker)\n(Docker Vector DB)" as QDRANT {
+        [384d Embeddings\n(Fast)]
+        [1536d Embeddings\n(Accurate)]
+    }
+
+    rectangle "SQLite\n(Metadata)" as SQLITE {
+        [Extraction Records]
+        [Session History]
+        [Timestamps]
+    }
+}
+
+rectangle "Knowledge Access" as ACCESS {
+    [VKB Visualizer\n(online mode)] as VKB
+    [Knowledge Retriever\n(Ontology-aware)] as RETRIEVER
+    [Graph Query Engine] as QUERY
+    [Export to JSON\n(optional)] as EXPORT
+}
+
+rectangle "Context Injection (v6.0)" as INJECTION {
+    [Retrieval Service\n(Hybrid Search + RRF)] as RETR_SVC
+    [Agent Adapters\n(Claude/Copilot/OpenCode/Mastra)] as ADAPT
+    [Working Memory\n(KG + STATE.md)] as WMEM
+
+    note right of RETR_SVC
+      POST /api/retrieve on :3033
+      Token-budgeted markdown
+      Per-agent scoring profiles
+    end note
+}
+
+' === Online Learning Flow ===
+[Live Sessions\n(Transcripts)] --> MONITOR : File changes
+MONITOR --> EXTRACTOR : New exchanges
+EXTRACTOR --> ONTOLOGY : Knowledge text
+ONTOLOGY --> GRAPHDB : Entity + Ontology\nmetadata
+EXTRACTOR --> QDRANT : Dual embeddings\n(384d + 1536d)
+EXTRACTOR --> SQLITE : Metadata
+
+' === Manual Learning Flow ===
+[Manual Input\n(MCP Tools)] --> MCP : User types "ukb"\nat Claude prompt
+MCP --> WORKFLOW : execute_workflow\ncreate_ukb_entity_with_insight
+WORKFLOW --> GRAPHDB : Direct writes\nvia PersistenceAgent
+
+' === Access Layer ===
+GRAPHDB --> VKB : Query entities\nwith ontology
+GRAPHDB --> RETRIEVER : Ontology-aware\nretrieval
+GRAPHDB --> QUERY : Graph traversal
+GRAPHDB --> EXPORT : Team export\nto JSON
+
+QDRANT --> RETRIEVER : Semantic\nsearch
+SQLITE --> RETRIEVER : Metadata\nfiltering
+
+VKB --> [Web Browser] : Interactive\nvisualization
+
+' === Context Injection (v6.0) ===
+QDRANT --> RETR_SVC : Semantic search\n(4 collections)
+SQLITE --> RETR_SVC : Keyword search\n(FTS5)
+GRAPHDB --> WMEM : Project + Component\nentities
+RETR_SVC --> ADAPT : Token-budgeted\nmarkdown
+WMEM --> RETR_SVC : 300-token\nprefix
+ADAPT --> [Coding Agents] : Injected context\n(per-prompt or session)
+
+note right of GRAPHDB
+  **Central Knowledge Store**
+  • Graphology: In-memory graph
+  • LevelDB: Persistent storage
+  • Ontology metadata per entity
+  • Team-scoped (coding, RaaS, etc.)
+  • Auto-persist (1s interval)
+end note
+
+note right of ONTOLOGY
+  **5-Layer Hybrid Classification**
+  • Early exit on high confidence
+  • Heuristics: >10,000/sec
+  • LLM: <500ms p95
+  • Confidence scoring
+  • Method tracking (layer 0-4)
+end note
+
+note bottom of STORAGE
+  **Unified Architecture (v2.0)**
+  • Single source of truth: GraphDB
+  • No JSON intermediates
+  • Online + Manual = same DB
+  • Optional JSON export for backups
+end note
+
+note bottom of ACCESS
+  **VKB Modes**
+  • Default: --online (GraphDB)
+  • Legacy: --with-batch (JSON files)
+  • Distinguishes online vs manual
+end note
+
+note bottom of INJECTION
+  **Context Injection (v6.0)**
+  • Hybrid retrieval: semantic + keyword + recency
+  • Per-agent scoring profiles
+  • Working memory: KG structure + project state
+  • Cross-agent session continuity
+  • 1000 token budget (300 WM + 700 semantic)
+end note
+
+@enduml

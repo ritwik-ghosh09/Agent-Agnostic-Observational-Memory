@@ -1,0 +1,66 @@
+@startuml consolidator-heartbeat-flow
+!include _standard-style.puml
+
+title Consolidation Flow with In-Process Heartbeat\n(host obs-api owns observations.db)
+
+actor User
+participant "Dashboard\n(server.js, container)" as D <<api>>
+participant "Observations API\n(host, :12436)" as A <<api>>
+database ".observations/\nconsolidation-\nheartbeat.json" as HB <<storage>>
+database ".observations/\nobservations.db" as DB <<storage>>
+participant "ObservationConsolidator\n(in-process)" as OC <<core>>
+
+== Trigger ==
+
+User -> D: POST /api/consolidation/run
+D -> A: POST /api/consolidation/run\n(forward via host.docker.internal:12436)
+note right
+  Dashboard is a thin forwarder.
+  Consolidation runs in-process inside
+  the obs-api server, which already
+  owns the SQLite handle — no spawn,
+  no second writer, no WAL race.
+end note
+activate A
+
+A -> A: coalesce concurrent triggers\n(_consolidationPromise)
+A -> HB: write {pid, startedAt,\n  lastHeartbeat, args}
+A -> A: tap process.stderr so any\nconsolidator log line refreshes\nlastStderrAt + lastMessage
+loop every ~2s
+    A -> HB: refresh lastHeartbeat
+end
+
+A -> OC: run({includeToday}) | consolidateDay(date) | synthesizeInsights()
+activate OC
+loop for each undigested day
+    OC -> DB: read observations
+    OC -> OC: LLM theme grouping
+    OC -> DB: write digest
+    A -> HB: bump (last stderr line\n  becomes lastMessage)
+end
+OC --> A: result
+deactivate OC
+
+A -> HB: unlink (graceful exit)
+A --> D: { success, ok, digests, created, updated }
+deactivate A
+D --> User: same payload
+
+== Status ==
+
+User -> D: GET /api/consolidation/status
+D -> A: forward GET
+A -> HB: read heartbeat
+HB --> A: { pid, ageMs, alive, lastMessage } | null
+A --> D: { totalObs, undigested, …,\n  inflight: { … } | null }
+D --> User: same payload
+
+== Auto-consolidation (host-side, every 30 min) ==
+
+D -> A: GET /api/consolidation/status\n(via _fetchObsApi)
+A --> D: pendingPast count
+alt pendingPast >= 10
+    D -> A: POST /api/consolidation/run
+end
+
+@enduml

@@ -1,0 +1,71 @@
+@startuml health-verification-flow
+!include _standard-style.puml
+
+title Health Verification Pre-Prompt Flow (Phase 33)
+
+actor User
+participant "Claude Code" as Claude
+participant "UserPromptSubmit\nHook" as Hook
+participant "health-prompt-hook.js" as HealthHook
+participant "Health coordinator\n:3034" as Coord
+participant "Probed services\n(dashboard, vkb,\nsemantic-analysis,\nllm-cli-proxy, …)" as Services
+
+User -> Claude: Types prompt
+activate Claude
+
+Claude -> Hook: Trigger hook
+activate Hook
+
+Hook -> HealthHook: Execute hook script
+activate HealthHook
+
+HealthHook -> Coord: GET /health/state
+activate Coord
+Coord --> HealthHook: state JSON\n(generated_at, services,\ndatabases, lsl_by_project, …)
+deactivate Coord
+
+alt generated_at fresh (<3 min)
+    HealthHook -> HealthHook: Format compact summary\n("All systems operational")
+    HealthHook --> Hook: Return health context
+else generated_at stale (>3 min)
+    HealthHook --> Hook: Return "[🏥⏰] coordinator stale"\n(operator action required —\nno auto-heal in Phase 33)
+end
+
+deactivate HealthHook
+
+Hook --> Claude: Add context to prompt
+deactivate Hook
+
+note right of Coord
+  The coordinator continuously
+  probes services and refreshes
+  databases / processes / files
+  blocks. The hook only reads
+  state — it does not trigger
+  remediation.
+
+  Network state (internet, proxy,
+  VPN location) probed every tick
+  and passed through to dashboard
+  via /health/state → network{}.
+  
+  Database sub-checks (leveldb,
+  qdrant, graph_integrity) probed
+  directly and mapped to
+  passed/failed status.
+end note
+
+note over Services
+  Probed by the coordinator on
+  its own schedule (not by the
+  hook). Reachability + latency
+  surface in services[*].
+end note
+
+Coord -[#orange,dashed]-> Services : probe (independent)
+
+Claude -> Claude: Process prompt with\nhealth context
+Claude --> User: Response with health info
+deactivate Claude
+
+@enduml

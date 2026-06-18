@@ -1,0 +1,27 @@
+@startuml
+!include /coding/docs/puml/_standard-style.puml
+
+package "LLM Abstraction" {
+  component "LLMAbstraction" as llm <<core>>
+  component "ProviderRegistry" as pr <<api>>
+  component "LLMService" as lls <<api>>
+  component "CircuitBreaker" as cb <<api>>
+}
+
+package "Providers" {
+  component "AnthropicProvider" as ap <<external>>
+  component "DMRProvider" as dmr <<external>>
+  component "MockProvider" as mp <<external>>
+}
+
+llm --> pr : uses
+pr --> ap : manages
+pr --> dmr : manages
+pr --> mp : manages
+lls --> pr : uses
+lls --> cb : uses
+cb --> ap : monitors
+cb --> dmr : monitors
+cb --> mp : monitors
+
+@enduml

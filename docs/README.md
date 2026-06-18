@@ -1,0 +1,98 @@
+# Coding Documentation Hub
+
+Central documentation for the unified semantic analysis & knowledge management system.
+
+## 📚 Documentation Structure
+
+### Getting Started
+- **[Getting Started Guide](getting-started.md)** - Installation, configuration, and first steps
+- **[System Overview](system-overview.md)** - What coding provides and core capabilities
+
+### Core Systems
+- **[Live Session Logging (LSL)](lsl/README.md)** - Real-time conversation classification and routing
+- **[Observational Memory](observations/README.md)** - Per-exchange LLM observations with browsable dashboard
+- **[Constraint Monitoring](constraints/README.md)** - Real-time code quality enforcement
+- **[Status Line System](health-system/README.md)** - Visual system status and activity indicators
+
+### Integrations
+- **[Integration Overview](integrations/README.md)** - How external components integrate
+- **[MCP Semantic Analysis](integrations/mcp-semantic-analysis.md)** - 14-agent AI analysis system
+- **[MCP Constraint Monitor](integrations/mcp-constraint-monitor.md)** - Real-time constraint enforcement
+- **[Code Graph RAG](integrations/code-graph-rag.md)** - AST-based code search via Memgraph
+- **[VSCode CoPilot](integrations/vscode-copilot.md)** - Enhanced CoPilot integration
+
+### Knowledge Management
+- **[Knowledge Management Overview](knowledge-management/README.md)** - UKB/VKB systems
+- **[Update Knowledge Base (UKB)](knowledge-management/ukb-update.md)** - Capturing insights and knowledge
+- **[Visualize Knowledge Base (VKB)](knowledge-management/vkb-visualize.md)** - Web-based knowledge visualization
+- **[Knowledge Workflows](knowledge-management/workflows.md)** - Common patterns and use cases
+
+### Architecture
+- **[Architecture Overview](architecture/README.md)** - System architecture, principles, and patterns
+- **[4-Layer Monitoring](health-system/README.md#architecture)** - Health monitoring architecture
+- **[LSL Classification](lsl/README.md#reliablecodingclassifier)** - Classification and routing system
+
+### Reference
+- **[API Keys Setup](reference/api-keys-setup.md)** - LLM provider configuration
+- **[Troubleshooting](troubleshooting.md)** - Common issues and solutions
+- **[CLI Commands](reference/commands.md)** - Command-line reference
+
+---
+
+## 🔗 Integration Components
+
+Each integration component is self-contained with its own comprehensive documentation:
+
+- **[MCP Semantic Analysis Server](../integrations/mcp-server-semantic-analysis/README.md)** - Standalone Node.js MCP server with 14 intelligent agents
+- **[MCP Constraint Monitor](../integrations/mcp-constraint-monitor/README.md)** - Real-time code quality enforcement server
+- **[Code Graph RAG](../integrations/code-graph-rag/README.md)** - AST-based code search via Memgraph
+- **[VSCode Knowledge Management CoPilot](../integrations/vscode-km-copilot/README.md)** - Enhanced GitHub CoPilot with knowledge management
+
+---
+
+## 🚀 Quick Navigation
+
+**New to Coding?** Start with [Getting Started](getting-started.md)
+
+**Understanding the System?** Read [System Overview](system-overview.md)
+
+**Working with LSL?** See [Live Session Logging](lsl/README.md)
+
+**Browsing Observations?** See [Observational Memory](observations/README.md)
+
+**Setting up Integrations?** Check [Integration Overview](integrations/README.md)
+
+**Managing Knowledge?** Visit [Knowledge Management](knowledge-management/README.md)
+
+**Architecture Deep Dive?** Explore [Architecture](architecture/README.md)
+
+**Having Issues?** Consult [Troubleshooting](troubleshooting.md)
+
+---
+
+## 📄 Additional System Documentation
+
+Detailed standalone documentation for specific systems:
+
+### Monitoring & Health
+- **[Process Monitoring System](monitoring-system.md)** - Consolidated monitoring architecture with PSM
+- **[Enhanced Health Monitoring](enhanced-health-monitoring.md)** - Comprehensive health tracking and status reporting
+
+### Core System Details
+- **[Multi-Collection Classification](multi-collection-classification.md)** - 4-collection semantic classification with 768-dim embeddings (nomic-embed-text-v1)
+- **[Constraint Monitoring System](constraint-monitoring-system.md)** - Detailed constraint enforcement documentation
+- **[Adaptive Transcript Format Detection](adaptive-transcript-format-detection.md)** - LSL format detection and adaptation
+
+### Configuration & Setup
+- **[Multi-Team Knowledge Base Setup](multi-team-setup.md)** - Team-based knowledge organization
+- **[Custom Slash Commands](slash-commands.md)** - `/sl` (session logs) and `/lg` (live guardrails)
+
+---
+
+## 📖 Legacy Documentation
+
+Historical documentation and migration guides have been archived in `.obsolete/docs/` for reference.
+
+---
+
+*Last updated: 2025-10-16*
