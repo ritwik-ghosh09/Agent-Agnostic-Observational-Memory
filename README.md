@@ -77,10 +77,40 @@ See [Architecture Report](docs/architecture-report.md) for full system overview,
 The launcher automatically adapts to your network environment:
 - **Corporate network detection** — 3-layer detection (environment variable, SSH probe, HTTPS fallback) with 5-second timeouts
 - **Proxy auto-configuration** — Detects local proxy services (proxydetox) and configures environment variables automatically
+- **Docker build proxy** — Build-time proxy is driven by the same VPN detection (see below)
 - **Docker auto-start** — Launches Docker Desktop on demand with hung-process recovery and 45-second timeout
 - **Tested in all combinations** — CN/public network, with/without proxy, Claude/CoPilot — validated by 17 end-to-end tests
 
 No manual network configuration needed for most environments. See [Getting Started - Network Setup](docs/getting-started.md#network-setup-corporateproxy) for details.
+
+#### Docker Build Proxy Management
+
+The Docker **build** (compiling `coding-services`) fetches OS packages via `apt-get`
+and npm/Python dependencies, so it needs working network access at build time.
+Docker normally auto-injects `http_proxy`/`https_proxy` build-args from
+`~/.docker/config.json`. On a corporate laptop that proxy often points at a
+host-only address (e.g. `127.0.0.1` rewritten to the Docker bridge gateway) which
+is **unreachable from inside the build container when off-VPN** — causing
+`apt-get update` to fail with `Unable to locate package ...`.
+
+The launcher resolves this automatically, keyed to the corporate-VPN detection
+(`INSIDE_CN`):
+
+| State | Build proxy behavior |
+|-------|----------------------|
+| **Inside CN** (on VPN) | Passes the detected proxy through to the build (`http_proxy`/`https_proxy` build-args) |
+| **Outside CN** (off VPN) | Forces the build-args **empty**, overriding any proxy from `~/.docker/config.json` so the build goes direct |
+
+This is implemented in `_configure_docker_build_proxy()`
+([scripts/launch-agent-common.sh](scripts/launch-agent-common.sh)), which exports
+`DOCKER_BUILD_HTTP_PROXY` / `DOCKER_BUILD_HTTPS_PROXY` / `DOCKER_BUILD_NO_PROXY`.
+These feed the `build.args` block in
+[docker/docker-compose.yml](docker/docker-compose.yml). No manual configuration is
+needed.
+
+**Overrides** (rarely needed):
+- `CODING_DOCKER_BUILD_PROXY=http://host:port` — force a specific build proxy (takes precedence when inside CN)
+- `CODING_FORCE_CN=true|false` — force VPN detection on/off, which also flips the build proxy
 
 ### Installation Safety
 

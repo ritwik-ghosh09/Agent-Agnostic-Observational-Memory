@@ -9,6 +9,17 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.coding-services
+      # Proxy build-args are driven by the launcher's corporate-VPN detection
+      # (scripts/launch-agent-common.sh:_configure_docker_build_proxy).
+      # On VPN these carry the proxy; off VPN they are empty, which overrides
+      # any proxy auto-injected from ~/.docker/config.json so the build goes direct.
+      args:
+        http_proxy: "${DOCKER_BUILD_HTTP_PROXY-}"
+        https_proxy: "${DOCKER_BUILD_HTTPS_PROXY-}"
+        HTTP_PROXY: "${DOCKER_BUILD_HTTP_PROXY-}"
+        HTTPS_PROXY: "${DOCKER_BUILD_HTTPS_PROXY-}"
+        no_proxy: "${DOCKER_BUILD_NO_PROXY-localhost,127.0.0.1,::1}"
+        NO_PROXY: "${DOCKER_BUILD_NO_PROXY-localhost,127.0.0.1,::1}"
     container_name: coding-services
     restart: unless-stopped
     depends_on:

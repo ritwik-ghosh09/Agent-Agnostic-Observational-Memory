@@ -259,12 +259,45 @@ _resolve_port_conflicts() {
   fi
 }
 
+# Configure the proxy that the Docker *build* uses (apt-get, curl, etc.).
+#
+# Docker auto-injects http(s)_proxy build-args from ~/.docker/config.json. On a
+# corporate laptop that points at a host-only proxy (e.g. 127.0.0.1 rewritten to
+# the bridge gateway) which is unreachable from inside the build container when
+# off-VPN — breaking `apt-get update`. We drive the build proxy from the same
+# corporate-VPN detection the rest of the launcher uses (INSIDE_CN):
+#   - On VPN  (INSIDE_CN=true):  pass the detected proxy through to the build.
+#   - Off VPN (INSIDE_CN=false): force the build-args empty so the build goes
+#     direct, overriding whatever ~/.docker/config.json would have injected.
+# The vars are consumed by docker/docker-compose.yml build.args.
+_configure_docker_build_proxy() {
+  if [ "$INSIDE_CN" = "true" ]; then
+    # On VPN: reuse whatever proxy the environment/config provides. Prefer an
+    # explicit override, then the standard env vars.
+    local proxy="${CODING_DOCKER_BUILD_PROXY:-${HTTP_PROXY:-${http_proxy:-}}}"
+    export DOCKER_BUILD_HTTP_PROXY="$proxy"
+    export DOCKER_BUILD_HTTPS_PROXY="${HTTPS_PROXY:-${https_proxy:-$proxy}}"
+    export DOCKER_BUILD_NO_PROXY="${NO_PROXY:-${no_proxy:-localhost,127.0.0.1,::1}}"
+    _agent_log "🐳 Docker build proxy: ON (inside CN) → ${DOCKER_BUILD_HTTP_PROXY:-<none>}"
+  else
+    # Off VPN: empty build-args override any proxy from ~/.docker/config.json,
+    # so the build reaches Debian/npm mirrors directly.
+    export DOCKER_BUILD_HTTP_PROXY=""
+    export DOCKER_BUILD_HTTPS_PROXY=""
+    export DOCKER_BUILD_NO_PROXY="localhost,127.0.0.1,::1"
+    _agent_log "🐳 Docker build proxy: OFF (outside CN) → direct"
+  fi
+}
+
 # Start coding services (Docker or Native mode)
 _start_services() {
   if ! command -v node &> /dev/null; then
     _agent_log "Error: Node.js is required but not found in PATH"
     exit 1
   fi
+
+  # Drive Docker build proxy from corporate-VPN detection before any build.
+  _configure_docker_build_proxy
 
   local docker_dir="$CODING_REPO/docker"
   if [ ! -f "$docker_dir/docker-compose.yml" ]; then
