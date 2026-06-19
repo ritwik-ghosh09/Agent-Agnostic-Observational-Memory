@@ -17,5 +17,11 @@
     "${workspaceFolder}/.specstory/history/.git",
     ".specstory/history",
     ".specstory/history/.git"
-  ]
+  ],
+  "chat.tools.terminal.autoApprove": {
+    "/^printf '\\\\n\\\\n\\\\n\\\\n\\\\n\\\\n\\\\n\\\\n\\\\n\\\\n\\\\n\\\\n\\\\n\\\\n' \\| bash install\\.sh 2>&1 \\| grep -E \"\\^❌\\|error_exit\\|Error:\\|ERROR\\|✗\\|Failed\\|FAILED\\|npm ERR\\|node:internal\" \\| head -30$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
+  }
 }

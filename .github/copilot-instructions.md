@@ -68,19 +68,19 @@ Forgetting step 1 is a recurring issue — committed source looks correct but `d
 **After ANY code change to a submodule:**
 ```bash
 cd integrations/<submodule> && npm run build
-cd $CODING_REPO/docker && docker-compose build coding-services && docker-compose up -d coding-services
+cd /Users/Q284340/Agentic/coding/docker && docker-compose build coding-services && docker-compose up -d coding-services
 ```
 
 **Dashboard** (`integrations/system-health-dashboard/`): Bind-mounted into `coding-services` (`docker-compose.yml:96-102` covers `dist/`, `server.js`, `static-server.js`), so **no `docker-compose build` is needed** — but Docker Desktop's VirtioFS caches bind-mounted files and does NOT pick up host edits live. After editing, you MUST do one of:
 
 ```bash
 # Frontend (UI bundle) only — rebuild dist/, then restart the frontend service:
-cd $CODING_REPO/integrations/system-health-dashboard && npm run build
+cd /Users/Q284340/Agentic/coding/integrations/system-health-dashboard && npm run build
 docker exec coding-services supervisorctl restart web-services:health-dashboard-frontend
 
 # Backend (server.js / static-server.js) — restart the whole container to invalidate the FUSE cache;
 # `supervisorctl restart web-services:health-dashboard` alone re-reads the STALE cached file:
-cd $CODING_REPO/docker && docker-compose restart coding-services
+cd /Users/Q284340/Agentic/coding/docker && docker-compose restart coding-services
 ```
 
 Symptom of the stale-cache bug: the dashboard backend exits with `SyntaxError: Invalid or unexpected token` mid-line, because Docker serves a truncated snapshot of the file. Verify with `docker exec coding-services wc -lc /coding/integrations/system-health-dashboard/server.js` vs the host — sizes must match.
@@ -102,6 +102,16 @@ Symptom of the stale-cache bug: the dashboard backend exits with `SyntaxError: I
 
 `mcp__semantic-analysis__analyze_code_graph` with actions: `nl_query`, `query`, `call_graph`, `similar`. Requires Memgraph running.
 
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+
 
 ## Available Skills
 
@@ -112,20 +122,3 @@ read the full skill file and follow its instructions.
 - **playwright-cli** (`.claude/commands/playwright-cli.md`): Use this skill whenever the user wants to automate a browser, scrape web content, take screenshots or PDFs of pages, fill out forms, click through UI flows, or run end-to-end tests — without using an MCP server. This skill drives Playwright directly from the bash_tool via Node.js scripts. Trigger whenever the user says things like "open this URL", "screenshot this page", "scrape this site", "automate this form", "test this UI", "extract data from", "click through", "check if this page works", or any task that requires real browser interaction. Prefer this skill over web_fetch when JavaScript rendering, authentication, interaction, or visual output is needed.
 - **sl** (`.claude/commands/sl.md`): Load session logs (LSL) from current and coding projects for continuity
 
-## graphify
-
-For any question about this repo's architecture, structure, components, or how to add/modify/find
-code, your first action should be `graphify query "<question>"` when `graphify-out/graph.json`
-exists. Use `graphify path "<A>" "<B>"` for relationship questions and `graphify explain "<concept>"`
-for focused-concept questions. These return a scoped subgraph, usually much smaller than the full
-report or raw grep output.
-
-Triggers: "how do I…", "where is…", "what does … do", "add/modify a <component>",
-"explain the architecture", or anything that depends on how files or classes relate.
-
-If `graphify-out/wiki/index.md` exists, use it for broad navigation. Read `graphify-out/GRAPH_REPORT.md`
-only for broad architecture review or when query/path/explain do not surface enough context. Only read
-source files when (a) modifying/debugging specific code, (b) the graph lacks the needed detail, or
-(c) the graph is missing or stale.
-
-Type `/graphify` in Copilot Chat to build or update the graph.

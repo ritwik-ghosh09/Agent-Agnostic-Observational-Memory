@@ -526,25 +526,28 @@ launch_agent() {
     fi
   fi
 
-  # 15. Agent-specific pre-launch hook (can use INSIDE_CN, PROXY_WORKING)
+  # 15. Set env vars (must precede agent_pre_launch: the pre-launch hook may
+  #     spawn helper servers — e.g. the CoPilot HTTP adapter — that resolve
+  #     CODING_TOOLS_PATH at startup. Exporting here ensures those children
+  #     inherit the correct repo path instead of falling back to ~/Agentic/coding.)
+  _set_agent_env_vars
+
+  # 16. Agent-specific pre-launch hook (can use INSIDE_CN, PROXY_WORKING)
   if type agent_pre_launch &>/dev/null; then
     agent_pre_launch
   fi
 
-  # 15. Agent-common init (LSL, monitoring, gitignore, etc.)
+  # 17. Agent-common init (LSL, monitoring, gitignore, etc.)
   agent_common_init "$TARGET_PROJECT_DIR" "$CODING_REPO"
 
-  # 16. Log mode info
+  # 18. Log mode info
   _agent_log "MCP servers run via stdio-proxy → SSE connections to Docker"
 
-  # 17. Set env vars
-  _set_agent_env_vars
-
-  # 18. cd to project
+  # 19. cd to project
   cd "$TARGET_PROJECT_DIR"
   _agent_log "Changed working directory to: $(pwd)"
 
-  # 19. Launch via tmux session wrapper
+  # 20. Launch via tmux session wrapper
   _agent_log "Launching ${AGENT_DISPLAY_NAME}..."
   source "$SCRIPT_DIR/tmux-session-wrapper.sh"
   tmux_session_wrapper "$AGENT_COMMAND" "$@"

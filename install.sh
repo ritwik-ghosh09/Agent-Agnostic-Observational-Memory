@@ -2331,6 +2331,85 @@ SYSTEMD_EOF
     fi
 }
 
+# Set up the host-side supervisor for the health coordinator
+# (scripts/health-coordinator.js, port 3034). On macOS this is owned by the
+# launchd job com.coding.health-coordinator; on Linux there is no launchd, so
+# we install a systemd user service that provides the equivalent KeepAlive /
+# Restart-on-failure supervision required by monitoring-verifier.js.
+setup_health_coordinator() {
+    info "Setting up health coordinator supervisor..."
+
+    case "$(uname -s)" in
+        Darwin*)
+            # launchd plist (com.coding.health-coordinator) is managed outside
+            # this installer on macOS — nothing to do here.
+            info "  macOS: health coordinator supervised by launchd (unchanged)"
+            ;;
+        Linux*)
+            create_health_coordinator_systemd
+            ;;
+        *)
+            info "  Start manually: node $CODING_REPO/scripts/health-coordinator.js"
+            ;;
+    esac
+}
+
+# Create Linux systemd user service for the health coordinator
+create_health_coordinator_systemd() {
+    local coord_port="${HEALTH_COORDINATOR_PORT:-3034}"
+    local service_path="$HOME/.config/systemd/user/coding-health-coordinator.service"
+    local node_path
+    node_path=$(which node)
+
+    if confirm_system_change \
+        "Install health coordinator as a systemd user service" \
+        "Creates $service_path"; then
+
+        mkdir -p "$HOME/.config/systemd/user"
+        cat > "$service_path" << SYSTEMD_EOF
+[Unit]
+Description=Coding Health Coordinator - single-owner system health SoT (port ${coord_port})
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=${CODING_REPO}
+ExecStart=${node_path} ${CODING_REPO}/scripts/health-coordinator.js
+Environment=HEALTH_COORDINATOR_PORT=${coord_port}
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+SYSTEMD_EOF
+
+        mkdir -p "$CODING_REPO/.logs"
+
+        # A manually-started coordinator would hold port ${coord_port} and make
+        # the systemd unit fail to bind — stop any non-systemd instance first.
+        if pgrep -f 'scripts/health-coordinator.js' >/dev/null 2>&1; then
+            info "  Stopping manually-started health coordinator before handing off to systemd..."
+            pkill -f 'scripts/health-coordinator.js' 2>/dev/null || true
+            sleep 1
+        fi
+
+        systemctl --user daemon-reload
+        systemctl --user enable coding-health-coordinator.service
+        systemctl --user restart coding-health-coordinator.service
+        sleep 2
+
+        if systemctl --user is-active coding-health-coordinator.service >/dev/null 2>&1; then
+            success "  Health coordinator running as systemd service on port $coord_port"
+        else
+            warning "  systemd service installed but may not have started"
+            info "  Check: systemctl --user status coding-health-coordinator"
+        fi
+    else
+        info "  Start manually: node $CODING_REPO/scripts/health-coordinator.js"
+    fi
+}
+
 # Legacy: Install Ollama for local LLM inference (DEPRECATED - use DMR instead)
 # Kept for backward compatibility on systems without Docker Desktop
 install_ollama() {
@@ -2793,6 +2872,7 @@ main() {
     install_plantuml
     setup_local_llm  # DMR preferred, Ollama as fallback
     setup_llm_cli_proxy  # HTTP bridge for claude/copilot CLI in Docker
+    setup_health_coordinator  # host-side supervisor for health-coordinator.js (port 3034)
     detect_network_and_set_repos
     test_proxy_connectivity
     install_memory_visualizer

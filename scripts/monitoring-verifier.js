@@ -26,6 +26,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { spawn, exec } from 'child_process';
 import { promisify } from 'util';
 import { fileURLToPath } from 'url';
@@ -124,15 +125,29 @@ class MonitoringVerifier {
   }
 
   /**
-   * STEP 1: Verify the host-side launchd job for the health coordinator
+   * STEP 1: Verify the host-side supervisor for the health coordinator
    * is loaded.
    *
    * Phase 33 plan 07: the legacy launchd job com.coding.system-watchdog
    * was retired in favor of com.coding.health-coordinator (whose
    * KeepAlive is the authoritative supervisor for the host-side health
-   * stack). This step now checks the new plist is loaded.
+   * stack).
+   *
+   * The host-side supervisor is platform-specific:
+   *   - macOS  → launchd job com.coding.health-coordinator
+   *   - Linux  → systemd user service coding-health-coordinator.service
    */
   async verifySystemWatchdog() {
+    if (process.platform === 'darwin') {
+      return this.verifySystemWatchdogLaunchd();
+    }
+    return this.verifySystemWatchdogSystemd();
+  }
+
+  /**
+   * macOS: verify the launchd com.coding.health-coordinator job is loaded.
+   */
+  async verifySystemWatchdogLaunchd() {
     this.log('🔍 STEP 1: Verifying launchd com.coding.health-coordinator job...');
 
     try {
@@ -151,6 +166,44 @@ class MonitoringVerifier {
         details: 'launchd job com.coding.health-coordinator not loaded'
       };
       this.error('❌ System Watchdog: launchd com.coding.health-coordinator not loaded');
+      return false;
+    } catch (error) {
+      this.results.systemWatchdog = {
+        status: 'error',
+        details: `Watchdog check failed: ${error.message}`
+      };
+      this.error(`❌ System Watchdog: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Linux: verify the systemd user service coding-health-coordinator.service
+   * is active. `systemctl --user is-active` exits 0 and prints "active" when
+   * the supervised coordinator is running (Restart=on-failure provides the
+   * KeepAlive-equivalent recovery).
+   */
+  async verifySystemWatchdogSystemd() {
+    this.log('🔍 STEP 1: Verifying systemd coding-health-coordinator.service...');
+
+    try {
+      const { stdout } = await execAsync(
+        'systemctl --user is-active coding-health-coordinator.service 2>/dev/null || true'
+      );
+      const active = stdout.trim() === 'active';
+      if (active) {
+        this.results.systemWatchdog = {
+          status: 'success',
+          details: 'systemd service coding-health-coordinator.service is active'
+        };
+        this.success('✅ System Watchdog: systemd coding-health-coordinator.service active');
+        return true;
+      }
+      this.results.systemWatchdog = {
+        status: 'error',
+        details: 'systemd service coding-health-coordinator.service not active'
+      };
+      this.error('❌ System Watchdog: systemd coding-health-coordinator.service not active');
       return false;
     } catch (error) {
       this.results.systemWatchdog = {
@@ -368,8 +421,26 @@ class MonitoringVerifier {
 
   /**
    * STEP 5: Test recovery mechanisms (quick test)
+   *
+   * The host-side recovery mechanism is platform-specific:
+   *   - macOS  → launchd KeepAlive on com.coding.health-coordinator.plist
+   *   - Linux  → systemd Restart=on-failure on coding-health-coordinator.service
+   *
+   * We verify the supervisor definition exists on disk so a stale teardown
+   * (launchctl bootout / systemctl stop) can be re-bootstrapped without
+   * restoring the file from git.
    */
   async verifyRecoveryTest() {
+    if (process.platform === 'darwin') {
+      return this.verifyRecoveryTestLaunchd();
+    }
+    return this.verifyRecoveryTestSystemd();
+  }
+
+  /**
+   * macOS: verify the launchd plist for the coordinator exists on disk.
+   */
+  async verifyRecoveryTestLaunchd() {
     this.log('🔍 STEP 5: Verifying Recovery Mechanisms...');
 
     try {
@@ -395,6 +466,45 @@ class MonitoringVerifier {
           details: `launchd plist missing on disk: ${plistPath}`
         };
         this.error(`❌ Recovery Test: launchd plist missing at ${plistPath}`);
+        return false;
+      }
+
+    } catch (error) {
+      this.results.recoveryTest = {
+        status: 'error',
+        details: `Recovery test failed: ${error.message}`
+      };
+      this.error(`❌ Recovery Test: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Linux: verify the systemd user unit for the coordinator exists on disk.
+   * Restart=on-failure in this unit is the KeepAlive-equivalent recovery
+   * mechanism for the single host coordinator process.
+   */
+  async verifyRecoveryTestSystemd() {
+    this.log('🔍 STEP 5: Verifying Recovery Mechanisms...');
+
+    try {
+      const unitPath = path.join(
+        process.env.HOME || os.homedir(),
+        '.config', 'systemd', 'user', 'coding-health-coordinator.service'
+      );
+      if (fs.existsSync(unitPath)) {
+        this.results.recoveryTest = {
+          status: 'success',
+          details: 'Recovery infrastructure: systemd unit present on disk'
+        };
+        this.success('✅ Recovery Test: systemd unit present');
+        return true;
+      } else {
+        this.results.recoveryTest = {
+          status: 'error',
+          details: `systemd unit missing on disk: ${unitPath}`
+        };
+        this.error(`❌ Recovery Test: systemd unit missing at ${unitPath}`);
         return false;
       }
 
@@ -506,8 +616,12 @@ class MonitoringVerifier {
         this.success('🎉 All monitoring components verified');
         return true;
       }
-      this.error('Installation verification failed — bootstrap com.coding.health-coordinator manually:');
-      this.error('  launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.coding.health-coordinator.plist');
+      this.error('Installation verification failed — bootstrap the health coordinator supervisor manually:');
+      if (process.platform === 'darwin') {
+        this.error('  launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.coding.health-coordinator.plist');
+      } else {
+        this.error('  systemctl --user enable --now coding-health-coordinator.service');
+      }
       return false;
     } catch (error) {
       this.error(`Installation verification failed: ${error.message}`);

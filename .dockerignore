@@ -69,6 +69,7 @@ Thumbs.db
 *.tar.gz
 *.tgz
 !_work/rapid-llm-proxy/rapid-llm-proxy-1.0.0.tgz
+!lib/km-core/fwornle-km-core-0.1.0.tgz
 
 # Serena memories and cache
 .serena
