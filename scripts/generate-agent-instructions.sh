@@ -97,7 +97,9 @@ emit_skill_list() {
         local desc
         desc=$(extract_description "$cmd_file")
         if [[ -z "$desc" ]]; then
-            desc=$(grep -v '^#\|^---\|^$' "$cmd_file" | head -1)
+            # grep -m1 stops at the first match itself; avoids SIGPIPE from `| head -1`
+            # which would abort the script under `set -o pipefail`.
+            desc=$(grep -m1 -v '^#\|^---\|^$' "$cmd_file" || true)
         fi
         echo "- **${prefix}${name}** (\`.claude/commands/$name.md\`): $desc"
     done
@@ -116,7 +118,7 @@ install_claude_global() {
     for cmd_file in "$COMMANDS_DIR"/*.md; do
         [[ -f "$cmd_file" ]] || continue
         cp "$cmd_file" "$target/$(basename "$cmd_file")"
-        ((count++))
+        count=$((count + 1))
     done
 
     log "Claude: installed $count skill(s) → $target"

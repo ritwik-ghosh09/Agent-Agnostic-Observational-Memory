@@ -681,7 +681,11 @@ ensure_agent_instructions() {
     return 0
   fi
 
-  CODING_REPO="$coding_repo" "$generator" "$target_project" "$coding_repo"
+  # Best-effort: instruction generation must never abort agent launch.
+  # The caller runs under `set -e`, so guard against any non-zero exit.
+  if ! CODING_REPO="$coding_repo" "$generator" "$target_project" "$coding_repo"; then
+    log "⚠️  agent instruction generation failed (non-fatal), continuing launch"
+  fi
 }
 
 # ==============================================================================

@@ -17,7 +17,7 @@
 
 import path from 'path';
 import fs from 'fs';
-import { spawn, exec, execSync } from 'child_process';
+import { spawn, spawnSync, exec, execSync } from 'child_process';
 import { promisify } from 'util';
 import { fileURLToPath } from 'url';
 import http from 'http';
@@ -488,39 +488,34 @@ const SERVICE_CONFIGS = {
     maxRetries: 2,
     timeout: 15000,
     startFn: async () => {
-      console.log('[HealthVerifier] Starting health verification daemon...');
+      // Phase 33: health-verifier is a one-shot REPORTER, not a daemon. The
+      // coordinator owns the lifecycle; the `start` CLI case was removed.
+      // Run a single `verify` pass which POSTs a verify_run signal to the
+      // coordinator and exits 0 (healthy) / 1 (violations) / 2 (coordinator
+      // unreachable). Exit 0 or 1 both mean the verifier ran and reported.
+      console.log('[HealthVerifier] Running one-shot health verification...');
 
-      // Check if already running globally (parallel session detection)
-      const isRunning = await psm.isServiceRunning('health-verifier', 'global');
-      if (isRunning) {
-        console.log('[HealthVerifier] Already running globally - skipping startup');
-        return { pid: 'already-running', service: 'health-verifier', skipRegistration: true };
-      }
-
-      const child = spawn('node', [
+      const run = spawnSync('node', [
         path.join(SCRIPT_DIR, 'health-verifier.js'),
-        'start'
+        'verify'
       ], {
-        detached: true,
-        stdio: ['ignore', 'ignore', 'ignore'],
-        cwd: CODING_DIR
+        stdio: ['ignore', 'ignore', 'inherit'],
+        cwd: CODING_DIR,
+        timeout: 12000
       });
 
-      child.unref();
-
-      // Brief wait for process to start
-      await sleep(500);
-
-      // Check if process is still running
-      if (!isProcessRunning(child.pid)) {
-        throw new Error('Health verifier process died immediately');
+      if (run.error) {
+        throw new Error(`Health verifier failed to run: ${run.error.message}`);
       }
-
-      return { pid: child.pid, service: 'health-verifier' };
+      if (run.status === 2) {
+        throw new Error('Health verifier could not reach the coordinator (exit 2)');
+      }
+      // status 0 (healthy) or 1 (violations reported) → verifier did its job.
+      return { pid: 'one-shot', service: 'health-verifier', skipRegistration: true };
     },
     healthCheckFn: async (result) => {
-      if (result.skipRegistration) return true;
-      return createPidHealthCheck()(result);
+      // One-shot reporter: success is determined by startFn's exit handling.
+      return true;
     }
   },
 
@@ -831,33 +826,26 @@ const SERVICE_CONFIGS = {
         return { pid: 'already-running', service: 'llm-cli-proxy', skipRegistration: true };
       }
 
-      const proxyDir = path.join(CODING_DIR, 'integrations/llm-cli-proxy');
-      const distEntry = path.join(proxyDir, 'dist/server.js');
+      // Proxy is provided by the @rapid/llm-proxy package via the thin
+      // wrapper at src/llm-proxy/llm-proxy.mjs (LLM_PROXY_PORT honoured).
+      const wrapperEntry = path.join(CODING_DIR, 'src/llm-proxy/llm-proxy.mjs');
 
-      // Check if built
-      if (!fs.existsSync(distEntry)) {
-        // Try to build
-        if (fs.existsSync(path.join(proxyDir, 'node_modules'))) {
-          console.log('[LLMCliProxy] dist/server.js not found - building...');
-          try {
-            execSync('npm run build', { cwd: proxyDir, timeout: 30000, stdio: 'pipe' });
-          } catch (buildError) {
-            throw new Error(`Build failed: ${buildError.message}`);
-          }
-        } else {
-          throw new Error('node_modules not found - run: cd integrations/llm-cli-proxy && npm install && npm run build');
-        }
+      if (!fs.existsSync(wrapperEntry)) {
+        throw new Error('src/llm-proxy/llm-proxy.mjs not found');
+      }
+      if (!fs.existsSync(path.join(CODING_DIR, 'node_modules/@rapid/llm-proxy'))) {
+        throw new Error('@rapid/llm-proxy not installed - run: npm install');
       }
 
       const proxyLogFile = path.join(CODING_DIR, '.data', 'llm-cli-proxy.log');
       const proxyLogFd = fs.openSync(proxyLogFile, 'a');
-      const child = spawn('node', [distEntry], {
+      const child = spawn('node', [wrapperEntry], {
         detached: true,
         stdio: ['ignore', proxyLogFd, proxyLogFd],
-        cwd: proxyDir,
+        cwd: CODING_DIR,
         env: {
           ...process.env,
-          LLM_CLI_PROXY_PORT: String(PORTS.LLM_CLI_PROXY)
+          LLM_PROXY_PORT: String(PORTS.LLM_CLI_PROXY)
         }
       });
       fs.closeSync(proxyLogFd);
@@ -1333,7 +1321,7 @@ async function startAllServices() {
 
   if (llmCliProxyResult.status === 'success') {
     results.successful.push(llmCliProxyResult);
-    await registerWithPSM(llmCliProxyResult, 'integrations/llm-cli-proxy/dist/server.js');
+    await registerWithPSM(llmCliProxyResult, 'src/llm-proxy/llm-proxy.mjs');
   } else {
     results.degraded.push(llmCliProxyResult);
   }

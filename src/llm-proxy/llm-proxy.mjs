@@ -11,12 +11,7 @@
  *   LLM_PROXY_PORT=9000 node src/llm-proxy/llm-proxy.mjs
  */
 
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-const pkgRoot = dirname(require.resolve('@rapid/llm-proxy/package.json'));
-
-// Import and start the canonical proxy bridge from the standalone package
-await import(resolve(pkgRoot, 'proxy-bridge', 'server.mjs'));
+// Import and start the canonical proxy bridge from the standalone package.
+// Use the package's exported "./proxy-bridge" subpath (the package "exports"
+// map intentionally does not expose package.json, so resolve it that way).
+await import('@rapid/llm-proxy/proxy-bridge');
