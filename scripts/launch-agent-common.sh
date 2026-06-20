@@ -262,6 +262,62 @@ _ensure_obs_api() {
   return 0
 }
 
+# Ensure the host-side LLM CLI Proxy (port 12435) is running.
+#
+# This HTTP bridge (src/llm-proxy/llm-proxy.mjs → @rapid/llm-proxy) routes
+# observation-summarization LLM calls through subscription providers
+# (Copilot/Claude). The obs-api server (host) and the in-container ETM reach it
+# at localhost:12435 / host.docker.internal:12435. When it is DOWN, observations
+# are still written but as low-quality "[Raw] … LLM summary unavailable" rows
+# (llmModel=null) and the digest/insight pipeline has nothing to consolidate —
+# i.e. new chat history appears in the dashboard only as raw, unsummarized text.
+#
+# Like obs-api and the health coordinator, it is a *host* process, so `coding`
+# must bring it up explicitly. We spawn the canonical wrapper detached (mirroring
+# SERVICE_CONFIGS.llmCliProxy.startFn in start-services-robust.js).
+_ensure_llm_cli_proxy() {
+  command -v node >/dev/null 2>&1 || return 0
+
+  local port="${LLM_CLI_PROXY_PORT:-12435}"
+  local url="http://localhost:${port}"
+
+  # Fast path: already responding.
+  if curl -sf "$url/health" >/dev/null 2>&1; then
+    _agent_log "✅ LLM CLI Proxy already running (${port})"
+    return 0
+  fi
+
+  local entry="$CODING_REPO/src/llm-proxy/llm-proxy.mjs"
+  if [ ! -f "$entry" ]; then
+    _agent_log "⚠️  LLM CLI Proxy entry missing ($entry) — observation summaries will be raw"
+    return 0
+  fi
+  if [ ! -d "$CODING_REPO/node_modules/@rapid/llm-proxy" ]; then
+    _agent_log "⚠️  @rapid/llm-proxy not installed — run: npm install (summaries will be raw)"
+    return 0
+  fi
+
+  _agent_log "🔌 Starting LLM CLI Proxy (host process, port ${port})..."
+  mkdir -p "$CODING_REPO/.data" 2>/dev/null || true
+  ( cd "$CODING_REPO" && LLM_PROXY_PORT="$port" nohup node "$entry" \
+      >> "$CODING_REPO/.data/llm-cli-proxy.log" 2>&1 & ) || true
+
+  # Confirm it came up.
+  local i
+  for i in $(seq 1 10); do
+    if curl -sf "$url/health" >/dev/null 2>&1; then
+      _agent_log "✅ LLM CLI Proxy healthy after ${i}s"
+      return 0
+    fi
+    sleep 1
+  done
+
+  _agent_log "⚠️  LLM CLI Proxy did not become healthy (observation summaries will be raw). Diagnose with:"
+  _agent_log "     tail -n 50 $CODING_REPO/.data/llm-cli-proxy.log"
+  _agent_log "     LLM_PROXY_PORT=$port node $entry"
+  return 0
+}
+
 # Check if coding-services container has unbound ports (running but ports not mapped to host).
 # Returns 0 if ports are broken, 1 if OK or container not running.
 _container_has_unbound_ports() {
@@ -709,6 +765,10 @@ launch_agent() {
   # 11.5. Ensure host-side health coordinator is up (Linux systemd / macOS launchd)
   #       BEFORE monitoring verification, which requires it (STEP 1 + STEP 2).
   _ensure_health_coordinator
+
+  # 11.55. Ensure the host-side LLM CLI Proxy (12435) is up BEFORE obs-api so
+  #        observation summaries are generated (not saved as raw [Raw] rows).
+  _ensure_llm_cli_proxy
 
   # 11.6. Ensure host-side Observations API (port 12436) is up so the dashboard's
   #       /api/observations* forwards resolve (it's a host process, not in Docker).

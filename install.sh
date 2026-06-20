@@ -2291,6 +2291,12 @@ create_llm_proxy_systemd() {
     local node_path
     node_path=$(which node)
 
+    # Canonical proxy entry is the thin wrapper at src/llm-proxy/llm-proxy.mjs
+    # (delegates to the installed @rapid/llm-proxy package). The legacy
+    # integrations/llm-cli-proxy/dist/server.js build no longer exists. The
+    # wrapper honours LLM_PROXY_PORT (not LLM_CLI_PROXY_PORT).
+    local proxy_entry="$CODING_REPO/src/llm-proxy/llm-proxy.mjs"
+
     if confirm_system_change \
         "Install LLM CLI Proxy as a systemd user service" \
         "Creates $service_path"; then
@@ -2303,9 +2309,9 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=${proxy_dir}
-ExecStart=${node_path} ${proxy_dir}/dist/server.js
-Environment=LLM_CLI_PROXY_PORT=${proxy_port}
+WorkingDirectory=${CODING_REPO}
+ExecStart=${node_path} ${proxy_entry}
+Environment=LLM_PROXY_PORT=${proxy_port}
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Restart=on-failure
 RestartSec=10
@@ -2314,10 +2320,19 @@ RestartSec=10
 WantedBy=default.target
 SYSTEMD_EOF
 
-        mkdir -p "$proxy_dir/logs"
+        mkdir -p "$CODING_REPO/.data"
+
+        # A manually-started proxy would hold the port and make the systemd
+        # unit fail to bind — stop any non-systemd instance first.
+        if pgrep -f 'src/llm-proxy/llm-proxy\.mjs' >/dev/null 2>&1; then
+            info "  Stopping manually-started LLM proxy before handing off to systemd..."
+            pkill -f 'src/llm-proxy/llm-proxy\.mjs' 2>/dev/null || true
+            sleep 1
+        fi
+
         systemctl --user daemon-reload
         systemctl --user enable llm-cli-proxy.service
-        systemctl --user start llm-cli-proxy.service
+        systemctl --user restart llm-cli-proxy.service
         sleep 2
 
         if systemctl --user is-active llm-cli-proxy.service >/dev/null 2>&1; then
