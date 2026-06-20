@@ -128,9 +128,16 @@ RUN cd integrations/mcp-server-semantic-analysis && npm run build 2>/dev/null ||
 RUN cd integrations/system-health-dashboard && npm run build 2>/dev/null || true
 
 # Build Constraint Dashboard (Next.js on port 3030)
+# NOTE: do NOT swallow errors here (no `2>/dev/null || true`). A failed build
+# leaves no `.next` production output, which makes the constraint-dashboard
+# supervisord program crash-loop into FATAL at runtime. The build is offline-
+# safe (app/layout.tsx uses system fonts, not next/font/google), so a failure
+# here is a real regression we want to surface and fail fast on. We still
+# verify the build id exists as a belt-and-braces guard.
 RUN cd integrations/mcp-constraint-monitor/dashboard && \
     CONSTRAINT_DASHBOARD_PORT=3030 CONSTRAINT_API_PORT=3031 \
-    ./node_modules/.bin/next build 2>/dev/null || true
+    ./node_modules/.bin/next build && \
+    test -f .next/BUILD_ID
 
 # Pre-warm Node fastembed cache so embedding-listener doesn't need to fetch
 # from storage.googleapis.com on first boot. fastembed pings the bucket on

@@ -211,6 +211,57 @@ _ensure_health_coordinator() {
   return 0
 }
 
+# Ensure the host-side Observations API server (port 12436) is running.
+#
+# The dashboard inside the coding-services container forwards /api/observations*
+# to this host process (OBS_API_URL=host.docker.internal:12436); the
+# .observations DB is its single owner and is NOT bind-mounted into the
+# container. Unlike the Docker stack, obs-api is a *host* node process, so
+# `coding` must bring it up explicitly — otherwise the dashboard shows
+# "Observations API unreachable".
+#
+# We delegate to scripts/restart-obs-api.mjs, the canonical idempotent
+# (re)starter that spawns obs-api detached and registers it with the Process
+# State Manager (same startFn as start-services-robust.js). It is a no-op-ish
+# fast path when the server is already healthy.
+_ensure_obs_api() {
+  command -v node >/dev/null 2>&1 || return 0
+
+  local obs_url="${OBS_API_URL:-http://localhost:12436}"
+  # Strip any host.docker.internal form down to localhost for host-side probe.
+  obs_url="${obs_url/host.docker.internal/localhost}"
+
+  # Fast path: already responding.
+  if curl -sf "$obs_url/health" >/dev/null 2>&1; then
+    _agent_log "✅ Observations API already running (12436)"
+    return 0
+  fi
+
+  local helper="$CODING_REPO/scripts/restart-obs-api.mjs"
+  if [ ! -f "$helper" ]; then
+    _agent_log "⚠️  Observations API not running and restart helper missing ($helper)"
+    return 0
+  fi
+
+  _agent_log "📚 Starting Observations API server (host process, port 12436)..."
+  ( cd "$CODING_REPO" && node "$helper" ) 2>&1 | sed 's/^/   /' || true
+
+  # Confirm it came up.
+  local i
+  for i in $(seq 1 10); do
+    if curl -sf "$obs_url/health" >/dev/null 2>&1; then
+      _agent_log "✅ Observations API healthy after ${i}s"
+      return 0
+    fi
+    sleep 1
+  done
+
+  _agent_log "⚠️  Observations API did not become healthy. Diagnose with:"
+  _agent_log "     tail -n 50 $CODING_REPO/.data/observations-api.log"
+  _agent_log "     node $helper"
+  return 0
+}
+
 # Check if coding-services container has unbound ports (running but ports not mapped to host).
 # Returns 0 if ports are broken, 1 if OK or container not running.
 _container_has_unbound_ports() {
@@ -658,6 +709,10 @@ launch_agent() {
   # 11.5. Ensure host-side health coordinator is up (Linux systemd / macOS launchd)
   #       BEFORE monitoring verification, which requires it (STEP 1 + STEP 2).
   _ensure_health_coordinator
+
+  # 11.6. Ensure host-side Observations API (port 12436) is up so the dashboard's
+  #       /api/observations* forwards resolve (it's a host process, not in Docker).
+  _ensure_obs_api
 
   # 12. Verify monitoring
   _verify_monitoring "$TARGET_PROJECT_DIR"
