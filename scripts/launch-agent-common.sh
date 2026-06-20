@@ -154,6 +154,63 @@ _ensure_docker() {
   fi
 }
 
+# Ensure the host-side health coordinator (port 3034) is running BEFORE
+# monitoring verification (scripts/monitoring-verifier.js STEP 1 + STEP 2).
+#
+# Platform ownership:
+#   - macOS  → launchd job com.coding.health-coordinator (KeepAlive) auto-starts
+#              it at login; nothing to do here.
+#   - Linux  → systemd *user* service coding-health-coordinator.service. The unit
+#              is enabled at install time, but a user service only auto-starts at
+#              login when lingering is enabled — otherwise it sits 'inactive' and
+#              monitoring-verifier.js fails systemWatchdog + coordinator checks.
+#              We start it here so `coding` is self-sufficient.
+_ensure_health_coordinator() {
+  # Only Linux needs launcher-side intervention; macOS launchd owns this.
+  [ "$PLATFORM" = "linux" ] || return 0
+  command -v systemctl >/dev/null 2>&1 || return 0
+
+  local unit="coding-health-coordinator.service"
+  local coord_url="${HEALTH_COORDINATOR_URL:-http://localhost:3034}"
+
+  # Fast path: already active and responding.
+  if systemctl --user is-active "$unit" >/dev/null 2>&1 \
+     && curl -sf "$coord_url/health" >/dev/null 2>&1; then
+    _agent_log "✅ Health coordinator already active (systemd: $unit)"
+    return 0
+  fi
+
+  # Unit installed? If not, point at the installer (this matches the systemd
+  # unit name that monitoring-verifier.js STEP 1 checks for).
+  local unit_file="$HOME/.config/systemd/user/$unit"
+  if [ ! -f "$unit_file" ]; then
+    _agent_log "⚠️  Health coordinator systemd unit not installed ($unit)."
+    _agent_log "   monitoring-verifier.js requires it. Install with:"
+    _agent_log "     ./install.sh        # runs setup_health_coordinator"
+    return 0
+  fi
+
+  _agent_log "🩺 Starting health coordinator (systemd user service: $unit)..."
+  systemctl --user daemon-reload 2>/dev/null || true
+  systemctl --user start "$unit" 2>/dev/null || true
+
+  # Wait briefly for the unit to become active and :3034 to respond.
+  local i
+  for i in $(seq 1 10); do
+    if systemctl --user is-active "$unit" >/dev/null 2>&1 \
+       && curl -sf "$coord_url/health" >/dev/null 2>&1; then
+      _agent_log "✅ Health coordinator active after ${i}s"
+      return 0
+    fi
+    sleep 1
+  done
+
+  _agent_log "⚠️  Health coordinator did not become active. Diagnose with:"
+  _agent_log "     systemctl --user status $unit"
+  _agent_log "     systemctl --user start $unit"
+  return 0
+}
+
 # Check if coding-services container has unbound ports (running but ports not mapped to host).
 # Returns 0 if ports are broken, 1 if OK or container not running.
 _container_has_unbound_ports() {
@@ -597,6 +654,10 @@ launch_agent() {
 
   # 11. Start services
   _start_services
+
+  # 11.5. Ensure host-side health coordinator is up (Linux systemd / macOS launchd)
+  #       BEFORE monitoring verification, which requires it (STEP 1 + STEP 2).
+  _ensure_health_coordinator
 
   # 12. Verify monitoring
   _verify_monitoring "$TARGET_PROJECT_DIR"
