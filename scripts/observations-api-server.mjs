@@ -513,6 +513,9 @@ app.get('/api/observations', (req, res) => {
             llmProvider: meta.llmProvider || null,
             llmTokens: meta.llmTokens || null,
             llmLatencyMs: meta.llmLatencyMs || null,
+            sessionModel: meta.sessionModel || null,
+            sessionProvider: meta.sessionProvider || null,
+            sessionReasoningEffort: meta.sessionReasoningEffort || null,
           };
         });
         const coldRows = ensureColdStore().readObservations({
@@ -551,6 +554,9 @@ app.get('/api/observations', (req, res) => {
         llmProvider: meta.llmProvider || null,
         llmTokens: meta.llmTokens || null,
         llmLatencyMs: meta.llmLatencyMs || null,
+        sessionModel: meta.sessionModel || null,
+        sessionProvider: meta.sessionProvider || null,
+        sessionReasoningEffort: meta.sessionReasoningEffort || null,
       };
     });
 

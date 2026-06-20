@@ -30,6 +30,12 @@ export interface Observation {
   llmProvider?: string
   llmTokens?: string | LlmTokens | null
   llmLatencyMs?: number | null
+  /** Model the user actually selected in the agent session (the "work" model,
+   *  e.g. gpt-5-mini from Copilot CLI). Distinct from llmModel, which is the
+   *  model that generated the observation summary. */
+  sessionModel?: string | null
+  sessionProvider?: string | null
+  sessionReasoningEffort?: string | null
   quality?: 'high' | 'normal' | 'low'
   /** Phase 35: 'cold' rows from JSON cold store, 'sqlite' from primary DB. */
   _origin?: 'cold' | 'sqlite'
@@ -100,11 +106,32 @@ function renderMarkdown(text: string): string {
       '<span class="text-[0.78em] text-sky-400/80">&lt;$1&gt;</span>')
 }
 
-function formatLlmTag(obs: Observation): string | null {
+/** The primary model tag shown on a card. Prefers the *session* model — the
+ *  one the user selected in the agent (e.g. gpt-5-mini in Copilot CLI), which
+ *  is what actually did the work. Falls back to the summarizer model
+ *  (llmModel/llmProvider) only when the session model is unknown (older rows
+ *  or agents whose session model we don't capture). */
+function formatModelTag(obs: Observation): string | null {
+  if (obs.sessionModel) {
+    const provider = obs.sessionProvider || 'copilot'
+    const effort = obs.sessionReasoningEffort ? ` · ${obs.sessionReasoningEffort}` : ''
+    return `${obs.sessionModel}@${provider}${effort}`
+  }
   if (!obs.llmModel && !obs.llmProvider) return null
   const model = obs.llmModel || '?'
   const provider = obs.llmProvider || '?'
   return `${model}@${provider}`
+}
+
+/** The summarizer model footnote, shown only in the expanded view when it
+ *  differs from the session model — so the model that generated the summary
+ *  text is still discoverable without masquerading as the work model. */
+function formatSummarizerTag(obs: Observation): string | null {
+  if (!obs.llmModel) return null
+  if (obs.sessionModel && obs.sessionModel === obs.llmModel) return null
+  // When a session model exists, the llmModel is the (different) summarizer.
+  if (!obs.sessionModel) return null
+  return `summarized by ${obs.llmModel}`
 }
 
 function parseTokens(raw: string | LlmTokens | null | undefined): LlmTokens | null {
@@ -117,7 +144,8 @@ function parseTokens(raw: string | LlmTokens | null | undefined): LlmTokens | nu
 
 export function ObservationCard({ observation, isExpanded, onToggle, compact }: ObservationCardProps) {
   const borderColor = AGENT_BORDER_COLORS[observation.agent] || 'border-l-blue-500'
-  const llmTag = formatLlmTag(observation)
+  const llmTag = formatModelTag(observation)
+  const summarizerTag = formatSummarizerTag(observation)
   const tokens = parseTokens(observation.llmTokens)
   const isLow = observation.quality === 'low'
 
@@ -207,6 +235,7 @@ export function ObservationCard({ observation, isExpanded, onToggle, compact }: 
             {(llmTag || tokens) && (
               <div className="mt-3 pt-2 border-t border-border/50 flex items-center gap-4 text-[11px] text-muted-foreground/60 font-mono">
                 {llmTag && <span>{llmTag}</span>}
+                {summarizerTag && <span className="text-muted-foreground/40">{summarizerTag}</span>}
                 {tokens && (
                   <>
                     <span>{tokens.input} in</span>

@@ -821,6 +821,21 @@ class EnhancedTranscriptMonitor {
       readFiles: readFiles.length > 0 ? readFiles : undefined,
     };
 
+    // Capture the model the user actually selected in the agent session (the
+    // "work" model), distinct from the summarizer model the obs-api uses.
+    // Currently sourced from the Copilot CLI events.jsonl; absent for other
+    // agents, in which case the dashboard falls back to the summarizer model.
+    if (this.agentType === 'copilot') {
+      const sessionModel = this._extractCopilotSessionModel();
+      if (sessionModel?.model) {
+        metadata.sessionModel = sessionModel.model;
+        metadata.sessionProvider = 'copilot';
+        if (sessionModel.reasoningEffort) {
+          metadata.sessionReasoningEffort = sessionModel.reasoningEffort;
+        }
+      }
+    }
+
     // Patch recent observations that have "Artifacts: none" with the actual modified files.
     // Handles: incremental re-processing where early fires miss Edit calls,
     // multi-turn tool calls across prompt set boundaries, ETM restarts.
@@ -1590,6 +1605,44 @@ class EnhancedTranscriptMonitor {
       return null;
     } catch (error) {
       this.debug(`Error finding copilot transcript: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Extract the model the user actually selected in the Copilot CLI session.
+   *
+   * The Copilot CLI records model selection as structured events in
+   * ~/.copilot/session-state/<id>/events.jsonl:
+   *   - `session.model_change` → { data: { newModel: "gpt-5-mini", reasoningEffort } }
+   * The latest `session.model_change` wins (the user can switch mid-session).
+   *
+   * This is the model that did the work — distinct from the summarizer model
+   * (claude-sonnet-4.6) the obs-api uses to generate the observation summary.
+   * Returns { model, reasoningEffort } or null when unknown.
+   */
+  _extractCopilotSessionModel(transcriptPath) {
+    try {
+      const evPath = transcriptPath || this.findCopilotTranscript();
+      if (!evPath || !fs.existsSync(evPath)) return null;
+
+      const lines = fs.readFileSync(evPath, 'utf-8').split('\n');
+      let model = null;
+      let reasoningEffort = null;
+      // Scan forward; keep the LAST model_change so mid-session switches win.
+      for (const line of lines) {
+        if (!line || line.indexOf('session.model_change') === -1) continue;
+        try {
+          const ev = JSON.parse(line);
+          if (ev?.type === 'session.model_change' && ev.data?.newModel) {
+            model = ev.data.newModel;
+            reasoningEffort = ev.data.reasoningEffort || null;
+          }
+        } catch { /* skip malformed line */ }
+      }
+      return model ? { model, reasoningEffort } : null;
+    } catch (error) {
+      this.debug(`Error extracting copilot session model: ${error.message}`);
       return null;
     }
   }
