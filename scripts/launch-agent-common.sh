@@ -259,6 +259,93 @@ _resolve_port_conflicts() {
   fi
 }
 
+# Clear leaked docker-proxy processes (Linux only).
+#
+# On Linux, Docker spawns a userland `docker-proxy` process per published host
+# port. When a `docker compose up`/build is interrupted (Ctrl-C, crash, OOM)
+# these can be orphaned: the container is gone but the proxy keeps the host
+# port bound. They survive `docker compose down` and make the next start fail
+# with "ports are not available ... address already in use".
+#
+# On macOS docker-proxy runs inside the Docker VM (never a host process), so
+# _resolve_port_conflicts deliberately skips all docker-* procs there. This
+# function is the Linux-specific counterpart and is a no-op on macOS.
+#
+# A proxy is treated as "leaked" only if its published host-port is NOT
+# currently published by any *running* container — i.e. it points at a
+# container that no longer exists. Proxies backing live containers are left
+# untouched.
+_clear_leaked_docker_proxies() {
+  [ "$PLATFORM" = "linux" ] || return 0
+  command -v docker >/dev/null 2>&1 || return 0
+
+  # Map of "PID host-port" for every docker-proxy process on the host.
+  local proxies
+  proxies=$(ps -eo pid=,cmd= 2>/dev/null \
+    | awk '/[d]ocker-proxy/ { for (i=1;i<=NF;i++) if ($i=="-host-port") print $1, $(i+1) }')
+  [ -z "$proxies" ] && return 0
+
+  # Host ports currently published by running containers (e.g. "0.0.0.0:3100->3000/tcp").
+  local live_ports
+  live_ports=$(docker ps --format '{{.Ports}}' 2>/dev/null \
+    | grep -oE ':[0-9]+->' | grep -oE '[0-9]+' | sort -u || true)
+
+  local leaked_pids=""
+  while read -r pid hostport; do
+    [ -z "$pid" ] && continue
+    # Skip proxies that belong to a running container.
+    if [ -n "$live_ports" ] && echo "$live_ports" | grep -qx "$hostport"; then
+      continue
+    fi
+    _agent_log "🧟 Leaked docker-proxy on host port $hostport (PID $pid) — no live container"
+    leaked_pids="$leaked_pids $pid"
+  done <<< "$proxies"
+
+  [ -z "$leaked_pids" ] && return 0
+
+  # Try our own kill first, then passwordless sudo. Never prompt interactively
+  # from the launcher — surface clear remediation instead.
+  # shellcheck disable=SC2086
+  kill $leaked_pids 2>/dev/null || true
+  sleep 1
+
+  local still
+  still=$(ps -eo pid=,cmd= 2>/dev/null \
+    | awk '/[d]ocker-proxy/ { for (i=1;i<=NF;i++) if ($i=="-host-port") print $1 }')
+  # Re-filter to only those we wanted gone that are still alive.
+  local stuck=""
+  for pid in $leaked_pids; do
+    if echo "$still" | grep -qx "$pid"; then
+      stuck="$stuck $pid"
+    fi
+  done
+
+  if [ -n "$stuck" ]; then
+    if sudo -n true 2>/dev/null; then
+      _agent_log "🔐 Clearing root-owned leaked proxies via passwordless sudo..."
+      # shellcheck disable=SC2086
+      sudo -n kill $stuck 2>/dev/null || true
+      sleep 1
+      local recheck=""
+      local after
+      after=$(ps -eo pid= 2>/dev/null)
+      for pid in $stuck; do
+        echo "$after" | grep -qx "$pid" && recheck="$recheck $pid"
+      done
+      stuck="$recheck"
+    fi
+  fi
+
+  if [ -n "$stuck" ]; then
+    _agent_log "⚠️  Leaked docker-proxy still running (root-owned):$stuck"
+    _agent_log "   These hold host ports and need privileges to clear. Run ONE of:"
+    _agent_log "     sudo kill$stuck"
+    _agent_log "     sudo systemctl restart docker   # clears all leaked proxies"
+  else
+    _agent_log "✅ Cleared leaked docker-proxy process(es)"
+  fi
+}
+
 # Configure the proxy that the Docker *build* uses (apt-get, curl, etc.).
 #
 # Docker auto-injects http(s)_proxy build-args from ~/.docker/config.json. On a
@@ -310,6 +397,12 @@ _start_services() {
   if [ "$CODING_FORCE_CLEAN" != "true" ] && curl -sf http://localhost:8080/health >/dev/null 2>&1; then
     _agent_log "✅ coding-services already running and healthy - reusing existing containers"
   else
+    # Linux: clear any leaked docker-proxy processes (orphaned from a previous
+    # interrupted/crashed run) that still hold host ports. These survive
+    # `docker compose down` and otherwise make `up` fail with
+    # "ports are not available ... address already in use". No-op on macOS.
+    _clear_leaked_docker_proxies
+
     # Detect stale container (running but ports not bound to host) — common after
     # Docker Desktop crashes or port conflicts. Fix it immediately instead of
     # waiting 60s to fail.
@@ -322,9 +415,26 @@ _start_services() {
       _resolve_port_conflicts "$docker_dir/docker-compose.yml"
       _agent_log "🐳 Starting coding services via Docker..."
       export CODING_REPO
-      if ! docker compose -f "$docker_dir/docker-compose.yml" up -d; then
-        _agent_log "Error: Failed to start Docker containers"
-        exit 1
+      local up_log
+      if ! up_log=$(docker compose -f "$docker_dir/docker-compose.yml" up -d 2>&1); then
+        echo "$up_log" | sed 's/^/   /'
+        # A leaked docker-proxy or stray host listener is the usual cause of a
+        # port-bind failure on Linux. Clear orphans + conflicts and retry once.
+        if echo "$up_log" | grep -qiE 'address already in use|ports are not available'; then
+          _agent_log "⚠️  Port bind conflict — clearing leaked proxies/host listeners and retrying..."
+          _clear_leaked_docker_proxies
+          _resolve_port_conflicts "$docker_dir/docker-compose.yml"
+          docker compose -f "$docker_dir/docker-compose.yml" down --remove-orphans 2>/dev/null || true
+          if ! docker compose -f "$docker_dir/docker-compose.yml" up -d; then
+            _agent_log "Error: Failed to start Docker containers after conflict recovery"
+            _agent_log "   A root-owned leaked proxy may still hold a port. Try:"
+            _agent_log "     sudo systemctl restart docker   # then re-run 'coding'"
+            exit 1
+          fi
+        else
+          _agent_log "Error: Failed to start Docker containers"
+          exit 1
+        fi
       fi
     fi
 
