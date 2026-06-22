@@ -34,6 +34,7 @@ export function NavBar() {
     { label: 'Insights', path: '/insights', count: insightCount },
     { label: 'Coverage', path: '/coverage' },
     { label: 'Token Usage', path: '/token-usage' },
+    { label: 'Live Context', path: '/live-context' },
   ]
 
   return (
