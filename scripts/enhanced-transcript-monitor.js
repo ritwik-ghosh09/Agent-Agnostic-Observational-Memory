@@ -119,6 +119,7 @@ class EnhancedTranscriptMonitor {
     // Initialize Process State Manager for preventing multiple instances
     this.processStateManager = new ProcessStateManager();
     this.serviceRegistered = false;
+    this._releaseInstanceLock = null;
 
     this.transcriptPath = this.findCurrentTranscript();
 
@@ -711,6 +712,34 @@ class EnhancedTranscriptMonitor {
   }
 
   /**
+   * Classify a tool call's file artifact in an agent-agnostic way.
+   *
+   * Agents differ in tool naming and parameter keys for file operations:
+   *   - Claude Code: Edit/Write/MultiEdit (modify), Read (read), param `file_path`
+   *   - Copilot CLI: edit/create (modify), view (read), param `path`
+   *   - OpenCode:    edit/write (modify), read (read)
+   * Non-file tools (bash/grep/glob/read_bash) are intentionally ignored — their
+   * `path`/`pattern` args are search scopes, not produced/consumed artifacts.
+   *
+   * @param {{name?: string, input?: Object}} toolCall
+   * @returns {{ path: string, op: 'modified'|'read' }|null}
+   */
+  _classifyToolFileArtifact(toolCall) {
+    if (!toolCall || !toolCall.name) return null;
+    const name = String(toolCall.name).toLowerCase();
+    const input = toolCall.input || {};
+    const filePath = input.file_path || input.filePath || input.path || input.notebook_path;
+    if (!filePath || typeof filePath !== 'string') return null;
+
+    const MODIFY = new Set(['edit', 'write', 'create', 'multiedit', 'notebookedit', 'apply_patch', 'applypatch']);
+    const READ = new Set(['read', 'view', 'notebookread']);
+
+    if (MODIFY.has(name)) return { path: filePath, op: 'modified' };
+    if (READ.has(name)) return { path: filePath, op: 'read' };
+    return null;
+  }
+
+  /**
    * Fire observation for a COMPLETE prompt set (all exchanges).
    * Builds a consolidated message list so the LLM sees the full picture:
    * user intent + all tool calls + all assistant responses + final outcome.
@@ -756,17 +785,20 @@ class EnhancedTranscriptMonitor {
       if (exchange.toolCalls && exchange.toolCalls.length > 0) {
         const toolSummary = exchange.toolCalls.map(tc => {
           const inp = tc.input || {};
-          if (tc.name === 'Edit' || tc.name === 'Write') {
-            return `${tc.name}: ${inp.file_path || 'unknown file'}`;
-          } else if (tc.name === 'Read') {
-            return `Read: ${inp.file_path || 'unknown file'}`;
-          } else if (tc.name === 'Bash') {
+          const name = String(tc.name || 'tool');
+          const lname = name.toLowerCase();
+          const filePath = inp.file_path || inp.filePath || inp.path || inp.notebook_path;
+          if (['edit', 'write', 'create', 'multiedit', 'notebookedit', 'apply_patch', 'applypatch'].includes(lname)) {
+            return `${name}: ${filePath || 'unknown file'}`;
+          } else if (['read', 'view', 'notebookread'].includes(lname)) {
+            return `${name}: ${filePath || 'unknown file'}`;
+          } else if (lname === 'bash') {
             const cmd = (inp.command || '').slice(0, 120);
             return `Bash: ${cmd}`;
-          } else if (tc.name === 'Grep' || tc.name === 'Glob') {
-            return `${tc.name}: ${inp.pattern || ''} in ${inp.path || '.'}`;
+          } else if (['grep', 'glob'].includes(lname)) {
+            return `${name}: ${inp.pattern || ''} in ${inp.path || '.'}`;
           } else {
-            return tc.name;
+            return name;
           }
         }).join('\n');
         assistantContent += `[Tool calls]\n${toolSummary}\n\n`;
@@ -790,22 +822,26 @@ class EnhancedTranscriptMonitor {
 
     if (messages.length < 2) return; // Need at least user + assistant
 
-    // Extract modified files programmatically from tool calls (ground truth, not LLM-inferred)
+    // Extract modified files programmatically from tool calls (ground truth, not LLM-inferred).
+    // Uses an agent-agnostic classifier so Copilot CLI tools (edit/create/view with a
+    // `path` param) are captured, not just Claude-style Edit/Write/Read with `file_path`.
     const modifiedFiles = [];
     const readFiles = [];
     for (const exchange of exchanges) {
-      if (exchange.toolCalls) {
-        for (const tc of exchange.toolCalls) {
-          const filePath = tc.input?.file_path || tc.input?.filePath;
-          if (filePath) {
-            if (tc.name === 'Edit' || tc.name === 'Write') {
-              if (!modifiedFiles.includes(filePath)) modifiedFiles.push(filePath);
-            } else if (tc.name === 'Read') {
-              if (!readFiles.includes(filePath)) readFiles.push(filePath);
-            }
-          }
+      if (!exchange.toolCalls) continue;
+      for (const tc of exchange.toolCalls) {
+        const artifact = this._classifyToolFileArtifact(tc);
+        if (!artifact) continue;
+        if (artifact.op === 'modified') {
+          if (!modifiedFiles.includes(artifact.path)) modifiedFiles.push(artifact.path);
+        } else if (artifact.op === 'read') {
+          if (!readFiles.includes(artifact.path)) readFiles.push(artifact.path);
         }
       }
+    }
+    // A file that was both read and modified counts only as a modified artifact.
+    for (let i = readFiles.length - 1; i >= 0; i--) {
+      if (modifiedFiles.includes(readFiles[i])) readFiles.splice(i, 1);
     }
 
     // Debug: log tool call extraction for artifact tracking diagnosis
@@ -817,6 +853,7 @@ class EnhancedTranscriptMonitor {
       sessionId: this.sessionId || null,
       sourceFile: 'live-etm',
       project: path.basename(this.config.projectPath || ''),
+      projectRoot: this.config.projectPath || undefined,
       modifiedFiles: modifiedFiles.length > 0 ? modifiedFiles : undefined,
       readFiles: readFiles.length > 0 ? readFiles : undefined,
     };
@@ -1727,13 +1764,15 @@ class EnhancedTranscriptMonitor {
       return { complete: false, reason: 'no assistant response yet' };
     }
 
-    // Copilot: assistant.message events are only emitted when the response is complete
+    // Copilot: a single user prompt produces MANY assistant.message events — one
+    // per tool-calling step. The response is final only when the model emits an
+    // assistant.message with NO tool requests and no tools are still executing.
+    // Delegating to getCopilotCompletionState prevents flushing mid-turn (which
+    // captured a partial response instead of the final generated answer).
     if (agentType === 'copilot') {
       const lastExchange = promptSet[promptSet.length - 1];
-      if (lastExchange?.claudeResponse || lastExchange?.assistantMessage) {
-        return { complete: true, reason: 'copilot assistant.message received' };
-      }
-      return { complete: false, reason: 'no copilot response yet' };
+      const lastExchangeTs = lastExchange ? new Date(lastExchange.timestamp).getTime() : 0;
+      return this.getCopilotCompletionState(transcriptPath, lastExchangeTs);
     }
 
     // Mastra: the Stop hook fires when the assistant finishes, so any assistant
@@ -2090,6 +2129,103 @@ ORDER BY m.time_created ASC;`;
     } catch (error) {
       this.debug(`Error getting OpenCode completion state: ${error.message}`);
       return { complete: true, finish: null, hasToolsPending: false }; // fail-open
+    }
+  }
+
+  /**
+   * Determine whether the latest Copilot turn-set is complete.
+   *
+   * Copilot CLI emits MANY `assistant.message` events for a single user prompt:
+   * each tool-calling step produces its own assistant.message (often a short
+   * preamble + toolRequests). The model keeps taking turns until it emits a
+   * FINAL assistant.message that carries NO toolRequests — that is the actual
+   * generated response. Treating any assistant.message as "complete" flushes the
+   * observation mid-turn and captures a partial response instead of the final
+   * answer, which is the bug this method fixes.
+   *
+   * @param {string} transcriptPath - Path to the Copilot events.jsonl
+   * @param {number} [promptSetEndTs=0] - Timestamp (ms) of the prompt set's last
+   *   exchange. If a newer user.message exists, the set is definitionally done.
+   * @returns {{ complete: boolean, reason: string, hasToolsPending: boolean }}
+   */
+  getCopilotCompletionState(transcriptPath, promptSetEndTs = 0) {
+    try {
+      if (!transcriptPath || !fs.existsSync(transcriptPath)) {
+        return { complete: false, reason: 'no copilot transcript', hasToolsPending: false };
+      }
+
+      const lines = fs.readFileSync(transcriptPath, 'utf-8').split('\n');
+      const events = [];
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try { events.push(JSON.parse(line)); } catch { /* skip malformed line */ }
+      }
+      if (events.length === 0) {
+        return { complete: false, reason: 'empty copilot transcript', hasToolsPending: false };
+      }
+
+      // Locate the latest user prompt; evaluate only the turn-set after it.
+      let lastUserIdx = -1;
+      for (let i = events.length - 1; i >= 0; i--) {
+        if (events[i].type === 'user.message') { lastUserIdx = i; break; }
+      }
+
+      // A newer user prompt than this set's last exchange means the user moved
+      // on — the buffered prompt set is definitionally complete.
+      if (promptSetEndTs && lastUserIdx >= 0) {
+        const lastUserTs = new Date(events[lastUserIdx].timestamp || 0).getTime();
+        if (lastUserTs > promptSetEndTs + 1000) {
+          return { complete: true, reason: 'newer copilot user prompt arrived', hasToolsPending: false };
+        }
+      }
+
+      const slice = events.slice(lastUserIdx + 1);
+
+      // Session ended — whatever response exists is final.
+      if (slice.some(e => e.type === 'session.shutdown')) {
+        return { complete: true, reason: 'copilot session.shutdown', hasToolsPending: false };
+      }
+
+      // Find the most recent assistant.message in this turn-set.
+      let lastAssistantIdx = -1;
+      for (let i = slice.length - 1; i >= 0; i--) {
+        if (slice[i].type === 'assistant.message') { lastAssistantIdx = i; break; }
+      }
+      if (lastAssistantIdx === -1) {
+        return { complete: false, reason: 'no copilot assistant.message yet', hasToolsPending: false };
+      }
+
+      // Pending tools = execution_start events without a matching complete.
+      let pending = 0;
+      for (const e of slice) {
+        if (e.type === 'tool.execution_start') pending++;
+        else if (e.type === 'tool.execution_complete') pending--;
+      }
+      const hasToolsPending = pending > 0;
+
+      const lastAssistant = slice[lastAssistantIdx];
+      const toolRequests = lastAssistant.data?.toolRequests || [];
+      // A new turn opened after the last assistant.message → still generating.
+      const turnReopened = slice.slice(lastAssistantIdx + 1)
+        .some(e => e.type === 'assistant.turn_start');
+
+      if (toolRequests.length > 0) {
+        return { complete: false, reason: 'copilot assistant requested tools (turn continues)', hasToolsPending };
+      }
+      if (hasToolsPending) {
+        return { complete: false, reason: 'copilot tools still executing', hasToolsPending: true };
+      }
+      if (turnReopened) {
+        return { complete: false, reason: 'copilot started a new turn (still generating)', hasToolsPending: false };
+      }
+
+      // Final assistant.message carried no tool requests and no tools are pending.
+      return { complete: true, reason: 'copilot final assistant.message (no tool requests)', hasToolsPending: false };
+    } catch (error) {
+      this.debug(`Error getting Copilot completion state: ${error.message}`);
+      // Fail-closed for copilot: prefer deferring (the caller force-flushes after
+      // 5 minutes) over capturing a partial mid-turn response.
+      return { complete: false, reason: `copilot completion error: ${error.message}`, hasToolsPending: false };
     }
   }
 
@@ -3891,6 +4027,40 @@ ORDER BY m.time_created ASC;`;
       console.log(`🧹 Cleaned up ${cleanupStats.total} dead process(es) from registry`);
     }
 
+    // Atomic single-instance guard. The registry check below is racy: several
+    // uncoordinated spawners (the health-coordinator safety-net, the statusline
+    // auto-restart, and PSM restarts) can fire near-simultaneously after an idle
+    // exit, and two of them can both pass the registry check and run as
+    // duplicates. proper-lockfile gives a filesystem-atomic owner per project so
+    // only one ETM survives. A hard-killed owner's lock goes stale (12s) so a
+    // successor still takes over automatically. Fail OPEN on any unexpected lock
+    // error so a lock-subsystem problem can never leave the project unmonitored.
+    try {
+      const lockDir = path.join(HOST_CODING_PATH, '.pids');
+      fs.mkdirSync(lockDir, { recursive: true });
+      const lockKey = Buffer.from(projectPath).toString('base64url');
+      const lockTarget = path.join(lockDir, `etm-${lockKey}.lock`);
+      if (!fs.existsSync(lockTarget)) fs.writeFileSync(lockTarget, '');
+      this._releaseInstanceLock = await lockfile.lock(lockTarget, {
+        stale: 12000,
+        update: 4000,
+        retries: 0,
+        realpath: false,
+        onCompromised: (err) => {
+          console.error(`[ETM] instance lock compromised (${err.message}) — exiting to avoid a split-brain monitor`);
+          process.exit(0);
+        }
+      });
+      console.log(`🔒 Acquired ETM instance lock for ${path.basename(projectPath)}`);
+    } catch (err) {
+      if (err && err.code === 'ELOCKED') {
+        console.error(`❌ Another enhanced-transcript-monitor already owns ${path.basename(projectPath)} (instance lock held) — exiting cleanly`);
+        process.exit(0);
+      }
+      // Fail-open: never let a lock-subsystem error suppress the monitor.
+      console.error(`[ETM] instance lock unavailable (${err?.message || err}); continuing without it`);
+    }
+
     // Check if another instance is already running for this project
     const existingService = await this.processStateManager.getService(serviceName, 'per-project', { projectPath });
     if (existingService && this.processStateManager.isProcessAlive(existingService.pid)) {
@@ -4255,6 +4425,18 @@ ORDER BY m.time_created ASC;`;
         this.debug('✅ Service unregistered from Process State Manager');
       } catch (error) {
         this.debug(`Failed to unregister service: ${error.message}`);
+      }
+    }
+
+    // Release the atomic instance lock so a successor can take over promptly
+    // (no need to wait for the 12s stale window on a graceful/idle exit).
+    if (this._releaseInstanceLock) {
+      try {
+        await this._releaseInstanceLock();
+        this._releaseInstanceLock = null;
+        this.debug('🔓 Released ETM instance lock');
+      } catch (error) {
+        this.debug(`Failed to release instance lock: ${error.message}`);
       }
     }
 
