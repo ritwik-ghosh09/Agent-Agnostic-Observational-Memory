@@ -423,9 +423,30 @@ Configuration: enabled per agent via `AGENT_ENABLE_LIVE_CONTEXT=true` (default) 
 for a CLI whose chrome changed). The feature is fail-open end to end — if the monitor,
 dashboard, or retrieval service is unavailable, the CLI is never affected.
 
-**Status**: ✅ Production Ready
+**Requirement — the CLI must run inside tmux.** Capture works by reading the agent's
+tmux pane, so the draft is only visible when the agent is launched through the shared
+tmux wrapper. Launch any agent with `coding --copilot`, `coding --claude`, or
+`coding --opencode` and the monitor starts automatically. A CLI started **directly**
+(e.g. running `copilot` outside `coding`, with no tmux session) cannot be captured — it
+has no pane to read, so the **Live Context** tab will stay empty for that session even
+though it shows *Live* (connected). Open the dashboard at
+[http://localhost:3032](http://localhost:3032) → **Live Context**.
 
----
+To enable Live Context for a tmux session that is **already running** (one that predates
+the feature, or where it was disabled), attach the monitor on demand:
+
+```bash
+# Auto-detect the current ($TMUX) or single coding-* session, infer the agent:
+scripts/live-context-attach.sh
+
+# Or target a specific session explicitly:
+scripts/live-context-attach.sh coding-copilot-12345 copilot
+```
+
+The monitor self-exits when its tmux session closes; re-running the helper for an
+already-monitored session is a no-op.
+
+**Status**: ✅ Production Ready
 
 ## ⚡ Usage Examples
 
