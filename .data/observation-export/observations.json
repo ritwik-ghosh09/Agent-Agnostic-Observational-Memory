@@ -25113,7 +25113,7 @@
     "project": "obs-memory",
     "quality": "normal",
     "createdAt": "2026-06-18T14:07:47.538Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-21T00:32:49.509Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -25127,7 +25127,7 @@
     "project": "obs-memory",
     "quality": "normal",
     "createdAt": "2026-06-18T14:11:52.185Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-21T00:32:49.509Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -25147,7 +25147,7 @@
     "project": "obs-memory",
     "quality": "normal",
     "createdAt": "2026-06-18T14:47:27.176Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-21T00:32:49.509Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -25161,7 +25161,7 @@
     "project": "obs-memory",
     "quality": "normal",
     "createdAt": "2026-06-18T14:48:26.121Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-21T00:32:49.509Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -25177,7 +25177,7 @@
     "project": "obs-memory",
     "quality": "normal",
     "createdAt": "2026-06-18T16:33:40.409Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-21T00:32:49.509Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -25191,7 +25191,7 @@
     "project": "obs-memory",
     "quality": "normal",
     "createdAt": "2026-06-20T00:08:36.243Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-21T00:33:12.648Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -25205,7 +25205,7 @@
     "project": "obs-memory",
     "quality": "normal",
     "createdAt": "2026-06-20T15:34:08.611Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-21T00:33:12.648Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -25219,6 +25219,76 @@
     "project": "obs-memory",
     "quality": "normal",
     "createdAt": "2026-06-20T15:49:16.615Z",
+    "digestedAt": "2026-06-21T00:33:12.648Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": null
+  },
+  {
+    "id": "9596cc2b-f201-4d47-b6fd-41d9b188f0cd",
+    "summary": "Intent: Understand the constraints and limitations of using SQLite as a storage backend for agent memory.\nApproach: The assistant provided a comprehensive breakdown of SQLite limitations across scale, concurrency, data types, distribution, and agent-specific pain points, framing tradeoffs to inform architectural decisions for the obs-memory project.\nArtifacts: none\nResult: Key constraints identified: single-writer bottleneck hurts multi-agent concurrency, no native vector/embedding or JSON indexing, no built-in replication or HA, and VACUUM locks degrade append-heavy workloads. Recommended alternatives include PostgreSQL for multi-agent writes, dedicated vector DBs for embeddings, and TimescaleDB/ClickHouse for high-cardinality time-series; SQLite remains viable only for single-agent or prototype scenarios under ~10 GB.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-20T15:52:44.649Z",
+    "digestedAt": "2026-06-21T00:33:12.648Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": null
+  },
+  {
+    "id": "73e53447-61ab-4ad5-88ac-4aca53a44d58",
+    "summary": "Intent: Asked for ideal database choices for enterprise-grade agentic AI pipelines.\nApproach: The assistant provided a comprehensive multi-layer database stack recommendation covering transactional, time-series, vector, cache, event log, observational memory, and analytics tiers, with both minimal and full enterprise configurations.\nArtifacts: none\nResult: No code or files were changed; the exchange was a general knowledge/advisory discussion recommending PostgreSQL+TimescaleDB, Redis, Milvus, Kafka, and Snowflake/S3+Iceberg as the core enterprise stack for agentic AI pipelines.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "normal",
+    "createdAt": "2026-06-20T16:42:01.754Z",
+    "digestedAt": "2026-06-21T00:33:12.648Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": null
+  },
+  {
+    "id": "f13a8104-bbd7-47f1-a30e-2b849fa318b0",
+    "summary": "Intent: Developer asked about concurrent database access best practices for enterprise-grade agentic memory systems.\nApproach: The assistant provided a comprehensive reference answer covering standard enterprise patterns without modifying any project files, serving as an informational knowledge exchange.\nArtifacts: none\nResult: Delivered an overview of concurrent DB access patterns including connection pooling, CQRS/read replicas, optimistic/pessimistic/advisory locking, distributed transaction handling via saga pattern, append-only observational writes, Redis for session state, rate limiting, retry logic, and monitoring/alerting recommendations.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "normal",
+    "createdAt": "2026-06-20T20:46:19.104Z",
+    "digestedAt": "2026-06-21T00:33:12.648Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": null
+  },
+  {
+    "id": "8e8c58b8-23fe-4f59-87df-365f551fea59",
+    "summary": "Intent: Implement the plan described in Markdown_parsing.md step-by-step.\nApproach: The assistant began by reading the plan file and surveying existing codebase files (categorize script, FAU API, checkpoint patterns) to understand the architecture before writing any code.\nArtifacts: none\nResult: The exchange captures only the investigation phase — the assistant read relevant files to gather context but did not produce any implementation artifacts or code changes before the exchange ended.",
+    "agent": "copilot",
+    "project": "coding",
+    "quality": "normal",
+    "createdAt": "2026-06-22T01:36:27.874Z",
+    "digestedAt": null,
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": null
+  },
+  {
+    "id": "2df7034f-b179-4819-8f35-4c3bb1f5b06a",
+    "summary": "Intent: Reduce the cosine similarity threshold to 0.4 and set the minimum characters per chunk to 500.\nApproach: Directly modify the two configuration constants/defaults in the chunking script to adjust the splitting behavior and minimum chunk size.\nArtifacts: edited (file path not specified in exchange)\nResult: Cosine similarity threshold lowered to 0.4 (sentences with similarity below this value get split) and minimum characters per chunk set to 500.",
+    "agent": "copilot",
+    "project": "coding",
+    "quality": "high",
+    "createdAt": "2026-06-22T02:05:10.664Z",
     "digestedAt": null,
     "llm": {
       "model": "claude-sonnet-4.6",

@@ -16662,5 +16662,131 @@
       "sourceCount": 3
     },
     "project": "coding"
+  },
+  {
+    "id": "1f3acc9d-f68b-412d-8d2f-432f2b813ac8",
+    "date": "2026-06-18",
+    "theme": "obs-memory Stack Setup, Proxy Fix, and Submodule Vendoring",
+    "summary": "The goal was to understand, configure, and fully start the obs-memory codebase on a Linux machine originally configured for macOS.\n\n- **Startup chain traced**: `bin/coding → scripts/launch-claude.sh → scripts/launch-agent-common.sh`, launching a Docker Compose stack of 4 containers with ~10 supervisord-managed services.\n- **PATH/portability fix**: Repointed `~/.bashrc` `CODING_REPO` variable and made `obs-memory/.activate` portable (previously hardcoded a macOS path).\n- **VPN-aware proxy fix**: Added `_configure_docker_build_proxy()` to `scripts/launch-agent-common.sh` and wired `DOCKER_BUILD_*` proxy build-args into `docker/docker-compose.yml`, gated on the existing `INSIDE_CN` detection so `apt-get` succeeds when off corporate VPN.\n- **Submodule resolution**: Registered, vendored, and committed all 5 `integrations/*` submodule directories (including `dashboard/`, which was the fatal build blocker); three were private SSH repos (`fwornle/*`) with no key configured, so they were vendored directly.\n- **Two local commits produced**: `103a663` (proxy/VPN-aware Docker build) and `c855fd7` (submodules registered and populated).\n- `README.md` was also updated to reflect the corrected start commands (`./bin/coding --claude` / `./bin/coding --force --claude`).",
+    "observationIds": [
+      "1b4ec09e-d995-4b84-ab05-ea270765bf74",
+      "7014cb9d-7da7-45ca-8691-a1f2884008a6",
+      "72520cbd-738e-40da-8cb6-679ca0333cad"
+    ],
+    "agents": [
+      "claude"
+    ],
+    "filesTouched": [
+      "/home/<USER_ID_REDACTED>/.bashrc",
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/.activate",
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/docker/docker-compose.yml",
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/scripts/launch-agent-common.sh",
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/README.md",
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/.gitmodules"
+    ],
+    "quality": "normal",
+    "createdAt": "2026-06-21T00:32:49.509Z",
+    "metadata": {
+      "sourceCount": 3
+    },
+    "project": "obs-memory"
+  },
+  {
+    "id": "dd190336-3129-41a4-a929-835554f4175e",
+    "date": "2026-06-18",
+    "theme": "Git Remote Policy: Local-Only Commits Until Repo Migration",
+    "summary": "A project management directive was established: all git commits are to remain local only — no pushes to any remote repository. The plan is to push the full repo and its history to a new repository at a later, explicitly chosen time. No files were changed; this policy directly governed how subsequent commit work in observation 4 was executed.",
+    "observationIds": [
+      "823f5af8-f0b7-4c37-95ad-44c28f7af8e8"
+    ],
+    "agents": [
+      "claude"
+    ],
+    "filesTouched": [],
+    "quality": "normal",
+    "createdAt": "2026-06-21T00:32:49.509Z",
+    "metadata": {
+      "sourceCount": 1
+    },
+    "project": "obs-memory"
+  },
+  {
+    "id": "73deaff8-6adc-4f5a-9ba2-509f1f152023",
+    "date": "2026-06-18",
+    "theme": "Background Stack Retry Fails on API Authentication Error",
+    "summary": "An automated background task (`bmzber9w7`) titled \"Retry full start with submodules populated\" completed and delivered a failure notification. The task exited with code 1 due to an **API authentication error (HTTP 403 — invalid API key)**, meaning the Docker stack retry was blocked not by a build or submodule issue but by a missing or invalid credential for an external API dependency. No developer action was requested and no artifacts were modified.",
+    "observationIds": [
+      "216b74e6-859a-4b90-82aa-b6f8d9904eef"
+    ],
+    "agents": [
+      "claude"
+    ],
+    "filesTouched": [],
+    "quality": "normal",
+    "createdAt": "2026-06-21T00:32:49.509Z",
+    "metadata": {
+      "sourceCount": 1
+    },
+    "project": "obs-memory"
+  },
+  {
+    "id": "c1d93d2a-8f35-4d18-87c8-866163113028",
+    "date": "2026-06-20",
+    "theme": "General Relational Database Best Practices Survey",
+    "summary": "An early-morning general knowledge query about relational database best practices, not tied to any specific project or RDBMS.\n- The assistant produced a broad, categorized 17-point checklist spanning schema design, indexing, transactions, migrations, backups, scaling, security, observability, and governance.\n- No artifacts were created or modified; this was a purely advisory exchange serving as a reference document.",
+    "observationIds": [
+      "aa81c8a4-55d2-4254-8840-93d283c7b4f7"
+    ],
+    "agents": [
+      "copilot"
+    ],
+    "filesTouched": [],
+    "quality": "normal",
+    "createdAt": "2026-06-21T00:33:12.648Z",
+    "metadata": {
+      "sourceCount": 1
+    },
+    "project": "obs-memory"
+  },
+  {
+    "id": "1ac47587-b9c7-444c-ba6e-355f4843ea24",
+    "date": "2026-06-20",
+    "theme": "Hybrid RAG Architecture Approaches Survey",
+    "summary": "The developer sought an overview of Hybrid RAG implementation strategies to inform architectural decisions.\n- The assistant surveyed 14 distinct approaches including Retrieval-then-Generate, Fusion-in-Decoder (FiD), multi-hop retrieval, RAG fine-tuning, tool-augmented RAG, sparse+dense hybrid indexing, and multimodal RAG.\n- Practical guidance emphasized hybrid indexing, reranking pipelines, provenance tracking, and managing cost/latency tradeoffs.\n- No files or artifacts were produced; purely an advisory/evaluative discussion.",
+    "observationIds": [
+      "fea94934-3910-4a7b-9502-91761a8f1d2e"
+    ],
+    "agents": [
+      "copilot"
+    ],
+    "filesTouched": [],
+    "quality": "normal",
+    "createdAt": "2026-06-21T00:33:12.648Z",
+    "metadata": {
+      "sourceCount": 1
+    },
+    "project": "obs-memory"
+  },
+  {
+    "id": "3f7ff01d-bdd4-43ad-8298-903b960f6b3f",
+    "date": "2026-06-20",
+    "theme": "Database Architecture Design for Agentic AI Memory Systems",
+    "summary": "An extended afternoon-to-evening thread progressively drilling into database design for agent observational memory, culminating in enterprise-grade concurrency guidance. The session moved through four escalating levels of specificity:\n\n- **Obs 3 (15:49):** Broad best-practices survey for storing observational memory — covering storage patterns, embedding indexing, deduplication, retention policies, privacy, and schema management; no specific technology committed to.\n- **Obs 4 (15:52):** Deep-dive into SQLite's constraints for the `obs-memory` project — single-writer bottleneck, lack of native vector/JSON indexing, no replication or HA, and `VACUUM` lock contention on append-heavy workloads; SQLite deemed viable only for single-agent or prototype use under ~10 GB.\n- **Obs 5 (16:42):** Enterprise-stack recommendation across all tiers — PostgreSQL + TimescaleDB (transactional/time-series), Redis (cache/session), Milvus (vector), Kafka (event log), and Snowflake/S3+Iceberg (analytics); both minimal and full enterprise configurations provided.\n- **Obs 6 (20:46):** Concurrency patterns for multi-agent writes — connection pooling, CQRS/read replicas, optimistic/pessimistic/advisory locking, saga pattern for distributed transactions, append-only observational writes, Redis-backed session state, retry logic, and monitoring/alerting.\n\nNo files were created or modified across any of these exchanges; all output was advisory reference material.",
+    "observationIds": [
+      "af28d5d1-3775-42d5-8abf-219d0cbbe5a6",
+      "9596cc2b-f201-4d47-b6fd-41d9b188f0cd",
+      "73e53447-61ab-4ad5-88ac-4aca53a44d58",
+      "f13a8104-bbd7-47f1-a30e-2b849fa318b0"
+    ],
+    "agents": [
+      "copilot"
+    ],
+    "filesTouched": [],
+    "quality": "high",
+    "createdAt": "2026-06-21T00:33:12.648Z",
+    "metadata": {
+      "sourceCount": 4
+    },
+    "project": "obs-memory"
   }
 ]

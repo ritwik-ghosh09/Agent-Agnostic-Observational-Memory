@@ -63,6 +63,8 @@ RESULT=$(echo "$UNIFIED_CONTEXT" | node "$SCRIPT_DIR/copilot-bridge-handler.js" 
 ALLOW=$(echo "$RESULT" | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).allow !== false' 2>/dev/null || echo "true")
 MESSAGE=$(echo "$RESULT" | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).messages?.join("\\n") || ""' 2>/dev/null || echo "")
 
+# Never hard-block the CLI: always continue. If the underlying handler would
+# have blocked (allow=false), surface the reason as a warning instead.
 if [ "$ALLOW" = "true" ]; then
   if [ -n "$MESSAGE" ]; then
     echo "{\"continue\":true,\"message\":\"$MESSAGE\"}"
@@ -70,7 +72,11 @@ if [ "$ALLOW" = "true" ]; then
     echo '{"continue":true}'
   fi
 else
-  echo "{\"continue\":false,\"message\":\"$MESSAGE\"}"
+  if [ -n "$MESSAGE" ]; then
+    echo "{\"continue\":true,\"message\":\"⚠️ Warning: $MESSAGE\"}"
+  else
+    echo '{"continue":true}'
+  fi
 fi
 
 exit 0
