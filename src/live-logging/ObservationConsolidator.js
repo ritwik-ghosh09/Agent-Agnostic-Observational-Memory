@@ -243,10 +243,10 @@ export class ObservationConsolidator {
     const text = `${entry.topic ?? ''}\n\n${entry.summary ?? ''}`.trim();
     if (!text) return null;
     const vector = await tools.embed(text);
-    // Scope candidate matches to the same project so that "Coding Patterns"
-    // in project A cannot absorb a same-named topic from project B just
+    // Scope candidate matches to the same project ROOT so that "Coding Patterns"
+    // in codebase A cannot absorb a same-named topic from codebase B just
     // because the embedding cosine clears the threshold.
-    const project = entry.project || 'unknown';
+    const projectRoot = entry.projectRoot || 'unknown';
     const search = {
       vector,
       // Top-5: the strongest cosine match may still lose the verdict to a
@@ -256,7 +256,7 @@ export class ObservationConsolidator {
       score_threshold: INSIGHT_FACET_THRESHOLD,
       with_payload: true,
       with_vector: false,
-      filter: { must: [{ key: 'project', match: { value: project } }] },
+      filter: { must: [{ key: 'projectRoot', match: { value: projectRoot } }] },
     };
     const results = await tools.qdrant.search('insights', search);
     if (!results || results.length === 0) return null;
@@ -550,6 +550,98 @@ export class ObservationConsolidator {
   }
 
   /**
+   * Canonicalize an absolute project-root path into a stable partition key.
+   * Strips the machine-specific home/user prefix (`/home/<user>/`,
+   * `/Users/<user>/`, and the redacted `<USER_ID_REDACTED>` form) to a `~/`
+   * token so that historical observations (whose stored paths are redacted)
+   * and live observations (whose paths are raw) for the SAME codebase converge
+   * to one identical key. Returns null for empty input.
+   */
+  _normalizeRoot(p) {
+    if (!p || typeof p !== 'string') return null;
+    let s = p.trim();
+    if (!s) return null;
+    s = s.replace(/\/+$/, '');
+    s = s.replace(/^\/(?:home|Users)\/[^/]+\//, '~/');
+    return s || null;
+  }
+
+  /**
+   * Resolve the absolute project ROOT (the codebase identity) for an
+   * observation. This is the partition key that guarantees two different
+   * project roots are never summarized together.
+   *
+   * Precedence:
+   *   1. `metadata.projectRoot` captured at ingestion (normalized).
+   *   2. Derived from the observation's own file paths: the prefix of any
+   *      `modifiedFiles`/`readFiles` entry up to and including the basename
+   *      label in `metadata.project` (normalized).
+   *   3. The basename label itself, when present but no path evidence exists.
+   *   4. 'unknown' — a dedicated bucket that is never merged with a real root.
+   *
+   * @param {string|Object} metadata - metadata JSON string or parsed object
+   * @returns {string} normalized root key, a basename, or 'unknown'
+   */
+  _extractProjectRoot(metadata) {
+    let m = metadata;
+    if (typeof m === 'string') {
+      try { m = JSON.parse(m); } catch { return 'unknown'; }
+    }
+    if (!m || typeof m !== 'object') return 'unknown';
+
+    if (typeof m.projectRoot === 'string' && m.projectRoot.trim()) {
+      return this._normalizeRoot(m.projectRoot) || 'unknown';
+    }
+
+    const base = (typeof m.project === 'string' && m.project && m.project !== 'unknown')
+      ? m.project
+      : null;
+    if (base) {
+      const files = [
+        ...(Array.isArray(m.modifiedFiles) ? m.modifiedFiles : []),
+        ...(Array.isArray(m.readFiles) ? m.readFiles : []),
+      ];
+      const marker = '/' + base + '/';
+      for (const f of files) {
+        if (typeof f !== 'string') continue;
+        const idx = f.indexOf(marker);
+        if (idx >= 0) {
+          return this._normalizeRoot(f.slice(0, idx + base.length + 1)) || 'unknown';
+        }
+        if (f.endsWith('/' + base)) {
+          return this._normalizeRoot(f) || 'unknown';
+        }
+      }
+      // No path evidence — fall back to the basename as a provisional key so
+      // attribution is preserved (strictly better than collapsing to a shared
+      // bucket). Never returns the legacy 'coding' default.
+      return base;
+    }
+    return 'unknown';
+  }
+
+  /**
+   * Resolve the partition key (absolute root) and the human-readable display
+   * label (basename) for an observation in one call.
+   * @param {{metadata?: string|Object}} obs
+   * @returns {{ key: string, label: string }}
+   */
+  _projectKey(obs) {
+    const meta = obs && obs.metadata;
+    const key = this._extractProjectRoot(meta);
+    let label = key === 'unknown'
+      ? 'unknown'
+      : (key.split('/').filter(Boolean).pop() || key);
+    try {
+      const m = typeof meta === 'string' ? JSON.parse(meta) : meta;
+      if (m && typeof m.project === 'string' && m.project && m.project !== 'unknown') {
+        label = m.project;
+      }
+    } catch { /* keep derived label */ }
+    return { key, label };
+  }
+
+  /**
    * Lazily-initialized ReliableCodingClassifier. Only the isCoding signal
    * is consumed: per Phase A design we promote null-project rows to
    * 'coding' when classified positive, or leave them as 'unknown'.
@@ -712,7 +804,7 @@ export class ObservationConsolidator {
     // never collapse into a single digest row.
     for (let i = 0; i < digestEntries.length; i++) {
       if (!vectors[i]) continue;
-      const project = digestEntries[i].project || 'unknown';
+      const projectRoot = digestEntries[i].projectRoot || 'unknown';
       try {
         const hits = await tools.qdrant.search('digests', {
           vector: vectors[i],
@@ -723,7 +815,7 @@ export class ObservationConsolidator {
           filter: {
             must: [
               { key: 'date', match: { value: date } },
-              { key: 'project', match: { value: project } },
+              { key: 'projectRoot', match: { value: projectRoot } },
             ],
           },
         });
@@ -737,7 +829,7 @@ export class ObservationConsolidator {
 
     // Within-batch: greedy pairwise. Earlier entries (or the cross-batch
     // target the entry already merges into) absorb later ones — but only
-    // when they share the same project label.
+    // when they share the same project ROOT (codebase identity).
     const cosine = (a, b) => {
       let dot = 0, na = 0, nb = 0;
       for (let i = 0; i < a.length; i++) { dot += a[i]*b[i]; na += a[i]*a[i]; nb += b[i]*b[i]; }
@@ -745,12 +837,12 @@ export class ObservationConsolidator {
     };
     for (let i = 1; i < digestEntries.length; i++) {
       if (!vectors[i] || plan[i].action === 'merge') continue;
-      const projectI = digestEntries[i].project || 'unknown';
+      const rootI = digestEntries[i].projectRoot || 'unknown';
       let bestJ = -1, bestSim = 0;
       for (let j = 0; j < i; j++) {
         if (!vectors[j]) continue;
-        const projectJ = digestEntries[j].project || 'unknown';
-        if (projectJ !== projectI) continue;
+        const rootJ = digestEntries[j].projectRoot || 'unknown';
+        if (rootJ !== rootI) continue;
         const sim = cosine(vectors[i], vectors[j]);
         if (sim >= DIGEST_DEDUP_THRESHOLD && sim > bestSim) {
           bestSim = sim;
@@ -815,12 +907,20 @@ export class ObservationConsolidator {
     try { this.db.exec('ALTER TABLE digests ADD COLUMN project TEXT'); } catch { /* exists */ }
     try { this.db.exec('ALTER TABLE insights ADD COLUMN project TEXT'); } catch { /* exists */ }
 
+    // Project-root scoping columns. `project` holds the human-readable basename
+    // label; `project_root` holds the normalized absolute root used as the
+    // strict partition key so two codebases never get summarized together.
+    try { this.db.exec('ALTER TABLE digests ADD COLUMN project_root TEXT'); } catch { /* exists */ }
+    try { this.db.exec('ALTER TABLE insights ADD COLUMN project_root TEXT'); } catch { /* exists */ }
+
     // Index for efficient undigested lookups
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_obs_digested ON observations(digested_at)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_digests_date ON digests(date)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_insights_topic ON insights(topic)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_digests_project ON digests(project)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_insights_project ON insights(project)');
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_digests_project_root ON digests(project_root)');
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_insights_project_root ON insights(project_root)');
 
     // Git-friendly JSON export (mirrors UKB knowledge-export pattern)
     const projectRoot = path.resolve(path.dirname(this.dbPath), '..');
@@ -876,9 +976,12 @@ export class ObservationConsolidator {
   /**
    * Consolidate a single day's observations into thematic digests.
    * @param {string} date - YYYY-MM-DD
+   * @param {Object} [options]
+   * @param {string[]|null} [options.roots] - When set, only observations whose
+   *   project root is in this list are consolidated. Empty/null = all roots.
    * @returns {Promise<{digests: number, observations: number}>}
    */
-  async consolidateDay(date) {
+  async consolidateDay(date, { roots = null } = {}) {
     if (!this.db) throw new Error('Not initialized');
 
     // Get undigested observations for this date
@@ -896,31 +999,39 @@ export class ObservationConsolidator {
       return { digests: 0, observations: 0 };
     }
 
-    // Resolve any null-project observations via the classifier before
-    // partitioning. Phase A handled the historical backlog; this catches
-    // any new rows that arrive without metadata.project populated.
+    // Resolve any null-project observations via project-root derivation before
+    // partitioning. Phase A handled the historical backlog; this catches any
+    // new rows that arrive without metadata.project/projectRoot populated.
     await this._backfillProjectsInBatch(observations);
 
-    // Partition by project so each LLM run sees a single project's
-    // narrative. Without this, mixed-project days produce digests that
-    // lump unrelated work under the wrong project label and break the
-    // downstream per-project filter.
-    const byProject = new Map();
+    // Partition by project ROOT so each LLM run sees a single codebase's
+    // narrative. Keyed by the normalized absolute root (collision-free), not
+    // the basename label — two different roots are never summarized together.
+    const rootFilter = Array.isArray(roots) && roots.length > 0
+      ? new Set(roots.map((r) => this._normalizeRoot(r) || r))
+      : null;
+    const byRoot = new Map();
     for (const o of observations) {
-      const p = this._extractProject(o.metadata);
-      if (!byProject.has(p)) byProject.set(p, []);
-      byProject.get(p).push(o);
+      const { key, label } = this._projectKey(o);
+      if (rootFilter && !rootFilter.has(key)) continue;
+      if (!byRoot.has(key)) byRoot.set(key, { label, list: [] });
+      byRoot.get(key).list.push(o);
     }
 
-    const breakdown = [...byProject.entries()]
-      .map(([p, list]) => `${p}=${list.length}`).join(', ');
+    if (byRoot.size === 0) {
+      process.stderr.write(`[Consolidator] No observations for ${date} match the selected project root(s)\n`);
+      return { digests: 0, observations: 0 };
+    }
+
+    const breakdown = [...byRoot.entries()]
+      .map(([key, { list }]) => `${key}=${list.length}`).join(', ');
     process.stderr.write(`[Consolidator] Consolidating ${observations.length} observations for ${date} (${breakdown})\n`);
 
     // Chunk large groups to avoid LLM timeouts (max ~35 observations per call)
     const CHUNK_SIZE = 35;
     const allDigestEntries = [];
 
-    for (const [project, projObs] of byProject) {
+    for (const [projectRoot, { label: project, list: projObs }] of byRoot) {
       const chunks = [];
       for (let i = 0; i < projObs.length; i += CHUNK_SIZE) {
         chunks.push(projObs.slice(i, i + CHUNK_SIZE));
@@ -945,9 +1056,9 @@ export class ObservationConsolidator {
 
         // Parse with the chunk's observations but map indices relative to global offset
         const chunkDigests = this._parseDigests(result, date, chunk, globalOffset);
-        // Tag every digest with the project so downstream merge planning
-        // and INSERT both have access to it.
-        for (const d of chunkDigests) d.project = project;
+        // Tag every digest with the project label and root so downstream merge
+        // planning and INSERT both have access to them.
+        for (const d of chunkDigests) { d.project = project; d.projectRoot = projectRoot; }
         allDigestEntries.push(...chunkDigests);
       }
     }
@@ -961,11 +1072,11 @@ export class ObservationConsolidator {
     // Write digests and mark observations as digested
     const now = new Date().toISOString();
     const insertDigest = this.db.prepare(`
-      INSERT INTO digests (id, date, theme, summary, observation_ids, agents, files_touched, quality, created_at, metadata, project)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO digests (id, date, theme, summary, observation_ids, agents, files_touched, quality, created_at, metadata, project, project_root)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const getDigest = this.db.prepare(
-      'SELECT id, observation_ids, agents, files_touched, summary, quality, project FROM digests WHERE id = ?'
+      'SELECT id, observation_ids, agents, files_touched, summary, quality, project, project_root FROM digests WHERE id = ?'
     );
     const updateDigest = this.db.prepare(`
       UPDATE digests
@@ -1043,7 +1154,7 @@ export class ObservationConsolidator {
           JSON.stringify(d.agents),
           this._redactPaths(JSON.stringify(d.filesTouched)),
           d.quality, now, this._redactPaths(JSON.stringify(d.metadata || {})),
-          d.project || 'unknown'
+          d.project || 'unknown', d.projectRoot || 'unknown'
         );
         createdCount++;
         for (const obsId of d.observationIds) digestedObsIds.add(obsId);
@@ -1069,6 +1180,7 @@ export class ObservationConsolidator {
         agents: JSON.stringify(d.agents),
         quality: d.quality || 'normal',
         project: d.project || 'unknown',
+        projectRoot: d.projectRoot || 'unknown',
       });
     }
 
@@ -1127,16 +1239,19 @@ export class ObservationConsolidator {
   /**
    * Synthesize digests into persistent project insights.
    * Merges with existing insights when topics overlap.
+   * @param {Object} [options]
+   * @param {string[]|null} [options.roots] - When set, only digests whose
+   *   project root is in this list are synthesized. Empty/null = all roots.
    * @returns {Promise<{created: number, updated: number}>}
    */
-  async synthesizeInsights() {
+  async synthesizeInsights({ roots = null } = {}) {
     if (!this.db) throw new Error('Not initialized');
 
-    // Get unsynthesized digests, including their project label so the
-    // synthesis pass can partition by project. A digest has been
+    // Get unsynthesized digests, including their project label and root so the
+    // synthesis pass can partition by project ROOT. A digest has been
     // synthesized once any insight links to its id.
     const digests = this.db.prepare(`
-      SELECT d.id, d.date, d.theme, d.summary, d.agents, d.files_touched, d.metadata, d.project
+      SELECT d.id, d.date, d.theme, d.summary, d.agents, d.files_touched, d.metadata, d.project, d.project_root
       FROM digests d
       LEFT JOIN insights i ON d.id IN (
         SELECT value FROM json_each(i.digest_ids)
@@ -1150,37 +1265,46 @@ export class ObservationConsolidator {
       return { created: 0, updated: 0 };
     }
 
-    // Partition digests by project. Cross-project synthesis would let an
-    // unrelated insight from project B contaminate project A's narrative,
-    // and the produced insight would still get a single project label,
-    // dropping the other on the floor.
-    const digestsByProject = new Map();
+    // Partition digests by project ROOT (codebase identity). Cross-root
+    // synthesis would let an unrelated insight from codebase B contaminate
+    // codebase A's narrative, and the produced insight would still get a
+    // single root label, dropping the other on the floor.
+    const rootFilter = Array.isArray(roots) && roots.length > 0
+      ? new Set(roots.map((r) => this._normalizeRoot(r) || r))
+      : null;
+    const digestsByRoot = new Map();
     for (const d of digests) {
-      const p = d.project || 'unknown';
-      if (!digestsByProject.has(p)) digestsByProject.set(p, []);
-      digestsByProject.get(p).push(d);
+      const key = d.project_root || 'unknown';
+      if (rootFilter && !rootFilter.has(key)) continue;
+      if (!digestsByRoot.has(key)) digestsByRoot.set(key, { label: d.project || 'unknown', list: [] });
+      digestsByRoot.get(key).list.push(d);
     }
 
-    // Existing insights are loaded once and filtered per project so each
+    if (digestsByRoot.size === 0) {
+      process.stderr.write(`[Consolidator] No unsynthesized digests match the selected project root(s)\n`);
+      return { created: 0, updated: 0 };
+    }
+
+    // Existing insights are loaded once and filtered per root so each
     // synthesis run only sees in-domain prior knowledge.
     const allExistingInsights = this.db.prepare(
-      'SELECT id, topic, summary, digest_ids, project FROM insights ORDER BY last_updated DESC'
+      'SELECT id, topic, summary, digest_ids, project, project_root FROM insights ORDER BY last_updated DESC'
     ).all();
 
-    const breakdown = [...digestsByProject.entries()]
-      .map(([p, list]) => `${p}=${list.length}`).join(', ');
-    const totalProjects = digestsByProject.size;
-    process.stderr.write(`[Consolidator] Stage 2/2: synthesizing ${digests.length} digests into insights — ${totalProjects} project(s): ${breakdown}\n`);
+    const breakdown = [...digestsByRoot.entries()]
+      .map(([key, { list }]) => `${key}=${list.length}`).join(', ');
+    const totalProjects = digestsByRoot.size;
+    process.stderr.write(`[Consolidator] Stage 2/2: synthesizing ${digests.length} digests into insights — ${totalProjects} project root(s): ${breakdown}\n`);
 
     const DIGEST_CHUNK_SIZE = 30;
     const allInsightEntries = [];
 
     let projectIdx = 0;
-    for (const [project, projDigests] of digestsByProject) {
+    for (const [projectRoot, { label: project, list: projDigests }] of digestsByRoot) {
       projectIdx++;
-      process.stderr.write(`[Consolidator] Project ${projectIdx}/${totalProjects}: ${project} — synthesizing ${projDigests.length} digest(s)\n`);
+      process.stderr.write(`[Consolidator] Project ${projectIdx}/${totalProjects}: ${projectRoot} — synthesizing ${projDigests.length} digest(s)\n`);
       const existingForProject = allExistingInsights.filter(
-        i => (i.project || 'unknown') === project
+        i => (i.project_root || 'unknown') === projectRoot
       );
 
       const digestChunks = [];
@@ -1196,8 +1320,8 @@ export class ObservationConsolidator {
           `[${d.date}] ${d.theme}\n${d.summary}`
         ).join('\n\n---\n\n');
 
-        // Combine DB insights for this project with insights produced in
-        // earlier chunks of the same project run, so the LLM keeps merging
+        // Combine DB insights for this root with insights produced in
+        // earlier chunks of the same root run, so the LLM keeps merging
         // duplicates instead of restating them.
         const currentInsights = [
           ...existingForProject.map(i => ({ topic: i.topic, summary: i.summary })),
@@ -1220,6 +1344,7 @@ export class ObservationConsolidator {
         const chunkInsights = this._parseInsights(result, chunk);
         for (const newInsight of chunkInsights) {
           newInsight.project = project;
+          newInsight.projectRoot = projectRoot;
           newInsight._digestIds = chunk.map(d => d.id);
           const existingIdx = projectInsightEntries.findIndex(e => e.topic === newInsight.topic);
           if (existingIdx >= 0) {
@@ -1277,26 +1402,27 @@ export class ObservationConsolidator {
     const transaction = this.db.transaction(() => {
       for (const entry of insightEntries) {
         const project = entry.project || 'unknown';
+        const projectRoot = entry.projectRoot || 'unknown';
         const entryDigestIds = entry._digestIds || [];
 
         // Resolve the similar-insight match into a 'merge' or 'facet' decision.
-        // Project scoping in _findSimilarInsightId already filters to the same
-        // project; we still re-validate here as defense-in-depth.
+        // Root scoping in _findSimilarInsightId already filters to the same
+        // project root; we still re-validate here as defense-in-depth.
         let existing = null;
         let verdict = null;
         if (entry._similarMatch) {
           existing = this.db.prepare(
-            'SELECT id, topic, digest_ids, metadata, project FROM insights WHERE id = ?'
+            'SELECT id, topic, digest_ids, metadata, project, project_root FROM insights WHERE id = ?'
           ).get(entry._similarMatch.id);
-          if (existing && (existing.project || 'unknown') !== project) existing = null;
+          if (existing && (existing.project_root || 'unknown') !== projectRoot) existing = null;
           if (existing) verdict = entry._similarMatch.verdict;
         }
-        // Fall back to exact topic-string match (cheap, catches the
-        // LLM-honoured "topic names should be stable" path).
+        // Fall back to exact topic-string match within the same root (cheap,
+        // catches the LLM-honoured "topic names should be stable" path).
         if (!existing) {
           existing = this.db.prepare(
-            'SELECT id, topic, digest_ids, metadata, project FROM insights WHERE topic = ? AND project = ?'
-          ).get(entry.topic, project);
+            'SELECT id, topic, digest_ids, metadata, project, project_root FROM insights WHERE topic = ? AND project_root = ?'
+          ).get(entry.topic, projectRoot);
           if (existing) verdict = 'merge';
         }
 
@@ -1320,7 +1446,7 @@ export class ObservationConsolidator {
             this._redactPaths(JSON.stringify(entry.metadata || {})),
             existing.id
           );
-          embeddingQueue.push({ id: existing.id, summary: this._redact(entry.summary), topic: entry.topic, confidence: entry.confidence, project });
+          embeddingQueue.push({ id: existing.id, summary: this._redact(entry.summary), topic: entry.topic, confidence: entry.confidence, project, projectRoot });
           updated++;
         } else if (existing && verdict === 'facet') {
           // Insert as a NEW insight, then cross-link both the new one and
@@ -1330,14 +1456,14 @@ export class ObservationConsolidator {
           // meaningful prefix exists.
           const newId = crypto.randomUUID();
           this.db.prepare(`
-            INSERT INTO insights (id, topic, summary, confidence, digest_ids, last_updated, created_at, metadata, project)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO insights (id, topic, summary, confidence, digest_ids, last_updated, created_at, metadata, project, project_root)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(
             newId, this._redact(entry.topic), this._redact(entry.summary),
             entry.confidence, JSON.stringify(entryDigestIds),
             now, now,
             this._redactPaths(JSON.stringify(entry.metadata || {})),
-            project
+            project, projectRoot
           );
 
           const parentTopic = this._deriveParentTopic(entry.topic, existing.topic);
@@ -1379,21 +1505,21 @@ export class ObservationConsolidator {
             newId
           );
 
-          embeddingQueue.push({ id: newId, summary: this._redact(entry.summary), topic: entry.topic, confidence: entry.confidence, project });
+          embeddingQueue.push({ id: newId, summary: this._redact(entry.summary), topic: entry.topic, confidence: entry.confidence, project, projectRoot });
           created++;
           facetLinked++;
         } else {
           const id = crypto.randomUUID();
           this.db.prepare(`
-            INSERT INTO insights (id, topic, summary, confidence, digest_ids, last_updated, created_at, metadata, project)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO insights (id, topic, summary, confidence, digest_ids, last_updated, created_at, metadata, project, project_root)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(
             id, this._redact(entry.topic), this._redact(entry.summary),
             entry.confidence, JSON.stringify(entryDigestIds),
             now, now, this._redactPaths(JSON.stringify(entry.metadata || {})),
-            project
+            project, projectRoot
           );
-          embeddingQueue.push({ id, summary: this._redact(entry.summary), topic: entry.topic, confidence: entry.confidence, project });
+          embeddingQueue.push({ id, summary: this._redact(entry.summary), topic: entry.topic, confidence: entry.confidence, project, projectRoot });
           created++;
         }
       }
@@ -1406,6 +1532,7 @@ export class ObservationConsolidator {
         topic: item.topic,
         confidence: item.confidence,
         project: item.project || 'unknown',
+        projectRoot: item.projectRoot || 'unknown',
       });
     }
 
