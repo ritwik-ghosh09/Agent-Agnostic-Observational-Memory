@@ -8,6 +8,9 @@
  *   node scripts/consolidate-observations.js --status     # show consolidation status
  *   node scripts/consolidate-observations.js --insights   # run insight synthesis only
  *   node scripts/consolidate-observations.js --daemon      # run continuously, consolidating daily at 02:00
+ *   node scripts/consolidate-observations.js --list-roots  # list project roots (codebases) present
+ *   node scripts/consolidate-observations.js --roots=<absA>,<absB>  # scope a run to selected project root(s)
+ *   node scripts/consolidate-observations.js --root=<abs>  # scope a run to one project root (repeatable)
  */
 
 import { ObservationConsolidator } from '../src/live-logging/ObservationConsolidator.js';
@@ -26,6 +29,19 @@ const jsonFlag = args.includes('--json');
 // Manual triggers (dashboard's POST /api/consolidation/run with no body)
 // historically included today's observations as well as past days.
 const includeTodayFlag = args.includes('--include-today');
+
+// Optional project-root scoping. --root=<abs> (repeatable) or
+// --roots=a,b,c. Empty selection = all roots, each scoped separately.
+const rootsSelection = [];
+for (const a of args) {
+  if (a.startsWith('--root=')) {
+    rootsSelection.push(a.slice('--root='.length));
+  } else if (a.startsWith('--roots=')) {
+    rootsSelection.push(...a.slice('--roots='.length).split(',').map(s => s.trim()).filter(Boolean));
+  }
+}
+const roots = rootsSelection.length ? rootsSelection : null;
+const listRootsFlag = args.includes('--list-roots');
 
 const dbPath = path.resolve('.observations/observations.db');
 
@@ -108,8 +124,19 @@ async function main() {
       return;
     }
 
+    if (listRootsFlag) {
+      const list = consolidator.listProjectRoots();
+      process.stderr.write(`\nProject roots (${list.length}):\n`);
+      for (const r of list) {
+        process.stderr.write(`  ${r.projectRoot}  [${r.project}]  obs=${r.observations} digests=${r.digests} insights=${r.insights} last=${r.lastActivity || '—'}\n`);
+      }
+      process.stderr.write('\n');
+      emitJson({ ok: true, roots: list });
+      return;
+    }
+
     if (insightsFlag) {
-      const result = await consolidator.synthesizeInsights();
+      const result = await consolidator.synthesizeInsights({ roots });
       process.stderr.write(`\nInsight synthesis: ${result.created} created, ${result.updated} updated\n`);
       emitJson({ ok: true, ...result });
       return;
@@ -117,7 +144,7 @@ async function main() {
 
     if (dateFlag >= 0 && args[dateFlag + 1]) {
       const date = args[dateFlag + 1];
-      const result = await consolidator.consolidateDay(date);
+      const result = await consolidator.consolidateDay(date, { roots });
       process.stderr.write(`\n${date}: ${result.digests} digests from ${result.observations} observations\n`);
       emitJson({ ok: true, ...result, created: 0, updated: 0 });
       return;
@@ -126,7 +153,7 @@ async function main() {
     if (daemonFlag) {
       // Daemon mode: run immediately, then schedule daily at 02:00 local time
       process.stderr.write(`[consolidate-observations] Daemon mode — running initial consolidation\n`);
-      await runPipeline(consolidator);
+      await runPipeline(consolidator, { roots });
 
       const scheduleNext = () => {
         const now = new Date();
@@ -136,7 +163,7 @@ async function main() {
         const delay = next.getTime() - now.getTime();
         process.stderr.write(`[consolidate-observations] Next run at ${next.toISOString()} (in ${Math.round(delay / 60000)} min)\n`);
         setTimeout(async () => {
-          await runPipeline(consolidator);
+          await runPipeline(consolidator, { roots });
           scheduleNext();
         }, delay);
       };
@@ -146,7 +173,7 @@ async function main() {
     }
 
     // Full pipeline (one-shot)
-    const result = await runPipeline(consolidator, { includeToday: includeTodayFlag });
+    const result = await runPipeline(consolidator, { includeToday: includeTodayFlag, roots });
     emitJson({ ok: true, ...result });
   } finally {
     if (!daemonFlag) consolidator.close();

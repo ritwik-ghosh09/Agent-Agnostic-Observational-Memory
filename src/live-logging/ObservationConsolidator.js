@@ -612,6 +612,19 @@ export class ObservationConsolidator {
           return this._normalizeRoot(f) || 'unknown';
         }
       }
+      // Try to recognise the observation's files as belonging to the local
+      // repo before falling back to the bare basename — this converges
+      // basename-only rows (no path marker) for the local codebase onto the
+      // same full-root key that path-evidenced rows resolve to.
+      const derived = this._deriveRootFromFiles(m);
+      if (derived !== 'unknown') return derived;
+      // The local repo this consolidator runs inside is itself a strong
+      // identity signal: a basename that matches the local repo's basename is
+      // almost certainly that repo, so promote it to the full local root.
+      const local = this._getLocalRepo();
+      if (local.root && (local.root.split('/').filter(Boolean).pop() || local.root) === base) {
+        return local.root;
+      }
       // No path evidence — fall back to the basename as a provisional key so
       // attribution is preserved (strictly better than collapsing to a shared
       // bucket). Never returns the legacy 'coding' default.
@@ -1241,7 +1254,7 @@ export class ObservationConsolidator {
    * @param {boolean} [options.includeToday=false] - Include today's observations (skip for daemon, include for manual trigger)
    * @returns {Promise<{days: number, digests: number, observations: number}>}
    */
-  async consolidateAll({ includeToday = false } = {}) {
+  async consolidateAll({ includeToday = false, roots = null } = {}) {
     if (!this.db) throw new Error('Not initialized');
 
     const days = this.db.prepare(`
@@ -1270,7 +1283,7 @@ export class ObservationConsolidator {
       // surfaces as the user-visible progress indicator (the heartbeat's
       // lastMessage carries the most recent stderr line).
       process.stderr.write(`[Consolidator] Day ${i + 1}/${totalDays}: ${date} — grouping observations\n`);
-      const result = await this.consolidateDay(date);
+      const result = await this.consolidateDay(date, { roots });
       totalDigests += result.digests;
       totalObs += result.observations;
       process.stderr.write(`[Consolidator] Day ${i + 1}/${totalDays}: ${date} — ${result.digests} digest(s) from ${result.observations} obs\n`);
@@ -1686,20 +1699,20 @@ export class ObservationConsolidator {
    *
    * @param {Object} [options]
    * @param {boolean} [options.includeToday=false]
+   * @param {string[]|null} [options.roots=null]  when set, only these project
+   *   roots are consolidated/synthesized/compacted/verified; empty/null = all
+   *   roots present, each scoped separately.
    * @param {boolean} [options.compaction=false]  enable periodic compactInsights() pass
-   * @param {string}  [options.compactionProject='coding']
    * @param {boolean} [options.verification=true]  enable periodic code-claim verification (default ON — cheap)
-   * @param {string[]} [options.verificationProjects=['coding']]
    * @returns {Promise<Object>}
    */
   async run({
     includeToday = false,
+    roots = null,
     compaction = false,
-    compactionProject = 'coding',
     verification = true,
-    verificationProjects = ['coding'],
   } = {}) {
-    const digestResult = await this.consolidateAll({ includeToday });
+    const digestResult = await this.consolidateAll({ includeToday, roots });
     let insightResult = { created: 0, updated: 0 };
 
     // Only synthesize insights if we have enough digests (>= 5 unsynthesized)
@@ -1710,7 +1723,7 @@ export class ObservationConsolidator {
     `).get().cnt;
 
     if (unsynthesizedCount >= 5) {
-      insightResult = await this.synthesizeInsights();
+      insightResult = await this.synthesizeInsights({ roots });
     } else {
       process.stderr.write(`[Consolidator] Only ${unsynthesizedCount} unsynthesized digests — waiting for >= 5 before insight synthesis\n`);
     }
@@ -1718,41 +1731,59 @@ export class ObservationConsolidator {
     // Apply confidence decay to existing insights
     this._decayConfidence();
 
+    // Enumerate the distinct project roots present in the insights, narrowed
+    // to the optional selection. Each root is compacted/verified separately so
+    // two codebases are never cross-contaminated. The isolated 'unknown'
+    // bucket is verified (per-insight, safe) but never compacted (compaction
+    // merges across insights, which must stay within a single codebase).
+    const rootFilter = Array.isArray(roots) && roots.length > 0
+      ? new Set(roots.map((r) => this._normalizeRoot(r) || r))
+      : null;
+    const distinctRoots = this.db.prepare(
+      "SELECT DISTINCT COALESCE(project_root, 'unknown') AS root FROM insights"
+    ).all()
+      .map((r) => r.root)
+      .filter((root) => !rootFilter || rootFilter.has(root));
+
     // Optional cadence-guarded compaction pass. Makes LLM calls per cluster,
     // so gated to once per COMPACTION_MIN_DAYS by default and only run when
     // explicitly opted in (via run({compaction: true})). Failures don't block
-    // the rest of the pipeline.
-    if (compaction && this._isCompactionDue(compactionProject)) {
-      try {
-        const compactResult = await this.compactInsights({ project: compactionProject, dryRun: false });
-        if (compactResult.merges > 0 || compactResult.facets > 0) {
-          process.stderr.write(
-            `[Consolidator] Compaction: ${compactResult.merges} merge(s), ${compactResult.facets} facet group(s), ${compactResult.separated} false-positive(s)\n`
-          );
+    // the rest of the pipeline. Run once per real project root.
+    if (compaction) {
+      for (const root of distinctRoots) {
+        if (root === 'unknown') continue;
+        if (!this._isCompactionDue(root)) continue;
+        try {
+          const compactResult = await this.compactInsights({ projectRoot: root, dryRun: false });
+          if (compactResult.merges > 0 || compactResult.facets > 0) {
+            process.stderr.write(
+              `[Consolidator] Compaction (${root}): ${compactResult.merges} merge(s), ${compactResult.facets} facet group(s), ${compactResult.separated} false-positive(s)\n`
+            );
+          }
+          this._markCompactionDone(root);
+        } catch (err) {
+          process.stderr.write(`[Consolidator] Compaction failed for ${root} (non-fatal): ${err.message}\n`);
         }
-        this._markCompactionDone(compactionProject);
-      } catch (err) {
-        process.stderr.write(`[Consolidator] Compaction failed (non-fatal): ${err.message}\n`);
       }
     }
 
     // Cadence-guarded code-claim verification. Cheap (no LLM, just filesystem
     // + git grep) and the only signal that catches insights silently going
     // stale against codebase moves. ON by default; cadence keeps it from
-    // re-grepping the world on every consolidation.
+    // re-grepping the world on every consolidation. Run once per project root.
     if (verification) {
-      for (const proj of verificationProjects) {
-        if (!this._isVerificationDue(proj)) continue;
+      for (const root of distinctRoots) {
+        if (!this._isVerificationDue(root)) continue;
         try {
-          const verResult = await this.verifyInsights({ project: proj, persist: true });
+          const verResult = await this.verifyInsights({ projectRoot: root, persist: true });
           if (verResult.scanned > 0) {
             process.stderr.write(
-              `[Consolidator] Verification (${proj}): ${verResult.freshCount} fresh, ${verResult.staleCount} stale, avg ratio ${verResult.avgRatio}\n`
+              `[Consolidator] Verification (${root}): ${verResult.freshCount} fresh, ${verResult.staleCount} stale, avg ratio ${verResult.avgRatio}\n`
             );
           }
-          this._markCadenceDone('last-verification', proj);
+          this._markVerificationDone(root);
         } catch (err) {
-          process.stderr.write(`[Consolidator] Verification failed for ${proj} (non-fatal): ${err.message}\n`);
+          process.stderr.write(`[Consolidator] Verification failed for ${root} (non-fatal): ${err.message}\n`);
         }
       }
     }
@@ -1954,22 +1985,29 @@ export class ObservationConsolidator {
    *
    * @param {Object} [options]
    * @param {string} [options.project='coding']  scope to one project
+   * @param {string|null} [options.projectRoot=null]  scope by project_root
+   *   (codebase identity) instead of the basename project label
    * @param {boolean} [options.dryRun=true]      preview only, no writes
    * @param {boolean} [options.clustersOnly=false]  stop after clustering, no LLM calls
    * @returns {Promise<{ clusters: number, merges: number, facets: number, separated: number, dryRun: boolean, clusterTopics?: string[][] }>}
    */
-  async compactInsights({ project = 'coding', dryRun = true, clustersOnly = false } = {}) {
+  async compactInsights({ project = 'coding', projectRoot = null, dryRun = true, clustersOnly = false } = {}) {
     if (!this.db) throw new Error('Not initialized');
 
-    const insights = this.db.prepare(
-      'SELECT id, topic, summary, confidence, digest_ids, metadata, project FROM insights WHERE project = ?'
-    ).all(project);
+    const insights = projectRoot
+      ? this.db.prepare(
+          'SELECT id, topic, summary, confidence, digest_ids, metadata, project, project_root FROM insights WHERE project_root = ?'
+        ).all(projectRoot)
+      : this.db.prepare(
+          'SELECT id, topic, summary, confidence, digest_ids, metadata, project FROM insights WHERE project = ?'
+        ).all(project);
 
     if (insights.length < 2) {
       return { clusters: 0, merges: 0, facets: 0, separated: 0, dryRun };
     }
 
-    process.stderr.write(`[Compaction] Scanning ${insights.length} insights in project=${project}\n`);
+    const scopeLabel = projectRoot || project;
+    process.stderr.write(`[Compaction] Scanning ${insights.length} insights in scope=${scopeLabel}\n`);
 
     // Pairwise similarity: prefer Qdrant for embedding cosine, fall back to
     // local topic-Jaccard if the embedder is unavailable. Build adjacency
@@ -2005,7 +2043,9 @@ export class ObservationConsolidator {
             score_threshold: INSIGHT_FACET_THRESHOLD,
             with_payload: false,
             with_vector: false,
-            filter: { must: [{ key: 'project', match: { value: project } }] },
+            filter: { must: [projectRoot
+              ? { key: 'projectRoot', match: { value: projectRoot } }
+              : { key: 'project', match: { value: project } }] },
           });
         } catch { continue; }
         for (const r of results || []) {
@@ -2556,14 +2596,20 @@ export class ObservationConsolidator {
    *
    * @param {Object} [options]
    * @param {string} [options.project='coding']
+   * @param {string|null} [options.projectRoot=null] - When set, scope by
+   *   project_root (codebase identity) instead of the basename project label.
    * @param {boolean} [options.persist=true]
    * @returns {Promise<{ scanned: number, freshCount: number, staleCount: number, avgRatio: number, results: Array }>}
    */
-  async verifyInsights({ project = 'coding', persist = true } = {}) {
+  async verifyInsights({ project = 'coding', projectRoot = null, persist = true } = {}) {
     if (!this.db) throw new Error('Not initialized');
-    const insights = this.db.prepare(
-      'SELECT id, topic, summary, metadata FROM insights WHERE project = ?'
-    ).all(project);
+    const insights = projectRoot
+      ? this.db.prepare(
+          'SELECT id, topic, summary, metadata FROM insights WHERE project_root = ?'
+        ).all(projectRoot)
+      : this.db.prepare(
+          'SELECT id, topic, summary, metadata FROM insights WHERE project = ?'
+        ).all(project);
     if (insights.length === 0) {
       return { scanned: 0, freshCount: 0, staleCount: 0, unverifiableCount: 0, archivedCount: 0, avgRatio: 1, results: [] };
     }
@@ -3257,6 +3303,55 @@ Produce updated/new insights. Each insight MUST be a structured reference articl
     const totalInsights = this.db.prepare('SELECT COUNT(*) as cnt FROM insights').get().cnt;
 
     return { totalObs, undigested, totalDigests, totalInsights };
+  }
+
+  /**
+   * Enumerate the distinct project roots (codebases) present in the data, with
+   * per-root observation/digest/insight counts and last-activity timestamp.
+   * Observation roots are derived from each row's captured context; digests and
+   * insights read their stored project_root column. Used by the CLI
+   * `--list-roots` flag and the dashboard's GET /api/project-roots endpoint to
+   * drive the project-root selector.
+   * @returns {Array<{projectRoot: string, project: string, observations: number, digests: number, insights: number, lastActivity: string|null}>}
+   */
+  listProjectRoots() {
+    if (!this.db) return [];
+    const map = new Map();
+    const touch = (key, label) => {
+      if (!map.has(key)) {
+        map.set(key, {
+          projectRoot: key,
+          project: label || (key === 'unknown' ? 'unknown' : (key.split('/').filter(Boolean).pop() || key)),
+          observations: 0,
+          digests: 0,
+          insights: 0,
+          lastActivity: null,
+        });
+      }
+      return map.get(key);
+    };
+    const bump = (e, ts) => {
+      if (ts && (!e.lastActivity || ts > e.lastActivity)) e.lastActivity = ts;
+    };
+
+    for (const o of this.db.prepare('SELECT metadata, created_at FROM observations').all()) {
+      const { key, label } = this._projectKey(o);
+      const e = touch(key, label);
+      e.observations++;
+      bump(e, o.created_at);
+    }
+    for (const d of this.db.prepare("SELECT COALESCE(project_root, 'unknown') AS root, project, date FROM digests").all()) {
+      const e = touch(d.root, d.project);
+      e.digests++;
+      bump(e, d.date);
+    }
+    for (const i of this.db.prepare("SELECT COALESCE(project_root, 'unknown') AS root, project, last_updated FROM insights").all()) {
+      const e = touch(i.root, i.project);
+      e.insights++;
+      bump(e, i.last_updated);
+    }
+
+    return [...map.values()].sort((a, b) => (b.lastActivity || '').localeCompare(a.lastActivity || ''));
   }
 
   close() {
