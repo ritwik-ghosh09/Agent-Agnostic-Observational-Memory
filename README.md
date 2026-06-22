@@ -377,6 +377,54 @@ Capture, organize, and visualize development insights with git-based team collab
 
 **Status**: ✅ Production Ready
 
+### Live Memory Context Preview
+
+See the **Working** and **Observational** memory that would be retrieved for the prompt
+you are *typing* in the CLI — **before** you press Enter. Because the prompt has not
+been submitted yet, no `UserPromptSubmit`-style hook has fired; the draft only exists on
+screen. A host-side monitor reads it straight from the terminal via `tmux capture-pane`,
+so the mechanism is fully **agent-agnostic** and works for **GitHub Copilot CLI**,
+**Claude Code**, and **OpenCode** without any CLI-specific plugin.
+
+How it works:
+
+- **Capture** — every coding agent runs inside the shared tmux wrapper. `scripts/live-query-monitor.js` polls the pane (`tmux capture-pane -p`) and extracts the current input-box draft with [`InputDraftExtractor`](src/live-logging/InputDraftExtractor.js) (structure-first parsing of the box border + prompt marker; placeholders and UI noise are filtered out).
+- **Debounce** — the draft must be *stable* (unchanged for ~600 ms) and new before a retrieval fires, so keystrokes don't spam the service.
+- **Retrieve** — the dashboard receives the draft, retrieves Working + Observational memory from the host Observations API, buffers it, and broadcasts it.
+- **Display** — the new **Live Context** tab in the Health Dashboard shows the query, its Working Memory, and its Observational Memory in real time over a dedicated WebSocket.
+
+```mermaid
+graph TD
+    subgraph CLI["CLI in tmux session (Copilot / Claude / OpenCode)"]
+        A["User types a prompt<br/>NOT yet submitted"]
+    end
+
+    A -->|"tmux capture-pane -p (poll ~350ms)"| B["live-query-monitor.js"]
+
+    subgraph MON["Host monitor"]
+        B --> C["InputDraftExtractor<br/>box + prompt-marker parse"]
+        C --> D{"Draft stable,<br/>new and non-noise?"}
+    end
+
+    D -->|no| B
+    D -->|yes| E["POST /api/live-context/query"]
+
+    subgraph DASH["Health Dashboard API :3033"]
+        E --> F["Retrieve Working +<br/>Observational memory"]
+        F --> G["Ring buffer + broadcast<br/>/api/live-context/ws"]
+    end
+
+    G -->|WebSocket| H["Live Context tab<br/>Working | Observational"]
+```
+
+Configuration: enabled per agent via `AGENT_ENABLE_LIVE_CONTEXT=true` (default) in
+`config/agents/*.sh`. Tunables (env): `LQM_POLL_MS`, `LQM_STABLE_MS`,
+`LQM_MIN_INTERVAL_MS`, `LQM_BUDGET`, and `LQM_INPUT_MARKERS` (override prompt markers
+for a CLI whose chrome changed). The feature is fail-open end to end — if the monitor,
+dashboard, or retrieval service is unavailable, the CLI is never affected.
+
+**Status**: ✅ Production Ready
+
 ---
 
 ## ⚡ Usage Examples
