@@ -18,6 +18,7 @@
  *   GET  /api/insights                 ?topic=&q=&project=
  *   GET  /api/insights/projects
  *   GET  /api/projects
+ *   GET  /api/project-roots
  *   GET  /api/consolidation/status
  */
 
@@ -255,11 +256,16 @@ function _clearHeartbeat() {
 function runConsolidation(options = {}) {
   if (_consolidationPromise) return _consolidationPromise;
 
+  const roots = Array.isArray(options.roots) && options.roots.length > 0
+    ? options.roots
+    : null;
+  const rootArgs = roots ? [`--roots=${roots.join(',')}`] : [];
+
   const args = options.date
-    ? ['--date', options.date]
+    ? ['--date', options.date, ...rootArgs]
     : options.insightsOnly
-    ? ['--insights']
-    : ['--include-today'];
+    ? ['--insights', ...rootArgs]
+    : ['--include-today', ...rootArgs];
 
   _consolidationStartedAt = new Date().toISOString();
   _consolidationArgs = args;
@@ -298,11 +304,11 @@ function runConsolidation(options = {}) {
       await consolidator.init();
       let result;
       if (options.insightsOnly) {
-        result = await consolidator.synthesizeInsights();
+        result = await consolidator.synthesizeInsights({ roots });
       } else if (options.date) {
-        result = await consolidator.consolidateDay(options.date);
+        result = await consolidator.consolidateDay(options.date, { roots });
       } else {
-        result = await consolidator.run({ includeToday: options.includeToday !== false });
+        result = await consolidator.run({ includeToday: options.includeToday !== false, roots });
       }
       return { ok: true, ...result };
     } finally {
@@ -774,6 +780,65 @@ app.get('/api/projects', (_req, res) => {
 });
 
 /**
+ * GET /api/project-roots
+ *
+ * Enumerate the distinct project ROOTS (codebases) present in the data with
+ * per-root observation/digest/insight counts and last-activity timestamp.
+ * Drives the dashboard's project-root selector for scoped consolidation runs.
+ * Observation roots prefer metadata.projectRoot, falling back to
+ * metadata.project, then 'unknown'; digests/insights read their project_root
+ * column. Shape mirrors ObservationConsolidator.listProjectRoots().
+ */
+app.get('/api/project-roots', (_req, res) => {
+  const db = getDb();
+  if (!db) return res.status(503).json({ error: 'Observations database unavailable' });
+  try {
+    const map = new Map();
+    const touch = (key, label) => {
+      const k = key || 'unknown';
+      if (!map.has(k)) {
+        map.set(k, {
+          projectRoot: k,
+          project: label || (k === 'unknown' ? 'unknown' : (k.split('/').filter(Boolean).pop() || k)),
+          observations: 0,
+          digests: 0,
+          insights: 0,
+          lastActivity: null,
+        });
+      }
+      return map.get(k);
+    };
+    const bump = (e, ts) => { if (ts && (!e.lastActivity || ts > e.lastActivity)) e.lastActivity = ts; };
+
+    try {
+      const obs = db.prepare(`
+        SELECT
+          COALESCE(json_extract(metadata, '$.projectRoot'), json_extract(metadata, '$.project'), 'unknown') AS root,
+          json_extract(metadata, '$.project') AS label,
+          created_at
+        FROM observations
+      `).all();
+      for (const r of obs) { const e = touch(r.root, r.label); e.observations++; bump(e, r.created_at); }
+    } catch { /* table may be missing */ }
+    try {
+      const digs = db.prepare("SELECT COALESCE(project_root, 'unknown') AS root, project, date FROM digests").all();
+      for (const r of digs) { const e = touch(r.root, r.project); e.digests++; bump(e, r.date); }
+    } catch { /* column/table may be missing */ }
+    try {
+      const ins = db.prepare("SELECT COALESCE(project_root, 'unknown') AS root, project, last_updated FROM insights").all();
+      for (const r of ins) { const e = touch(r.root, r.project); e.insights++; bump(e, r.last_updated); }
+    } catch { /* column/table may be missing */ }
+
+    const list = [...map.values()].sort((a, b) => (b.lastActivity || '').localeCompare(a.lastActivity || ''));
+    res.json(list);
+  } catch (err) {
+    process.stderr.write(`[obs-api] /project-roots error: ${err.message}\n`);
+    if (isCorruptionError(err)) invalidateDb();
+    res.status(500).json({ error: 'Failed to query project roots' });
+  }
+});
+
+/**
  * GET /api/projects/:project/coverage
  *
  * Per-project truthfulness + coverage summary used by the dashboard's
@@ -812,6 +877,14 @@ const PROJECT_COMPONENT_TAXONOMY = {
     { name: 'CodingPatterns', aliases: ['coding pattern', 'pattern'] },
     { name: 'LiveLoggingSystem', aliases: ['live logging', 'lsl', 'specstory', 'transcript monitor', 'etm'] },
     { name: 'LLMAbstraction', aliases: ['llm proxy', 'llm cli', 'rapid-llm-proxy', 'llmservice'] },
+  ],
+  'obs-memory': [
+    { name: 'SemanticAnalysis', aliases: ['semantic analysis', 'semantic-analysis', 'wave-analysis'] },
+    { name: 'KnowledgeManagement', aliases: ['knowledge management', 'knowledge graph', 'insight', 'digest', 'okb', 'ukb'] },
+    { name: 'ConstraintSystem', aliases: ['constraint', 'constraints'] },
+    { name: 'DockerizedServices', aliases: ['docker', 'container', 'compose'] },
+    { name: 'LiveLoggingSystem', aliases: ['live logging', 'lsl', 'specstory', 'transcript monitor', 'etm'] },
+    { name: 'LLMAbstraction', aliases: ['llm proxy', 'llm cli', 'rapid-llm-proxy', 'llmservice', 'llm abstraction'] },
   ],
   'rapid-automations': [
     { name: 'OKB', aliases: ['operational knowledge base', 'okb'] },
@@ -1022,7 +1095,10 @@ app.post('/api/retrieve', async (req, res) => {
 
 /**
  * POST /api/consolidation/run — trigger consolidation in-process.
- * Body: { date?: string, includeToday?: boolean, insightsOnly?: boolean }
+ * Body: { date?: string, includeToday?: boolean, insightsOnly?: boolean,
+ *         roots?: string[] | projectRoots?: string[] }
+ * When roots/projectRoots is set, the run is scoped to those project roots
+ * (each still summarized separately); empty/omitted = all roots.
  * Coalesces concurrent triggers — second caller attaches to the in-flight run.
  */
 app.post('/api/consolidation/run', async (req, res) => {
@@ -1031,7 +1107,12 @@ app.post('/api/consolidation/run', async (req, res) => {
   }
   const attached = !!_consolidationPromise;
   try {
-    const result = await runConsolidation(req.body || {});
+    const body = req.body || {};
+    const rawRoots = body.roots ?? body.projectRoots;
+    const roots = Array.isArray(rawRoots)
+      ? rawRoots.map((r) => String(r).trim()).filter(Boolean)
+      : null;
+    const result = await runConsolidation({ ...body, roots });
     res.json({ success: true, attached, ...result });
   } catch (err) {
     process.stderr.write(`[obs-api] /consolidation/run error: ${err.message}\n`);
