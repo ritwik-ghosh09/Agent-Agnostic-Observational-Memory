@@ -99,6 +99,14 @@ class SystemHealthAPIServer {
         this.lastKnownState = null; // Last WorkflowState from SSE stream (for new WS clients)
         this.previousStatus = null; // Track previous status for legacy event mapping
 
+        // Live Memory Context preview (typed-but-unsent CLI prompts).
+        // Dedicated WS server + client set, isolated from the UKB workflow WS so
+        // the live-context feed never couples to the workflow Redux pipeline.
+        this.liveWss = null;
+        this.liveContextClients = new Set();
+        this.liveContextBuffer = []; // ring buffer of recent entries for new clients
+        this.LIVE_CONTEXT_BUFFER_MAX = 50;
+
         // Auto-consolidation state
         this.autoConsolidationInterval = null;
         this.consolidationRunning = false;
@@ -320,6 +328,11 @@ class SystemHealthAPIServer {
 
         // Retrieval API (Phase 29)
         this.app.post('/api/retrieve', this.handleRetrieve.bind(this));
+
+        // Live Memory Context API — preview of Working + Observational memory for
+        // the prompt a user has typed but not yet submitted in the CLI.
+        this.app.post('/api/live-context/query', this.handleLiveContextQuery.bind(this));
+        this.app.get('/api/live-context', this.handleGetLiveContext.bind(this));
 
         // Error handling
         this.app.use(this.handleError.bind(this));
@@ -3443,6 +3456,8 @@ class SystemHealthAPIServer {
      */
     setupWebSocketServer() {
         this.wss = new WebSocketServer({ noServer: true });
+        // Dedicated WS server for the Live Context tab (no Redux/workflow coupling).
+        this.liveWss = new WebSocketServer({ noServer: true });
 
         // Handle WebSocket upgrade requests
         this.server.on('upgrade', (request, socket, head) => {
@@ -3452,9 +3467,40 @@ class SystemHealthAPIServer {
                 this.wss.handleUpgrade(request, socket, head, (ws) => {
                     this.wss.emit('connection', ws, request);
                 });
+            } else if (pathname === '/api/live-context/ws') {
+                this.liveWss.handleUpgrade(request, socket, head, (ws) => {
+                    this.liveWss.emit('connection', ws, request);
+                });
             } else {
                 socket.destroy();
             }
+        });
+
+        // Live Context clients: register, replay recent buffer, heartbeat.
+        this.liveWss.on('connection', (ws) => {
+            process.stderr.write('[LiveContext WS] Client connected\n');
+            this.liveContextClients.add(ws);
+
+            for (const entry of this.liveContextBuffer) {
+                if (ws.readyState === ws.OPEN) {
+                    ws.send(JSON.stringify({ type: 'LIVE_CONTEXT', payload: entry }));
+                }
+            }
+
+            const hb = setInterval(() => {
+                if (ws.readyState === ws.OPEN) {
+                    ws.send(JSON.stringify({ type: 'HEARTBEAT', payload: { ts: new Date().toISOString() } }));
+                }
+            }, 30000);
+
+            ws.on('close', () => {
+                this.liveContextClients.delete(ws);
+                clearInterval(hb);
+            });
+            ws.on('error', () => {
+                this.liveContextClients.delete(ws);
+                clearInterval(hb);
+            });
         });
 
         // Handle new WebSocket connections
@@ -4624,6 +4670,101 @@ class SystemHealthAPIServer {
         } catch (err) {
             process.stderr.write(`[RetrievalAPI] forward error: ${err.message}\n`);
             res.status(502).json({ error: 'Observations API unreachable' });
+        }
+    }
+
+    /**
+     * POST /api/live-context/query — receive a typed-but-unsent CLI draft from the
+     * live-query-monitor, retrieve matching Working + Observational memory, store
+     * it in the ring buffer, and broadcast to the "Live Context" tab.
+     *
+     * Body: { query, agent, sessionId, tmuxSession, project, cwd, budget, ts }
+     * Retrieval is delegated to the host Observations API (same upstream as
+     * handleRetrieve) so the container needs no direct DB access.
+     */
+    async handleLiveContextQuery(req, res) {
+        const body = req.body || {};
+        const query = typeof body.query === 'string' ? body.query.trim() : '';
+        if (!query) {
+            res.status(400).json({ error: 'query (string) is required' });
+            return;
+        }
+
+        const entry = {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            query: query.slice(0, 500),
+            agent: body.agent || 'agent',
+            sessionId: body.sessionId || null,
+            tmuxSession: body.tmuxSession || null,
+            project: body.project || null,
+            cwd: body.cwd || null,
+            typedAt: body.ts || null,
+            receivedAt: new Date().toISOString(),
+            markdown: '',
+            meta: null,
+            error: null,
+        };
+
+        const base = process.env.OBS_API_URL || 'http://host.docker.internal:12436';
+        try {
+            const upstream = await fetch(`${base}/api/retrieve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query: entry.query,
+                    budget: Number(body.budget) || 1000,
+                    context: {
+                        project: entry.project,
+                        cwd: entry.cwd,
+                        agent: entry.agent,
+                    },
+                }),
+            });
+            if (upstream.ok) {
+                const result = await upstream.json();
+                entry.markdown = result.markdown || '';
+                entry.meta = result.meta || null;
+            } else {
+                entry.error = `retrieval upstream ${upstream.status}`;
+            }
+        } catch (err) {
+            entry.error = `retrieval unreachable: ${err.message}`;
+            process.stderr.write(`[LiveContext] retrieval error: ${err.message}\n`);
+        }
+
+        // Store + broadcast even on retrieval error so the UI shows the live query.
+        this.liveContextBuffer.push(entry);
+        if (this.liveContextBuffer.length > this.LIVE_CONTEXT_BUFFER_MAX) {
+            this.liveContextBuffer.shift();
+        }
+        this.broadcastLiveContext(entry);
+
+        res.json({ ok: true, id: entry.id, hasContext: !entry.error && !!entry.markdown });
+    }
+
+    /**
+     * GET /api/live-context — return recent live-context entries (newest last) so
+     * a freshly loaded tab has history even before the next WS event arrives.
+     * Query param `limit` (default 20, max buffer size) caps the count.
+     */
+    handleGetLiveContext(req, res) {
+        const limit = Math.min(
+            Math.max(parseInt(req.query.limit, 10) || 20, 1),
+            this.LIVE_CONTEXT_BUFFER_MAX
+        );
+        const data = this.liveContextBuffer.slice(-limit);
+        res.json({ data, total: this.liveContextBuffer.length });
+    }
+
+    /**
+     * Broadcast a live-context entry to all connected Live Context WS clients.
+     */
+    broadcastLiveContext(entry) {
+        const message = JSON.stringify({ type: 'LIVE_CONTEXT', payload: entry });
+        for (const client of this.liveContextClients) {
+            if (client.readyState === client.OPEN) {
+                try { client.send(message); } catch { /* drop on send failure */ }
+            }
         }
     }
 }
