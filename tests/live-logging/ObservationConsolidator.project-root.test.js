@@ -67,6 +67,25 @@ describe('ObservationConsolidator project-root scoping', () => {
     expect(label).toBe('repoA');
   });
 
+  test('_projectKey label follows the resolved root, ignoring a stale basename', () => {
+    // A pre-fix observation captured the legacy 'coding' default label but its
+    // projectRoot resolves elsewhere. The label MUST follow the root basename
+    // so the digest/insight is not mislabeled (e.g. obs-memory data under
+    // 'coding') in the dashboard.
+    const { key, label } = c._projectKey(
+      obs({ project: 'coding', projectRoot: '/home/alice/work/obs-memory' })
+    );
+    expect(key).toBe('~/work/obs-memory');
+    expect(label).toBe('obs-memory');
+  });
+
+  test('_cadenceSlug flattens a root key into a filesystem-safe sentinel slug', () => {
+    expect(c._cadenceSlug('~/Ritwik/Memory/agent_agnostic/obs-memory'))
+      .toBe('_Ritwik_Memory_agent_agnostic_obs-memory');
+    expect(c._cadenceSlug('coding')).toBe('coding');
+    expect(c._cadenceSlug('')).toBe('unknown');
+  });
+
   test('two-root observation set partitions into disjoint buckets, roots selection filters', () => {
     const observations = [
       obs({ project: 'app', projectRoot: '/home/alice/teamX/app' }),

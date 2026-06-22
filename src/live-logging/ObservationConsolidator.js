@@ -694,15 +694,16 @@ export class ObservationConsolidator {
   _projectKey(obs) {
     const meta = obs && obs.metadata;
     const key = this._extractProjectRoot(meta);
-    let label = key === 'unknown'
+    // The display label MUST stay consistent with the partition key: it is the
+    // basename of the resolved root. We deliberately do NOT fall back to a
+    // stored `metadata.project` here — a stale basename (e.g. the legacy
+    // 'coding' default) would disagree with a root that resolved elsewhere and
+    // mislabel the digest/insight in the dashboard (obs-memory data shown under
+    // 'coding'). For consistent rows basename(key) already equals
+    // metadata.project, so dropping the override only fixes the stale cases.
+    const label = key === 'unknown'
       ? 'unknown'
       : (key.split('/').filter(Boolean).pop() || key);
-    try {
-      const m = typeof meta === 'string' ? JSON.parse(meta) : meta;
-      if (m && typeof m.project === 'string' && m.project && m.project !== 'unknown') {
-        label = m.project;
-      }
-    } catch { /* keep derived label */ }
     return { key, label };
   }
 
@@ -1664,7 +1665,7 @@ export class ObservationConsolidator {
    */
   _isCadenceDue(sentinelName, project, minDays) {
     const projectRoot = path.resolve(path.dirname(this.dbPath), '..');
-    const sentinelPath = path.join(projectRoot, '.data', `${sentinelName}-${project}.iso`);
+    const sentinelPath = path.join(projectRoot, '.data', `${sentinelName}-${this._cadenceSlug(project)}.iso`);
     try {
       const raw = fs.readFileSync(sentinelPath, 'utf8').trim();
       const last = new Date(raw).getTime();
@@ -1676,11 +1677,25 @@ export class ObservationConsolidator {
   }
 
   /**
+   * Flatten a cadence scope (now a project ROOT key such as
+   * `~/Ritwik/Memory/agent_agnostic/obs-memory`) into a filesystem-safe slug.
+   * Without this the `/` and `~` characters turn the sentinel into a nested
+   * path under directories that don't exist, so every write fails with ENOENT
+   * and the cadence guard never persists (verification/compaction re-run on
+   * every pass).
+   * @param {string} project
+   * @returns {string}
+   */
+  _cadenceSlug(project) {
+    return String(project || 'unknown').replace(/[^A-Za-z0-9._-]+/g, '_');
+  }
+
+  /**
    * Record that a cadence-guarded pass ran successfully.
    */
   _markCadenceDone(sentinelName, project) {
     const projectRoot = path.resolve(path.dirname(this.dbPath), '..');
-    const sentinelPath = path.join(projectRoot, '.data', `${sentinelName}-${project}.iso`);
+    const sentinelPath = path.join(projectRoot, '.data', `${sentinelName}-${this._cadenceSlug(project)}.iso`);
     try {
       fs.writeFileSync(sentinelPath, new Date().toISOString() + '\n');
     } catch (err) {
