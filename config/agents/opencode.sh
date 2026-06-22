@@ -14,6 +14,8 @@ AGENT_SESSION_VAR="OPENCODE_SESSION_ID"
 AGENT_TRANSCRIPT_FMT="opencode"
 AGENT_ENABLE_PIPE_CAPTURE=true
 AGENT_PROMPT_REGEX='>\s+([^\n\r]+)[\n\r]'
+# Live Memory Context preview (see config/agents/copilot.sh for details).
+AGENT_ENABLE_LIVE_CONTEXT=true
 AGENT_REQUIRES_COMMANDS="opencode"
 AGENT_INSTALL_COMMAND="go install github.com/opencode-ai/opencode@latest"
 

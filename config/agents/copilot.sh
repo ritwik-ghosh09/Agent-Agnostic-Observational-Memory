@@ -10,6 +10,9 @@ AGENT_SESSION_VAR="COPILOT_SESSION_ID"
 AGENT_TRANSCRIPT_FMT="copilot"
 AGENT_ENABLE_PIPE_CAPTURE=true
 AGENT_PROMPT_REGEX='❯\s+([^\n\r]+)[\n\r]'
+# Live Memory Context preview: capture the prompt being typed (pre-submission)
+# from the tmux pane and show retrieved memory in the dashboard "Live Context" tab.
+AGENT_ENABLE_LIVE_CONTEXT=true
 AGENT_REQUIRES_COMMANDS="copilot"
 # No AGENT_INSTALL_COMMAND — copilot install is org-specific
 

@@ -77,6 +77,7 @@ tmux_session_wrapper() {
     TRANSCRIPT_SOURCE_PROJECT CLAUDE_SESSION_ID COPILOT_SESSION_ID
     ANTHROPIC_API_KEY COPILOT_HTTP_ADAPTER_PID COPI_LOG_DIR
     AGENT_ENABLE_PIPE_CAPTURE AGENT_PROMPT_REGEX SESSION_ID
+    AGENT_ENABLE_LIVE_CONTEXT LQM_INPUT_MARKERS
     HTTP_PROXY HTTPS_PROXY http_proxy https_proxy NO_PROXY no_proxy
     OPENCODE_CONFIG_CONTENT
     PATH HOME USER SHELL TERM
@@ -129,12 +130,33 @@ tmux_session_wrapper() {
     fi
   fi
 
+  # --- Optional: live memory-context monitor (Working + Observational preview) ---
+  # Captures the prompt the user is TYPING (pre-submission) from the pane and
+  # pushes retrieved memory to the Health Dashboard "Live Context" tab. Works for
+  # every agent (capture-pane is independent of pipe-pane), gated by a flag.
+  local live_monitor_pid=""
+  if [ "${AGENT_ENABLE_LIVE_CONTEXT:-true}" = "true" ] && [ -f "${coding_repo}/scripts/live-query-monitor.js" ]; then
+    LQM_SESSION="$session_name" \
+      LQM_AGENT="$agent" \
+      CODING_REPO="$coding_repo" \
+      CODING_PROJECT_DIR="${CODING_PROJECT_DIR:-$transcript_project}" \
+      SESSION_ID="${SESSION_ID:-}" \
+      node "${coding_repo}/scripts/live-query-monitor.js" >/dev/null 2>&1 &
+    live_monitor_pid=$!
+    echo "[tmux-wrapper] Live memory-context monitor started (PID: $live_monitor_pid)"
+  fi
+
   # Attach — blocks until the agent exits or user detaches
   tmux attach-session -t "$session_name"
 
   # Cleanup: stop capture monitor if running
   if [ -n "$capture_monitor_pid" ] && kill -0 "$capture_monitor_pid" 2>/dev/null; then
     kill "$capture_monitor_pid" 2>/dev/null || true
+  fi
+
+  # Cleanup: stop live memory-context monitor if running
+  if [ -n "$live_monitor_pid" ] && kill -0 "$live_monitor_pid" 2>/dev/null; then
+    kill "$live_monitor_pid" 2>/dev/null || true
   fi
 
   # After attach returns, clean up the session if it still exists

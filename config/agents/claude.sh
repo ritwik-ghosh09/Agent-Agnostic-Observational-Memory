@@ -9,6 +9,9 @@ AGENT_SESSION_PREFIX="claude"
 AGENT_SESSION_VAR="CLAUDE_SESSION_ID"
 AGENT_TRANSCRIPT_FMT="claude"
 AGENT_ENABLE_PIPE_CAPTURE=false
+# Live Memory Context preview: capture-pane works independently of pipe-pane,
+# so the typed-prompt preview is enabled for Claude Code too.
+AGENT_ENABLE_LIVE_CONTEXT=true
 AGENT_REQUIRES_COMMANDS="claude"
 
 # Check for MCP config generation requirement

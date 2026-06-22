@@ -35,7 +35,7 @@ import http from 'node:http';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
-import { extractDraft } from '../src/live-logging/InputDraftExtractor.js';
+import { extractDraft, getProfile } from '../src/live-logging/InputDraftExtractor.js';
 
 const SESSION = process.env.LQM_SESSION;
 const AGENT = (process.env.LQM_AGENT || 'agent').toLowerCase();
@@ -55,6 +55,21 @@ if (!SESSION) {
 }
 
 const DASHBOARD_PORT = resolveDashboardPort();
+
+/**
+ * Resolve the input-draft extraction profile for this agent. `LQM_INPUT_MARKERS`
+ * (comma-separated) optionally overrides the prompt markers so operators can tune
+ * a CLI whose chrome changed without editing code.
+ */
+const PROFILE = (() => {
+  const base = getProfile(AGENT);
+  const override = process.env.LQM_INPUT_MARKERS;
+  if (override) {
+    const markers = override.split(',').map((s) => s.trim()).filter(Boolean);
+    if (markers.length) return { ...base, promptMarkers: markers };
+  }
+  return base;
+})();
 
 /** Parse an integer env var with a fallback. */
 function intEnv(name, fallback) {
@@ -167,7 +182,7 @@ async function tick() {
     return;
   }
 
-  const draft = extractDraft(capturePane(), AGENT);
+  const draft = extractDraft(capturePane(), PROFILE);
   const now = Date.now();
 
   if (draft !== lastDraft) {
