@@ -313,6 +313,7 @@ class SystemHealthAPIServer {
         this.app.get('/api/insights/projects', this.handleGetInsightProjects.bind(this));
         this.app.post('/api/insights/:id/resynthesize', this.handleResynthesizeInsight.bind(this));
         this.app.get('/api/projects/:project/coverage', this.handleGetProjectCoverage.bind(this));
+        this.app.get('/api/project-roots', this.handleGetProjectRoots.bind(this));
         this.app.get('/api/projects', this.handleGetAllProjects.bind(this));
         this.app.get('/api/consolidation/status', this.handleGetConsolidationStatus.bind(this));
         this.app.post('/api/consolidation/run', this.handleRunConsolidation.bind(this));
@@ -4521,6 +4522,16 @@ class SystemHealthAPIServer {
      */
     handleGetInsightProjects(req, res) {
         return this._forwardObsApi(req, res, '/api/insights/projects');
+    }
+
+    /**
+     * GET /api/project-roots — distinct project ROOTS (codebases) present, with
+     * per-root observation/digest/insight counts. Backs the Insights page's
+     * project-root multi-select so consolidation can be scoped per codebase.
+     * Forwards to the host obs-api which owns observations.db.
+     */
+    handleGetProjectRoots(req, res) {
+        return this._forwardObsApi(req, res, '/api/project-roots');
     }
 
     /**
