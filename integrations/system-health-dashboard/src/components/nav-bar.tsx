@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { useEffect, useState } from 'react'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 const API_PORT = process.env.SYSTEM_HEALTH_API_PORT || '3033'
 const API_BASE_URL = `http://localhost:${API_PORT}`
@@ -60,6 +61,7 @@ export function NavBar() {
             </Link>
           )
         })}
+        <ThemeToggle />
       </div>
     </nav>
   )

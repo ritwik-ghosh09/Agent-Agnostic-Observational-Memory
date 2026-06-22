@@ -11,6 +11,7 @@ import { NavBar } from './components/nav-bar'
 import { useEffect } from 'react'
 import { healthRefreshManager } from './store/middleware/healthRefreshMiddleware'
 import { initializeWorkflowConfig } from './store/slices/workflowConfigSlice'
+import { ThemeProvider } from './lib/theme'
 
 function AppContent() {
   useEffect(() => {
@@ -36,11 +37,13 @@ function AppContent() {
 
 function App() {
   return (
-    <Provider store={store}>
-      <BrowserRouter>
-        <AppContent />
-      </BrowserRouter>
-    </Provider>
+    <ThemeProvider>
+      <Provider store={store}>
+        <BrowserRouter>
+          <AppContent />
+        </BrowserRouter>
+      </Provider>
+    </ThemeProvider>
   )
 }
 
