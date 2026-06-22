@@ -226,6 +226,7 @@ src/**/*.d.ts
 !src/**/*.spec.js
 !src/retrieval/**/*.js
 !src/hooks/**/*.js
+!src/live-logging/**/*.js
 
 # Editor and IDE files (.vscode/ already ignored above with explicit exception
 # for settings.json so the workspace SCM ignore-list ships with the repo)
