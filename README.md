@@ -236,6 +236,63 @@ Real-time per-exchange observations from live coding sessions, inspired by the o
 
 ![Mastracode in VS Code](docs/images/coding-mastracode-vscode.png)
 
+##### Digests & Insights — Project-Root Scoped Consolidation
+
+Observations are consolidated in two LLM-driven stages, both **strictly scoped to a single codebase**:
+
+| Stage | Cadence | Output |
+|-------|---------|--------|
+| **Digest** | Daily | Thematic grouping of that day's observations into narrative summaries |
+| **Insight** | On demand / cron | Persistent reference articles synthesized from unsynthesized digests |
+
+**Partition key — `projectRoot`**: every observation records the absolute path of its codebase (e.g. `~/Ritwik/Memory/agent_agnostic/obs-memory`). The consolidator normalises this to a `~/…` key so observations from the same codebase always converge, regardless of whether they were captured with a full or redacted path. Two codebases that share a basename (e.g. two forks both called `obs-memory`) are kept separate.
+
+**Root derivation** (for observations without an explicit `projectRoot`):
+1. Extract from `metadata.projectRoot` captured at ingestion.
+2. Derive from `modifiedFiles`/`readFiles` paths matched against the local repo corpus.
+3. Fall back to the basename label as a provisional key.
+4. Unresolvable rows go to an isolated `unknown` bucket — never merged with any real root.
+
+```mermaid
+graph TD
+    O[Raw Observations<br/>metadata.projectRoot + label] --> K{Resolve root key}
+    K -->|metadata.projectRoot present| R1[Normalized root<br/>~/path/to/repo]
+    K -->|derive from file paths| R2[Local repo root]
+    K -->|no evidence| U[unknown bucket<br/>isolated — never merged]
+
+    R1 --> P[Partition by root]
+    R2 --> P
+    U --> P
+
+    P --> D[consolidateDay<br/>Digests — per root, per day]
+    D --> S[synthesizeInsights<br/>Insights — per root]
+    S --> V[verifyInsights / compactInsights<br/>claims checked against repo files]
+
+    SEL[Roots selection<br/>CLI ・ API ・ Dashboard] -.scopes.-> D
+    SEL -.scopes.-> S
+```
+
+**Selecting which root(s) to run:**
+
+```bash
+# CLI
+node scripts/consolidate-observations.js --list-roots
+node scripts/consolidate-observations.js --roots=~/path/to/repo
+node scripts/consolidate-observations.js --root=~/repoA --root=~/repoB
+
+# REST API
+curl http://localhost:12436/api/project-roots
+curl -X POST http://localhost:12436/api/consolidation/run \
+  -H 'Content-Type: application/json' \
+  -d '{"roots":["~/path/to/repo"]}'
+```
+
+The **Insights page** (`http://localhost:3032/insights`) includes a project-root multi-select so you can trigger a scoped consolidation run and view/filter insights by codebase directly from the dashboard.
+
+**Truthfulness & Confidence**: after synthesis each insight's backticked code/path claims are verified against the codebase files. `verificationRatio` (verified / total claims), `confidence` (LLM-assigned, decays over time), and `fresh`/`partial`/`stale` bands are surfaced in the Coverage tab.
+
+See [Consolidation & Project-Root Scoping](docs/observations/README.md#consolidation--project-root-scoping) for full details.
+
 ### Integration Components
 
 - **[System Health Dashboard](integrations/system-health-dashboard/)** - Real-time health visualization
@@ -385,6 +442,28 @@ curl -X POST http://localhost:8765/api/semantic/analyze-repository \
   -d '{"repository": ".", "depth": 25}'
 ```
 
+### Digests & Insights (Observational Memory)
+
+```bash
+# List codebases with observations
+node scripts/consolidate-observations.js --list-roots
+
+# Consolidate one codebase (digests + insights + verification)
+node scripts/consolidate-observations.js --roots=~/path/to/repo
+
+# Insights only for a specific root
+node scripts/consolidate-observations.js --insights --roots=~/path/to/repo
+
+# Via the Observations API
+curl http://localhost:12436/api/project-roots
+curl -X POST http://localhost:12436/api/consolidation/run \
+  -H 'Content-Type: application/json' \
+  -d '{"roots":["~/path/to/repo"]}'
+
+# Dashboard: http://localhost:3032/insights
+#   → use the project-root multi-select to scope and trigger runs
+```
+
 ---
 
 ## 🛠️ Configuration
@@ -471,6 +550,7 @@ Copyright © 2025 Frank Wornle
 - **LLM Providers & Local Models**: [docs/provider-configuration.md](docs/provider-configuration.md)
 - **Agent Abstraction API**: [docs/architecture/agent-abstraction-api.md](docs/architecture/agent-abstraction-api.md)
 - **Observational Memory**: [docs-content/core-systems/observational-memory.md](docs-content/core-systems/observational-memory.md)
+- **Digests & Insights Scoping**: [docs/observations/README.md](docs/observations/README.md#consolidation--project-root-scoping)
 - **Skills System**: [docs/skills-system.md](docs/skills-system.md)
 - **Adding Agents**: [docs/agent-integration-guide.md](docs/agent-integration-guide.md)
 - **Docker Architecture**: [docs/architecture-report.md](docs/architecture-report.md)
