@@ -3002,10 +3002,20 @@ Respond with EXACTLY this structure:
     // QUOTA/AUTH/PARSE error rather than the fetch aborting blind.
     const PROXY_TIMEOUT_MS = 300_000;
     const FETCH_TIMEOUT_MS = 360_000;
+    // Output-token ceiling. The proxy defaults to 4096, but a single insight
+    // chunk can synthesize several full reference articles (Purpose +
+    // Architecture + Key Files + Usage + Troubleshooting each), which routinely
+    // exceeds 4096 output tokens. At the default cap the copilot/sonnet
+    // response is truncated mid-`<insight>` block, so the trailing insights
+    // fail to parse and the chunk silently yields fewer (or zero) insights.
+    // Raise the cap to the provider-supported sonnet maximum so every
+    // `<insight>`/`<digest>` block in a chunk is emitted in full.
+    const MAX_OUTPUT_TOKENS = 8192;
     const requestBody = {
       process: processName,
       ...(this.provider ? { provider: this.provider } : {}),
       timeout: PROXY_TIMEOUT_MS,
+      maxTokens: MAX_OUTPUT_TOKENS,
       messages: [
         { role: 'system', content: prompt.system },
         { role: 'user', content: prompt.user },
