@@ -27,6 +27,15 @@ interface CodeVerification {
   referencedFiles?: string[]
 }
 
+interface ProjectRootInfo {
+  projectRoot: string
+  project: string
+  observations: number
+  digests: number
+  insights: number
+  lastActivity: string | null
+}
+
 interface InsightMetadata {
   codeVerification?: CodeVerification
   parentTopic?: string
@@ -426,11 +435,24 @@ export function InsightsPage() {
   const [consolidationResult, setConsolidationResult] = useState<string | null>(null)
   const [projects, setProjects] = useState<string[]>([])
   const [projectFilter, setProjectFilter] = useState<string>('')
+  const [projectRoots, setProjectRoots] = useState<ProjectRootInfo[]>([])
+  const [selectedRoots, setSelectedRoots] = useState<string[]>([])
+  const [rootsMenuOpen, setRootsMenuOpen] = useState(false)
 
   const fetchProjects = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/insights/projects`)
       if (res.ok) setProjects(await res.json())
+    } catch { /* ignore */ }
+  }, [])
+
+  const fetchProjectRoots = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/project-roots`)
+      if (res.ok) {
+        const data: ProjectRootInfo[] = await res.json()
+        setProjectRoots(Array.isArray(data) ? data : [])
+      }
     } catch { /* ignore */ }
   }, [])
 
@@ -468,6 +490,7 @@ export function InsightsPage() {
       const res = await fetch(`${API_BASE_URL}/api/consolidation/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(selectedRoots.length > 0 ? { roots: selectedRoots } : {}),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -485,7 +508,7 @@ export function InsightsPage() {
     await fetchInsights(query, projectFilter)
     await fetchStatus()
     setConsolidating(false)
-  }, [fetchInsights, fetchStatus, query, projectFilter])
+  }, [fetchInsights, fetchStatus, query, projectFilter, selectedRoots])
 
   useEffect(() => {
     fetchInsights('', projectFilter)
@@ -493,8 +516,9 @@ export function InsightsPage() {
 
   useEffect(() => {
     fetchProjects()
+    fetchProjectRoots()
     fetchStatus()
-  }, [fetchProjects, fetchStatus])
+  }, [fetchProjects, fetchProjectRoots, fetchStatus])
 
   // Hash-anchored scroll-into-view. Coverage tab tiles deep-link via
   // /insights#insight-<uuid>; React Router doesn't auto-scroll, so we
@@ -581,6 +605,69 @@ export function InsightsPage() {
           {status && (
             <div className="text-xs text-muted-foreground text-right">
               <div>{status.totalInsights} insights from {status.totalDigests} digests</div>
+            </div>
+          )}
+          {projectRoots.length > 1 && (
+            <div className="relative">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setRootsMenuOpen((o) => !o)}
+                aria-haspopup="listbox"
+                aria-expanded={rootsMenuOpen}
+                title="Scope the consolidation run to selected project roots (codebases)"
+              >
+                Roots: {selectedRoots.length === 0 ? 'All' : `${selectedRoots.length} selected`}
+              </Button>
+              {rootsMenuOpen && (
+                <div
+                  className="absolute right-0 z-20 mt-1 w-80 rounded border border-border bg-background p-2 shadow-md"
+                  role="listbox"
+                >
+                  <div className="flex items-center justify-between px-1 pb-2 text-xs text-muted-foreground">
+                    <span>Scope consolidation to codebases</span>
+                    {selectedRoots.length > 0 && (
+                      <button
+                        className="underline hover:text-foreground"
+                        onClick={() => setSelectedRoots([])}
+                      >
+                        Clear (all)
+                      </button>
+                    )}
+                  </div>
+                  <div className="max-h-64 overflow-auto">
+                    {projectRoots.map((r) => {
+                      const checked = selectedRoots.includes(r.projectRoot)
+                      return (
+                        <label
+                          key={r.projectRoot}
+                          className="flex cursor-pointer items-start gap-2 rounded px-1 py-1 text-sm hover:bg-muted"
+                        >
+                          <input
+                            type="checkbox"
+                            className="mt-1"
+                            checked={checked}
+                            onChange={() =>
+                              setSelectedRoots((prev) =>
+                                checked
+                                  ? prev.filter((x) => x !== r.projectRoot)
+                                  : [...prev, r.projectRoot]
+                              )
+                            }
+                          />
+                          <span className="min-w-0">
+                            <span className="block truncate font-medium">{r.project}</span>
+                            <span className="block truncate text-xs text-muted-foreground">{r.projectRoot}</span>
+                            <span className="block text-xs text-muted-foreground">
+                              obs {r.observations} · digests {r.digests} · insights {r.insights}
+                            </span>
+                          </span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {status && (status.undigested > 0 || status.inflight) && (
