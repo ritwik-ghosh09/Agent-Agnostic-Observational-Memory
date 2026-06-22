@@ -57,7 +57,7 @@ Dashboard UI (:3032) <-- Dashboard API (:3033, thin HTTP forwarders) -->
 2. **Fire-and-forget over HTTP** -- `ObservationApiClient.processMessages()` POSTs `/api/observations/messages` to the host obs-api on `localhost:12436` (never awaited, never blocks LSL)
 3. **LLM summarization** -- inside the obs-api, ObservationWriter calls the LLM proxy to generate a structured summary
 4. **Dedup check** -- DB-level dedup prevents storing duplicate summaries per agent
-5. **Storage** -- observation written to SQLite with metadata (agent, project, LLM model/provider, tokens). The obs-api holds the only RW handle in the system
+5. **Storage** -- observation written to SQLite with metadata (agent, `project` basename label, `projectRoot` absolute codebase root, LLM model/provider, tokens). The obs-api holds the only RW handle in the system
 6. **Dashboard** -- the dashboard inside the container forwards `/api/observations*` to the host obs-api at `host.docker.internal:12436`
 
 ## Supported Agents
@@ -66,10 +66,61 @@ All four agents generate observations:
 
 | Agent | Method | Project Detection |
 |-------|--------|-------------------|
-| **Claude Code** | ETM transcript monitoring | `path.basename(projectPath)` |
-| **GitHub Copilot** | ETM pipe-pane capture | `path.basename(projectPath)` |
-| **OpenCode** | ETM pipe-pane capture | `path.basename(projectPath)` |
-| **Mastracode** | ETM lifecycle hook transcripts | `path.basename(projectPath)` |
+| **Claude Code** | ETM transcript monitoring | `path.basename(projectPath)` label + `projectPath` root |
+| **GitHub Copilot** | ETM pipe-pane capture | `path.basename(projectPath)` label + `projectPath` root |
+| **OpenCode** | ETM pipe-pane capture | `path.basename(projectPath)` label + `projectPath` root |
+| **Mastracode** | ETM lifecycle hook transcripts | `path.basename(projectPath)` label + `projectPath` root |
+
+Each observation records two project fields: a human-readable `project`
+basename **label** (for display/filters) and an absolute `projectRoot` **key**
+(the codebase identity). All consolidation scoping uses the root key, so two
+codebases that happen to share a basename never collapse into one partition.
+
+## Consolidation & Project-Root Scoping
+
+Observations are consolidated in two LLM-driven stages — daily **Digests** and
+persistent **Insights** — both partitioned by **project root** (codebase), not
+by the basename label. This guarantees that observations from different
+codebases are never summarized together.
+
+- **Partition key** — the absolute `projectRoot`. `_normalizeRoot` collapses
+  the `/home/<user>/` or `/Users/<user>/` prefix to `~/` so redacted-historical
+  and raw-live paths for the same codebase converge to one key.
+- **Root derivation** (for rows lacking `projectRoot`) — derive from the
+  observation's own file paths (`modifiedFiles`/`readFiles`), matched against
+  the local repo corpus; undecidable rows stay an isolated `unknown` bucket
+  that is **never** merged with a real root.
+- **Selection** — a run can be scoped to chosen roots; with no selection (the
+  cron/auto-trigger default) every root is processed, each scoped separately.
+  - CLI: `--list-roots`, `--roots=<absA>,<absB>`, `--root=<abs>` (repeatable)
+  - API: `GET /api/project-roots`; `POST /api/consolidation/run` accepts
+    `{ roots: [...] }`
+  - Dashboard: a project-root multi-select on the Insights page posts the
+    selected roots to the scoped run endpoint.
+- **Migration** — `scripts/migrate-scope-by-project-root.mjs` backfills
+  `projectRoot` for existing observations, archives current digests/insights,
+  and regenerates them per root (`--dry-run` by default; `--execute`,
+  `--roots=`, `--no-regenerate`).
+
+```mermaid
+graph TD
+    O[Observations<br/>metadata.projectRoot + project label] --> K{Resolve project root key}
+    K -->|metadata.projectRoot| R1[Normalized root ~/...]
+    K -->|derive from file paths| R2[Local repo root]
+    K -->|no evidence| U[unknown bucket<br/>isolated, never merged]
+
+    R1 --> P[Partition by root]
+    R2 --> P
+    U --> P
+
+    P --> D[consolidateDay<br/>Digests per root]
+    D --> S[synthesizeInsights<br/>Insights per root]
+    S --> V[verifyInsights /<br/>compactInsights per root]
+
+    SEL[Roots selection<br/>CLI / API / Dashboard] -.scopes.-> D
+    SEL -.scopes.-> S
+```
+
 
 ## Dashboard
 
