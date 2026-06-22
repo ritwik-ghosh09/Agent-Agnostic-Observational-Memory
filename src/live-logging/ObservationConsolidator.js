@@ -617,6 +617,58 @@ export class ObservationConsolidator {
       // bucket). Never returns the legacy 'coding' default.
       return base;
     }
+    // No basename label at all (null-project row). Try to recognise the
+    // observation's files as belonging to the local repo this consolidator
+    // runs inside; otherwise it stays an isolated 'unknown'.
+    return this._deriveRootFromFiles(m);
+  }
+
+  /**
+   * Lazily resolve the local repository this consolidator runs inside: its
+   * normalized root key and the set of tracked (relative) paths. Used to
+   * attribute null-project observations whose files belong to this repo.
+   * @returns {{ root: string|null, paths: Set<string>|null }}
+   */
+  _getLocalRepo() {
+    if (this._localRepo) return this._localRepo;
+    let root = null;
+    let paths = null;
+    try {
+      const projectRoot = path.resolve(path.dirname(this.dbPath), '..');
+      root = this._normalizeRoot(projectRoot);
+      paths = new Set(ObservationSanitizer.loadRepoPaths(projectRoot));
+    } catch { /* non-fatal — leave null so derivation stays 'unknown' */ }
+    this._localRepo = { root, paths };
+    return this._localRepo;
+  }
+
+  /**
+   * Derive a project root for an observation with no basename label by
+   * checking whether any of its file paths match a tracked file in the local
+   * repo corpus. Returns the local repo root on a match, else 'unknown'.
+   * @param {Object} m - parsed metadata object
+   * @returns {string}
+   */
+  _deriveRootFromFiles(m) {
+    if (!m || typeof m !== 'object') return 'unknown';
+    const files = [
+      ...(Array.isArray(m.modifiedFiles) ? m.modifiedFiles : []),
+      ...(Array.isArray(m.readFiles) ? m.readFiles : []),
+    ];
+    if (files.length === 0) return 'unknown';
+    const { root, paths } = this._getLocalRepo();
+    if (!root || !paths || paths.size === 0) return 'unknown';
+    for (const f of files) {
+      if (typeof f !== 'string') continue;
+      const norm = this._normalizeRoot(f) || f;
+      const segs = norm.split('/').filter(Boolean);
+      // Test progressively-shorter trailing suffixes (>=2 segments) against
+      // the tracked-path corpus; a hit means the file lives in this repo.
+      for (let i = Math.max(0, segs.length - 8); i < segs.length - 1; i++) {
+        const rel = segs.slice(i).join('/');
+        if (paths.has(rel)) return root;
+      }
+    }
     return 'unknown';
   }
 
@@ -662,52 +714,44 @@ export class ObservationConsolidator {
   }
 
   /**
-   * Backfill `metadata.project` for any null-project observations in the
-   * batch. Mutates in-place. The classifier only signals coding-vs-other,
-   * so positive results promote to 'coding'; everything else stays
-   * 'unknown'. Persists the resolved project back to the DB so future
-   * passes don't re-classify the same row.
+   * Backfill `metadata.projectRoot` (+ basename `project`) for any
+   * unattributed observations in the batch. Mutates in-place and persists.
+   * The root is derived from each observation's own captured context (file
+   * paths matched against the local repo corpus). Rows whose root cannot be
+   * decided stay an explicit, isolated `unknown` — they are NEVER collapsed
+   * into a shared bucket (the legacy 'coding' default is gone). Persists the
+   * resolved root back to the DB so future passes don't re-derive the row.
    */
   async _backfillProjectsInBatch(observations) {
     const nulls = observations.filter(o => this._extractProject(o.metadata) === 'unknown'
       && !this._isMetadataExplicitUnknown(o.metadata));
     if (nulls.length === 0) return;
 
-    const classifier = await this._getClassifier();
-    if (!classifier) {
-      process.stderr.write(`[Consolidator] Skipping classifier backfill — classifier unavailable\n`);
-      return;
-    }
-
     const update = this.db.prepare(`
       UPDATE observations
-      SET metadata = json_set(COALESCE(metadata, '{}'), '$.project', ?)
+      SET metadata = json_set(COALESCE(metadata, '{}'), '$.project', ?, '$.projectRoot', ?)
       WHERE id = ?
     `);
     let promoted = 0;
     for (const o of nulls) {
-      let project = 'unknown';
-      try {
-        const r = await classifier.classify({
-          userMessage: o.summary,
-          timestamp: o.created_at || new Date().toISOString(),
-        });
-        if (r?.isCoding) {
-          project = 'coding';
-          promoted++;
-        }
-      } catch { /* leave as unknown */ }
-      try { update.run(project, o.id); } catch { /* ok */ }
-      // Reflect the resolved project back into the in-memory row so the
-      // partition step that follows sees the new label.
+      let root = 'unknown';
+      try { root = this._extractProjectRoot(o.metadata); } catch { /* unknown */ }
+      const project = root === 'unknown'
+        ? 'unknown'
+        : (root.split('/').filter(Boolean).pop() || root);
+      if (root !== 'unknown') promoted++;
+      try { update.run(project, root, o.id); } catch { /* ok */ }
+      // Reflect the resolved root back into the in-memory row so the
+      // partition step that follows sees the new attribution.
       try {
         const m = o.metadata ? JSON.parse(o.metadata) : {};
         m.project = project;
+        m.projectRoot = root;
         o.metadata = JSON.stringify(m);
       } catch { /* keep original metadata; partitioning will fall back to 'unknown' */ }
     }
     if (promoted > 0) {
-      process.stderr.write(`[Consolidator] Classifier backfill promoted ${promoted}/${nulls.length} null-project obs to 'coding'\n`);
+      process.stderr.write(`[Consolidator] Root backfill attributed ${promoted}/${nulls.length} unlabeled obs to a project root\n`);
     }
   }
 
