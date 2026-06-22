@@ -231,7 +231,12 @@ export function extractDraft(captureText, agent, opts = {}) {
   const profile = getProfile(agent);
   const { scanLines = 18, minLength = 3, maxLength = 500 } = opts;
 
-  const allLines = captureText.replace(/\r/g, '').split('\n');
+  const rawLines = captureText.replace(/\r/g, '').split('\n');
+  // Drop trailing blank rows that tmux pads to the pane height so the input box
+  // sits at the effective bottom of our scan window.
+  let end = rawLines.length;
+  while (end > 0 && rawLines[end - 1].trim() === '') end--;
+  const allLines = rawLines.slice(0, end);
   const start = Math.max(0, allLines.length - scanLines);
   const region = allLines.slice(start);
 
