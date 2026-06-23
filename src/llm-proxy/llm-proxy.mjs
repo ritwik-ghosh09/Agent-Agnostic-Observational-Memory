@@ -225,6 +225,15 @@ server.listen(PUBLIC_PORT, '0.0.0.0', () => {
   log(`Token-usage front proxy listening on http://0.0.0.0:${PUBLIC_PORT} (upstream :${INTERNAL_PORT})`);
 });
 
+// Without an 'error' handler, a listen failure (e.g. EADDRINUSE when a previous
+// instance has not yet released the port) is emitted as an unhandled 'error'
+// event and crashes the process with a noisy stack trace. Exit cleanly instead;
+// the health-coordinator's liveness watchdog will respawn us once the port frees.
+server.on('error', (err) => {
+  logErr(`front server error: ${err.code || ''} ${err.message}`.trim());
+  process.exit(1);
+});
+
 function shutdown() {
   try { store.flush(); } catch { /* best effort */ }
   server.close();
