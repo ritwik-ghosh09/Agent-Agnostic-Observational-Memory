@@ -32,6 +32,27 @@ interface WsMessage {
   payload?: unknown
 }
 
+/** Live typing draft streamed to the heading bar (transient). */
+export interface LiveDraft {
+  query: string
+  agent: string
+  sessionId: string | null
+  project: string | null
+  typedAt: string | null
+  receivedAt: string
+}
+
+/** A query the user actually submitted to the CLI (Recent Queries log entry). */
+export interface LiveSubmitted {
+  id: string
+  query: string
+  agent: string
+  sessionId: string | null
+  project: string | null
+  submittedAt: string | null
+  receivedAt: string
+}
+
 const API_PORT = process.env.SYSTEM_HEALTH_API_PORT || '3033'
 const MAX_ENTRIES = 50
 
@@ -57,6 +78,8 @@ function httpBase(): string {
  */
 export function useLiveContextWebSocket() {
   const [entries, setEntries] = useState<LiveContextEntry[]>([])
+  const [draft, setDraft] = useState<LiveDraft | null>(null)
+  const [submitted, setSubmitted] = useState<LiveSubmitted[]>([])
   const [isConnected, setIsConnected] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -68,6 +91,14 @@ export function useLiveContextWebSocket() {
     setEntries((prev) => {
       if (prev.some((e) => e.id === entry.id)) return prev
       return [entry, ...prev].slice(0, MAX_ENTRIES)
+    })
+  }, [])
+
+  const addSubmitted = useCallback((item: LiveSubmitted) => {
+    if (!item || !item.id) return
+    setSubmitted((prev) => {
+      if (prev.some((e) => e.id === item.id)) return prev
+      return [item, ...prev].slice(0, MAX_ENTRIES)
     })
   }, [])
 
@@ -95,6 +126,12 @@ export function useLiveContextWebSocket() {
         const msg = JSON.parse(ev.data) as WsMessage
         if (msg.type === 'LIVE_CONTEXT' && msg.payload) {
           addEntry(msg.payload as LiveContextEntry)
+        } else if (msg.type === 'LIVE_DRAFT' && msg.payload) {
+          const d = msg.payload as LiveDraft
+          // Empty query clears the heading.
+          setDraft(d.query ? d : null)
+        } else if (msg.type === 'LIVE_SUBMITTED' && msg.payload) {
+          addSubmitted(msg.payload as LiveSubmitted)
         }
       } catch {
         /* ignore malformed frames */
@@ -110,7 +147,7 @@ export function useLiveContextWebSocket() {
     ws.onerror = () => {
       try { ws.close() } catch { /* noop */ }
     }
-  }, [addEntry])
+  }, [addEntry, addSubmitted])
 
   const scheduleReconnect = useCallback(() => {
     if (closedRef.current) return
@@ -135,6 +172,19 @@ export function useLiveContextWebSocket() {
       })
       .catch(() => { /* fail-open: live feed still works */ })
 
+    // Seed the submitted-query log for the Recent Queries sidebar.
+    fetch(`${httpBase()}/api/live-context/submitted?limit=${MAX_ENTRIES}`)
+      .then((r) => (r.ok ? r.json() : { data: [] }))
+      .then((d: { data?: LiveSubmitted[] }) => {
+        const seed = (d.data || []).slice().reverse() // newest first
+        setSubmitted((prev) => {
+          const ids = new Set(prev.map((e) => e.id))
+          const merged = [...seed.filter((e) => !ids.has(e.id)), ...prev]
+          return merged.slice(0, MAX_ENTRIES)
+        })
+      })
+      .catch(() => { /* fail-open */ })
+
     connect()
 
     return () => {
@@ -147,5 +197,5 @@ export function useLiveContextWebSocket() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  return { entries, isConnected, clear }
+  return { entries, draft, submitted, isConnected, clear }
 }
