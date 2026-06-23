@@ -106,6 +106,9 @@ class SystemHealthAPIServer {
         this.liveContextClients = new Set();
         this.liveContextBuffer = []; // ring buffer of recent entries for new clients
         this.LIVE_CONTEXT_BUFFER_MAX = 50;
+        this.currentLiveDraft = null; // latest streamed draft (transient, heading bar)
+        this.submittedBuffer = []; // ring buffer of submitted ("sent to CLI") queries
+        this.SUBMITTED_BUFFER_MAX = 50;
 
         // Auto-consolidation state
         this.autoConsolidationInterval = null;
@@ -333,6 +336,10 @@ class SystemHealthAPIServer {
         // the prompt a user has typed but not yet submitted in the CLI.
         this.app.post('/api/live-context/query', this.handleLiveContextQuery.bind(this));
         this.app.get('/api/live-context', this.handleGetLiveContext.bind(this));
+        // Live typing draft (streamed to the heading bar) + submitted-query log.
+        this.app.post('/api/live-context/draft', this.handleLiveContextDraft.bind(this));
+        this.app.post('/api/live-context/submitted', this.handleLiveContextSubmitted.bind(this));
+        this.app.get('/api/live-context/submitted', this.handleGetLiveContextSubmitted.bind(this));
 
         // Error handling
         this.app.use(this.handleError.bind(this));
@@ -3487,6 +3494,18 @@ class SystemHealthAPIServer {
                 }
             }
 
+            // Replay submitted-query log so the "Recent Queries" sidebar is populated.
+            for (const item of this.submittedBuffer) {
+                if (ws.readyState === ws.OPEN) {
+                    ws.send(JSON.stringify({ type: 'LIVE_SUBMITTED', payload: item }));
+                }
+            }
+
+            // Replay the in-progress draft so the heading bar shows current typing.
+            if (this.currentLiveDraft && ws.readyState === ws.OPEN) {
+                ws.send(JSON.stringify({ type: 'LIVE_DRAFT', payload: this.currentLiveDraft }));
+            }
+
             const hb = setInterval(() => {
                 if (ws.readyState === ws.OPEN) {
                     ws.send(JSON.stringify({ type: 'HEARTBEAT', payload: { ts: new Date().toISOString() } }));
@@ -4757,15 +4776,97 @@ class SystemHealthAPIServer {
     }
 
     /**
-     * Broadcast a live-context entry to all connected Live Context WS clients.
+     * POST /api/live-context/draft — receive the prompt the user is *currently
+     * typing* (streamed on every change by the live-query-monitor) and broadcast
+     * it to the heading bar. Transient: stored only as `currentLiveDraft`, never
+     * buffered, never retrieved. An empty/whitespace query clears the heading.
+     *
+     * Body: { query, agent, sessionId, project, ts }
      */
-    broadcastLiveContext(entry) {
-        const message = JSON.stringify({ type: 'LIVE_CONTEXT', payload: entry });
+    handleLiveContextDraft(req, res) {
+        const body = req.body || {};
+        const query = typeof body.query === 'string' ? body.query.trim() : '';
+
+        const payload = {
+            query: query.slice(0, 500),
+            agent: body.agent || 'agent',
+            sessionId: body.sessionId || null,
+            project: body.project || null,
+            typedAt: body.ts || null,
+            receivedAt: new Date().toISOString(),
+        };
+
+        // Keep the latest draft (or null when cleared) for WS-connect replay.
+        this.currentLiveDraft = query ? payload : null;
+        this.broadcastLive('LIVE_DRAFT', payload);
+
+        res.json({ ok: true });
+    }
+
+    /**
+     * POST /api/live-context/submitted — record a query the user actually sent to
+     * the CLI (the input box cleared after Enter). Appended to the "Recent
+     * Queries" log buffer and broadcast. No retrieval is performed.
+     *
+     * Body: { query, agent, sessionId, project, ts }
+     */
+    handleLiveContextSubmitted(req, res) {
+        const body = req.body || {};
+        const query = typeof body.query === 'string' ? body.query.trim() : '';
+        if (!query) {
+            res.status(400).json({ error: 'query (string) is required' });
+            return;
+        }
+
+        const item = {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            query: query.slice(0, 500),
+            agent: body.agent || 'agent',
+            sessionId: body.sessionId || null,
+            project: body.project || null,
+            submittedAt: body.ts || null,
+            receivedAt: new Date().toISOString(),
+        };
+
+        this.submittedBuffer.push(item);
+        if (this.submittedBuffer.length > this.SUBMITTED_BUFFER_MAX) {
+            this.submittedBuffer.shift();
+        }
+        this.broadcastLive('LIVE_SUBMITTED', item);
+
+        res.json({ ok: true, id: item.id });
+    }
+
+    /**
+     * GET /api/live-context/submitted — return the submitted-query log (newest
+     * last) so a freshly loaded tab can seed its "Recent Queries" sidebar.
+     */
+    handleGetLiveContextSubmitted(req, res) {
+        const limit = Math.min(
+            Math.max(parseInt(req.query.limit, 10) || 50, 1),
+            this.SUBMITTED_BUFFER_MAX
+        );
+        const data = this.submittedBuffer.slice(-limit);
+        res.json({ data, total: this.submittedBuffer.length });
+    }
+
+    /**
+     * Broadcast a typed message to all connected Live Context WS clients.
+     */
+    broadcastLive(type, payload) {
+        const message = JSON.stringify({ type, payload });
         for (const client of this.liveContextClients) {
             if (client.readyState === client.OPEN) {
                 try { client.send(message); } catch { /* drop on send failure */ }
             }
         }
+    }
+
+    /**
+     * Broadcast a live-context entry to all connected Live Context WS clients.
+     */
+    broadcastLiveContext(entry) {
+        this.broadcastLive('LIVE_CONTEXT', entry);
     }
 }
 
