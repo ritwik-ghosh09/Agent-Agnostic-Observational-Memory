@@ -1,12 +1,11 @@
 import { Fragment } from 'react'
 import { useLiveContextWebSocket } from '@/hooks/useLiveContextWebSocket'
-import type { LiveContextEntry } from '@/hooks/useLiveContextWebSocket'
+import type { LiveContextEntry, LiveSubmitted } from '@/hooks/useLiveContextWebSocket'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Brain, Database, Radio, Terminal, Clock, AlertTriangle } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { Brain, Database, Radio, Terminal, AlertTriangle, Send, Loader2 } from 'lucide-react'
 
 const WORKING_HEADERS = ['Working Memory', 'Previous Session']
 const OBSERVATIONAL_HEADERS = ['Insights', 'Digests', 'Entities', 'Observations']
@@ -154,79 +153,139 @@ function MemoryColumn({
   )
 }
 
-function EntryDetail({ entry }: { entry: LiveContextEntry }) {
-  const sections = splitSections(entry.markdown)
+/** Two-column Working / Observational memory for the live query's retrieval. */
+function MemoryColumns({ entry, typing }: { entry: LiveContextEntry | null; typing: boolean }) {
+  const sections = entry ? splitSections(entry.markdown) : []
   const working = sections.filter((s) => WORKING_HEADERS.includes(s.title))
   const observational = sections.filter((s) => OBSERVATIONAL_HEADERS.includes(s.title))
   const other = sections.filter(
     (s) => !WORKING_HEADERS.includes(s.title) && !OBSERVATIONAL_HEADERS.includes(s.title)
   )
 
+  const emptyFor = (kind: 'working' | 'observational') => {
+    if (typing) return 'Retrieving after you pause…'
+    if (!entry) return 'Start typing a prompt in the CLI to preview its memory.'
+    return kind === 'working'
+      ? 'No working-memory context for this query.'
+      : 'No observational matches for this query.'
+  }
+
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardContent className="pt-4">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <Badge className={AGENT_COLORS[entry.agent] || 'bg-muted'}>{entry.agent}</Badge>
-            {entry.project && (
-              <span className="flex items-center gap-1">
-                <Terminal className="h-3 w-3" /> {entry.project}
-              </span>
-            )}
-            <span className="flex items-center gap-1">
-              <Clock className="h-3 w-3" /> {relativeTime(entry.receivedAt)}
-            </span>
-            {entry.meta?.latency_ms != null && <span>{entry.meta.latency_ms}ms</span>}
-            {entry.meta?.results_count != null && <span>{entry.meta.results_count} results</span>}
-          </div>
-          <div className="mt-2 text-lg font-medium">
-            <span className="text-muted-foreground">❯ </span>
-            {entry.query}
-          </div>
-        </CardContent>
-      </Card>
-
-      {entry.error && (
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>Retrieval unavailable: {entry.error}</AlertDescription>
-        </Alert>
-      )}
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <MemoryColumn
-          icon={<Brain className="h-4 w-4" />}
-          title="Working Memory"
-          accent="text-violet-500"
-          sections={working}
-          empty="No working-memory context for this query."
-        />
-        <MemoryColumn
-          icon={<Database className="h-4 w-4" />}
-          title="Observational Memory"
-          accent="text-sky-500"
-          sections={observational.length ? observational : other}
-          empty="No observational matches for this query."
-        />
-      </div>
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <MemoryColumn
+        icon={<Brain className="h-4 w-4" />}
+        title="Working Memory"
+        accent="text-violet-500"
+        sections={typing ? [] : working}
+        empty={emptyFor('working')}
+      />
+      <MemoryColumn
+        icon={<Database className="h-4 w-4" />}
+        title="Observational Memory"
+        accent="text-sky-500"
+        sections={typing ? [] : observational.length ? observational : other}
+        empty={emptyFor('observational')}
+      />
     </div>
   )
 }
 
+/** Main heading bar — streams the prompt the user is typing in the CLI. */
+function HeadingCard({
+  query,
+  agent,
+  project,
+  isTyping,
+  latencyMs,
+  resultsCount,
+}: {
+  query: string
+  agent: string
+  project: string | null
+  isTyping: boolean
+  latencyMs: number | null
+  resultsCount: number | null
+}) {
+  return (
+    <Card>
+      <CardContent className="pt-4">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          {agent && <Badge className={AGENT_COLORS[agent] || 'bg-muted'}>{agent}</Badge>}
+          {project && (
+            <span className="flex items-center gap-1">
+              <Terminal className="h-3 w-3" /> {project}
+            </span>
+          )}
+          <Badge
+            variant="outline"
+            className={
+              isTyping ? 'border-amber-500 text-amber-600' : 'border-emerald-500 text-emerald-600'
+            }
+          >
+            {isTyping ? (
+              <>
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" /> typing…
+              </>
+            ) : (
+              'retrieved'
+            )}
+          </Badge>
+          {!isTyping && latencyMs != null && <span>{latencyMs}ms</span>}
+          {!isTyping && resultsCount != null && <span>{resultsCount} results</span>}
+        </div>
+        <div className="mt-2 text-lg font-medium">
+          <span className="text-muted-foreground">❯ </span>
+          {query || <span className="italic text-muted-foreground">Waiting for typing…</span>}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+/** Left sidebar — a read-only log of queries actually submitted to the CLI. */
+function RecentQueries({ items }: { items: LiveSubmitted[] }) {
+  return (
+    <Card className="hidden flex-col overflow-hidden md:flex">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <Send className="h-3.5 w-3.5" /> Recent Queries
+        </CardTitle>
+      </CardHeader>
+      <ScrollArea className="flex-1">
+        <div className="space-y-1 p-2">
+          {items.length === 0 ? (
+            <p className="px-2 py-3 text-xs italic text-muted-foreground">
+              No submitted queries yet. Press Enter in the CLI to log one here.
+            </p>
+          ) : (
+            items.map((e) => (
+              <div key={e.id} className="rounded-md px-3 py-2 text-left text-sm">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                  <span className="truncate text-foreground/90">{e.query}</span>
+                </div>
+                <div className="mt-0.5 flex items-center gap-2 text-[10px] uppercase text-muted-foreground/70">
+                  <span>{e.agent}</span>
+                  <span>{relativeTime(e.receivedAt)}</span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </ScrollArea>
+    </Card>
+  )
+}
+
 export function LiveContextPage() {
-  const { entries, isConnected } = useLiveContextWebSocket()
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const { entries, draft, submitted, isConnected } = useLiveContextWebSocket()
 
-  // Auto-follow the newest entry unless the user has pinned an older one.
-  useEffect(() => {
-    if (entries.length === 0) return
-    setSelectedId((cur) => {
-      if (cur && entries.some((e) => e.id === cur)) return cur
-      return entries[0].id
-    })
-  }, [entries])
-
-  const selected = entries.find((e) => e.id === selectedId) || entries[0] || null
+  const latest = entries[0] || null
+  // "typing" = a live draft exists that differs from the last retrieved query.
+  const typing = !!draft && draft.query.length > 0 && draft.query !== latest?.query
+  const headingQuery = draft?.query || latest?.query || ''
+  const headingAgent = draft?.agent || latest?.agent || ''
+  const headingProject = draft?.project || latest?.project || null
 
   return (
     <div className="flex h-[calc(100vh-3rem)] flex-col gap-4 p-6">
@@ -252,61 +311,33 @@ export function LiveContextPage() {
         </Badge>
       </div>
 
-      {entries.length === 0 ? (
-        <Card className="flex flex-1 items-center justify-center">
-          <CardContent className="pt-6 text-center text-muted-foreground">
-            <Radio className="mx-auto mb-3 h-8 w-8 opacity-40" />
-            <p className="font-medium">Waiting for a typed query…</p>
-            <p className="mt-1 text-sm">
-              Start typing a prompt in Copilot CLI, Claude Code, or OpenCode. The matching
-              Working &amp; Observational memory will appear here in real time.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid flex-1 grid-cols-1 gap-4 overflow-hidden md:grid-cols-[260px_1fr]">
-          {/* History sidebar */}
-          <Card className="hidden flex-col overflow-hidden md:flex">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Recent Queries</CardTitle>
-            </CardHeader>
-            <ScrollArea className="flex-1">
-              <div className="space-y-1 p-2">
-                {entries.map((e) => {
-                  const active = e.id === selected?.id
-                  return (
-                    <button
-                      key={e.id}
-                      onClick={() => setSelectedId(e.id)}
-                      className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
-                        active ? 'bg-primary/10 text-foreground' : 'hover:bg-muted text-muted-foreground'
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                            e.error ? 'bg-destructive' : 'bg-emerald-500'
-                          }`}
-                        />
-                        <span className="truncate">{e.query}</span>
-                      </div>
-                      <div className="mt-0.5 flex items-center gap-2 text-[10px] uppercase text-muted-foreground/70">
-                        <span>{e.agent}</span>
-                        <span>{relativeTime(e.receivedAt)}</span>
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-            </ScrollArea>
-          </Card>
+      <div className="grid flex-1 grid-cols-1 gap-4 overflow-hidden md:grid-cols-[260px_1fr]">
+        {/* Submitted-query log */}
+        <RecentQueries items={submitted} />
 
-          {/* Detail */}
-          <ScrollArea className="overflow-hidden">
-            <div className="pr-2">{selected && <EntryDetail entry={selected} />}</div>
-          </ScrollArea>
-        </div>
-      )}
+        {/* Heading (live typing) + memory columns for the live query */}
+        <ScrollArea className="overflow-hidden">
+          <div className="space-y-4 pr-2">
+            <HeadingCard
+              query={headingQuery}
+              agent={headingAgent}
+              project={headingProject}
+              isTyping={typing}
+              latencyMs={latest?.meta?.latency_ms ?? null}
+              resultsCount={latest?.meta?.results_count ?? null}
+            />
+
+            {latest?.error && !typing && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>Retrieval unavailable: {latest.error}</AlertDescription>
+              </Alert>
+            )}
+
+            <MemoryColumns entry={typing ? null : latest} typing={typing} />
+          </div>
+        </ScrollArea>
+      </div>
     </div>
   )
 }
