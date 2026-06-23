@@ -19,6 +19,7 @@ import { KeywordSearch } from './keyword-search.js';
 import { rrfFuse, buildRecencyList, TIER_WEIGHTS, loadAgentProfiles } from './rrf-fusion.js';
 import { assembleBudgetedMarkdown } from './token-budget.js';
 import { buildWorkingMemory } from './working-memory.js';
+import { FeedbackStore, aggregateLearnedSignals } from './feedback-store.js';
 
 /** Qdrant collection names matching embedding-config.json. */
 const COLLECTIONS = ['insights', 'digests', 'kg_entities', 'observations'];
@@ -30,7 +31,7 @@ const RANKED_RESULT_SNIPPET_CHARS = 200;
  *
  * @param {object} item - RRF-fused retrieval candidate
  * @param {number} index - Zero-based index after final sorting
- * @returns {{ id: string, tier: string, rank: number, rawScore: number, rrfScore: number, tierWeight: number, snippet: string, title: string }}
+ * @returns {{ id: string, tier: string, rank: number, rawScore: number, rrfScore: number, tierWeight: number, snippet: string, title: string, learnedRerank?: object }}
  */
 function toRankedResult(item, index) {
   const payload = item.payload || {};
@@ -40,7 +41,7 @@ function toRankedResult(item, index) {
     .trim()
     .slice(0, RANKED_RESULT_SNIPPET_CHARS);
 
-  return {
+  const ranked = {
     id: item.id,
     tier: item.tier,
     rank: index + 1,
@@ -50,6 +51,13 @@ function toRankedResult(item, index) {
     snippet,
     title: payload.topic || payload.theme || payload.entityType || payload.agent || '',
   };
+
+  // Optional explainability metadata — present only when a learned boost applied.
+  if (item.learnedRerank) {
+    ranked.learnedRerank = item.learnedRerank;
+  }
+
+  return ranked;
 }
 
 /**
@@ -62,6 +70,7 @@ export class RetrievalService {
    * @param {number} [options.scoreThreshold=0.82] - Minimum Qdrant similarity score (D-04)
    * @param {number} [options.defaultBudget=1000] - Default token budget (D-08)
    * @param {function} [options.dbGetter] - Function returning a better-sqlite3 db instance
+   * @param {FeedbackStore} [options.feedbackStore] - Injected learned-rerank store (auto-built if omitted)
    */
   constructor(options = {}) {
     // Default 0.70 (was 0.82). MiniLM-L6-v2 cosine similarities cluster
@@ -76,6 +85,10 @@ export class RetrievalService {
     this.qdrantClient = null;
     this.keywordSearch = new KeywordSearch();
     this.dbGetter = options.dbGetter ?? null;
+    // Learned-rerank store (G6). Injected for tests; otherwise default-built in
+    // initialize() once the shared Qdrant client exists. Wired to the same
+    // Qdrant client RetrievalService uses for semantic search.
+    this.feedbackStore = options.feedbackStore ?? null;
     this.codingRoot = options.codingRoot
       || process.env.CODING_REPO
       || new URL('../../', import.meta.url).pathname.replace(/\/$/, '');
@@ -99,6 +112,9 @@ export class RetrievalService {
         this.embeddingService = getEmbeddingService();
         await this.embeddingService.initialize(); // warm fastembed model (Pitfall 1)
         this.qdrantClient = getQdrantClient();
+        if (!this.feedbackStore) {
+          this.feedbackStore = new FeedbackStore({ qdrantClient: this.qdrantClient });
+        }
         this._initialized = true;
         process.stderr.write('[RetrievalService] Initialized (fastembed warm, Qdrant connected)\n');
       } catch (err) {
@@ -182,6 +198,12 @@ export class RetrievalService {
     // without being filtered out entirely. Only applies to the `insights`
     // tier; digests/kg_entities/observations don't have a verification field.
     this._applyFreshnessRerank(fused);
+
+    // Step 4.8: Learned rerank (G6) — apply a bounded, fail-open boost to items
+    // that humans previously promoted for similar queries. Strict no-op when the
+    // feedback store is empty/unavailable. Runs after freshness and before the
+    // final sort so it affects rankedResults and token-budget assembly.
+    await this._applyLearnedRerank(fused, query, vector, context);
 
     fused.sort((a, b) => b.rrfScore - a.rrfScore);
     const rankedResults = fused.map(toRankedResult);
@@ -395,6 +417,62 @@ export class RetrievalService {
       if (ratio >= 1) continue;                // no penalty if fully fresh
       const multiplier = 0.3 + 0.7 * Math.max(0, Math.min(1, ratio));
       result.rrfScore *= multiplier;
+    }
+  }
+
+  /**
+   * Apply the learned rerank boost (G6) using prior human re-ranking feedback.
+   *
+   * Strict no-op and fail-open: any error, a missing/empty feedback store, or
+   * zero similar events leaves every `rrfScore` unchanged (identical to today).
+   * Only stable `tier:id` candidates already present in `fused` are boosted —
+   * missing-candidate recall is intentionally out of scope (design §3).
+   *
+   * For boosted candidates a `learnedRerank` metadata object
+   * `{ multiplier, signal, matchedEvents }` is attached for explainability and
+   * surfaced (optionally) in `rankedResults`.
+   *
+   * @param {Array<object>} fused - Fused candidates with mutable rrfScore
+   * @param {string} query - Final retrieval query text (unused; kept for signature/clarity)
+   * @param {number[]} queryVector - 384-dim query embedding already computed in retrieve()
+   * @param {object|null} context - Retrieval context; `context.project` scopes feedback
+   * @returns {Promise<void>}
+   */
+  async _applyLearnedRerank(fused, query, queryVector, context = null) {
+    try {
+      if (!this.feedbackStore || !Array.isArray(fused) || fused.length === 0) return;
+      if (!Array.isArray(queryVector) || queryVector.length === 0) return;
+
+      const matchedEvents = await this.feedbackStore.findSimilar(queryVector, context);
+      if (!Array.isArray(matchedEvents) || matchedEvents.length === 0) return;
+
+      // Stable item-key set for the current fused list: `${tier}:${id}`.
+      const byKey = new Map();
+      for (const item of fused) {
+        if (item == null || item.tier == null || item.id == null) continue;
+        byKey.set(`${item.tier}:${item.id}`, item);
+      }
+      if (byKey.size === 0) return;
+
+      const signals = aggregateLearnedSignals(matchedEvents, new Set(byKey.keys()));
+      if (signals.size === 0) return;
+
+      for (const [itemKey, info] of signals) {
+        const item = byKey.get(itemKey);
+        if (!item || !Number.isFinite(item.rrfScore)) continue;
+        if (!Number.isFinite(info.multiplier) || info.multiplier === 1) continue;
+        item.rrfScore *= info.multiplier;
+        item.learnedRerank = {
+          multiplier: info.multiplier,
+          signal: info.signal,
+          matchedEvents: info.matchedEvents,
+        };
+      }
+    } catch (err) {
+      // Fail-open: never let learned rerank degrade baseline retrieval.
+      process.stderr.write(
+        `[RetrievalService] Learned rerank skipped (non-fatal): ${err.message}\n`
+      );
     }
   }
 
