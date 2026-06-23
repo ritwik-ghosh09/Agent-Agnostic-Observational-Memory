@@ -4763,6 +4763,15 @@ class SystemHealthAPIServer {
         const entry = {
             id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             query: query.slice(0, 500),
+            // The raw typed draft (pre-enrichment). The monitor enriches `query`
+            // with pane context via buildRetrievalQuery, so it no longer equals the
+            // draft the user typed. The UI compares the live draft against this
+            // rawDraft to know when retrieval for the *current* draft has arrived
+            // (so it can stop showing "typing…" and render the memory columns).
+            // Fall back to the enriched query for older producers that omit it.
+            rawDraft: (typeof body.rawDraft === 'string' && body.rawDraft.trim()
+                ? body.rawDraft
+                : query).slice(0, 500),
             agent: body.agent || 'agent',
             sessionId: body.sessionId || null,
             tmuxSession: body.tmuxSession || null,

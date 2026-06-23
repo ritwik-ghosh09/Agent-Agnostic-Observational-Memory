@@ -7,6 +7,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 export interface LiveContextEntry {
   id: string
   query: string
+  /**
+   * The raw typed draft (pre-enrichment). `query` is enriched with pane context
+   * by the monitor, so it no longer matches what the user typed. The UI compares
+   * the live draft against this to know when retrieval for the *current* draft has
+   * arrived. Optional for backward-compat with older entries (falls back to query).
+   */
+  rawDraft?: string
   agent: string
   sessionId: string | null
   tmuxSession: string | null

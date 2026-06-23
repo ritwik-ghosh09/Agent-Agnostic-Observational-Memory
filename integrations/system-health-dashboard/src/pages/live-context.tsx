@@ -530,9 +530,13 @@ export function LiveContextPage() {
   const { entries, draft, submitted, isConnected } = useLiveContextWebSocket()
 
   const latest = entries[0] || null
-  // "typing" = a live draft exists that differs from the last retrieved query.
-  const typing = !!draft && draft.query.length > 0 && draft.query !== latest?.query
-  const headingQuery = draft?.query || latest?.query || ''
+  // "typing" = a live draft exists that differs from the last retrieved draft.
+  // Compare against the entry's rawDraft (the original typed text), not query,
+  // which the monitor enriches with pane context — otherwise the draft never
+  // matches the retrieved entry and the UI stays stuck on "typing…".
+  const lastRetrievedDraft = latest?.rawDraft || latest?.query
+  const typing = !!draft && draft.query.length > 0 && draft.query !== lastRetrievedDraft
+  const headingQuery = draft?.query || latest?.rawDraft || latest?.query || ''
   const headingContext = draft?.context || ''
   const headingAgent = draft?.agent || latest?.agent || ''
   const headingProject = draft?.project || latest?.project || null
