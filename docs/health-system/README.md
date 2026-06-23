@@ -78,11 +78,12 @@ The supervision architecture includes multiple guards to prevent runaway process
 - **Rate Limiting** - GPS: Max 10 restarts/hour; Coordinator: Max 6 restarts/hour per service
 - **Fallback Supervision** - CombinedStatusLine provides backup restart only when GPS heartbeat is stale
 - **Active Session Gating** - Transcript monitors only spawned for sessions with transcript activity in the last 2 minutes
+- **Copilot Session Coverage** - The coordinator's ETM safety net unions active Copilot CLI session cwds (`~/.copilot/session-state/*/events.jsonl`) into its candidate set, so monitors are auto-respawned even for sessions rooted outside the Agentic dir (e.g. the user's HOME)
 - **Multi-Agent Detection** - Detects Claude, Copilot, and OpenCode sessions via process scanning
 - **Agent Age Cap** - Running agent's display age capped at monitor uptime; transcripts with `status: 'not_found'` (e.g., OpenCode) correctly show as inactive instead of falsely green
 - **GPS/Coordinator Deference** - GPS defers transcript monitor management to GlobalLSLCoordinator when active (prevents dual-supervisor race condition)
 - **Prompt Hook Safety Net** - HealthPromptHook spawns coordinator when GPS has exhausted restart budget (rate-limited 1/min)
-- **Idle Timeout Tmux Guard** - Monitor checks for active tmux session before idle-exit (prevents restart budget waste)
+- **Idle Timeout Active-Session Guard** - Before idle-exiting, the monitor checks for an active tmux (Claude), OpenCode, or Copilot session and stays alive if any is recently active (prevents premature mid-session exit and restart budget waste)
 - **Intentional Stop Markers** - Graceful shutdown marks project as stopped, preventing restart loops
 
 ## Component Details

@@ -268,6 +268,27 @@ graph TD
     SKIP --> TIMER
 ```
 
+**Egress & semantic health.** When the proxy is respawned (by the watchdog or
+systemd) it no longer inherits the shell's `HTTPS_PROXY`. The wrapper
+(`src/llm-proxy/llm-proxy.mjs`) resolves the corporate proxy from the proxydetox
+controller, installs a Node-20-compatible `undici` global dispatcher, then clears
+`HTTPS_PROXY` so the upstream provider tunnels through the now-proxy-aware global
+`fetch` — restoring `semantic_ok=true` completions after every heal.
+
+**Dashboard accuracy.** The coordinator's network probe (`pollNetworkStatus`)
+resolves the local proxy host:port from the proxydetox controller instead of the
+hard-coded legacy `px` port `3128`, so the systemd-launched coordinator (which
+has no shell proxy env) probes the right port. This eliminates the false
+"Local proxy: Not running" / "Internet: Unreachable" failures previously shown on
+the Health Dashboard's **LLM Proxy Health** card (port `3032`).
+
+**ETM coverage.** The coordinator's transcript-monitor safety net unions active
+Copilot CLI session cwds (`~/.copilot/session-state/*/events.jsonl`) into its
+candidate set, so the Enhanced Transcript Monitor is auto-respawned even for
+sessions rooted outside the Agentic dir. The monitor's idle-timeout guard also
+checks for active Copilot (and OpenCode/tmux) sessions before exiting, preventing
+a premature mid-session exit that would lapse the heartbeat.
+
 
 #### [📋 Live Session Logging (LSL)](docs/lsl/)
 Real-time conversation classification and routing with security redaction
