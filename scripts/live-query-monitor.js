@@ -6,9 +6,18 @@
  * Runs on the host alongside a coding-agent tmux session (Copilot CLI, Claude
  * Code, or OpenCode). It periodically snapshots the agent's tmux pane with
  * `tmux capture-pane -p`, extracts the draft the user is currently typing (via
- * InputDraftExtractor), debounces until the draft is stable, and POSTs the query
- * to the Health Dashboard. The dashboard retrieves the matching Working +
- * Observational memory and broadcasts it to the "Live Context" tab.
+ * InputDraftExtractor), and emits three kinds of update to the Health Dashboard
+ * so the "Live Context" tab can render three zones:
+ *
+ *   1. Draft stream — on every change, POST the in-progress draft to
+ *      `/api/live-context/draft` → streamed live into the main heading bar.
+ *   2. Context — once the draft is *stable* for LQM_STABLE_MS (default 3 s),
+ *      POST it to `/api/live-context/query`; the dashboard runs the Knowledge
+ *      Context Injection memory pipeline and broadcasts Working + Observational
+ *      memory for the live query → the two memory columns.
+ *   3. Submitted — when the draft transitions non-empty → empty (the user pressed
+ *      Enter and the input box cleared), POST the just-sent query to
+ *      `/api/live-context/submitted` → appended to the "Recent Queries" log.
  *
  * Why not a UserPromptSubmit hook? The prompt has not been submitted yet — it
  * only exists on screen — so the terminal snapshot is the single source of truth.
@@ -18,7 +27,7 @@
  *   LQM_AGENT            agent name: copilot | claude | opencode (default: agent)
  *   LQM_DASHBOARD_PORT   dashboard API port (default: API_PORT from .env.ports or 3033)
  *   LQM_POLL_MS          poll interval ms (default 350)
- *   LQM_STABLE_MS        draft must be unchanged this long before retrieve (default 600)
+ *   LQM_STABLE_MS        draft must be unchanged this long before retrieve (default 3000)
  *   LQM_MIN_INTERVAL_MS  minimum gap between retrievals (default 1200)
  *   LQM_BUDGET           retrieval token budget (default 1000)
  *   CODING_REPO          coding repo root (for .env.ports lookup)
@@ -45,7 +54,7 @@ const PROJECT = basename(PROJECT_DIR);
 const SESSION_ID = process.env.SESSION_ID || `${AGENT}-${process.pid}`;
 
 const POLL_MS = intEnv('LQM_POLL_MS', 350);
-const STABLE_MS = intEnv('LQM_STABLE_MS', 600);
+const STABLE_MS = intEnv('LQM_STABLE_MS', 3000);
 const MIN_INTERVAL_MS = intEnv('LQM_MIN_INTERVAL_MS', 1200);
 const BUDGET = intEnv('LQM_BUDGET', 1000);
 
@@ -98,6 +107,7 @@ let lastDraft = null;        // most recent extracted draft
 let lastDraftAt = 0;         // when lastDraft was first observed (stability timer)
 let lastSentQuery = null;    // last query we actually retrieved on
 let lastSentAt = 0;          // when we last fired a retrieval
+let lastNonEmptyDraft = null; // last non-empty draft seen (for submission detection)
 let stopped = false;
 
 /**
@@ -129,28 +139,28 @@ function sessionAlive() {
 }
 
 /**
- * POST the stable draft query to the dashboard. Fail-open: resolves regardless.
+ * POST a JSON payload to a dashboard live-context endpoint. Fail-open: resolves
+ * regardless of outcome so the monitor never disrupts the CLI.
  *
- * @param {string} query
+ * @param {string} path  request path (e.g. '/api/live-context/query')
+ * @param {object} payload  JSON body
+ * @returns {Promise<void>}
  */
-function sendQuery(query) {
+function postJson(path, payload) {
   return new Promise((resolve) => {
-    const body = JSON.stringify({
-      query,
-      agent: AGENT,
-      sessionId: SESSION_ID,
-      tmuxSession: SESSION,
-      project: PROJECT,
-      cwd: PROJECT_DIR,
-      budget: BUDGET,
-      ts: new Date().toISOString(),
-    });
+    let body;
+    try {
+      body = JSON.stringify(payload);
+    } catch {
+      resolve();
+      return;
+    }
 
     const req = http.request(
       {
         hostname: '127.0.0.1',
         port: DASHBOARD_PORT,
-        path: '/api/live-context/query',
+        path,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -171,7 +181,58 @@ function sendQuery(query) {
 }
 
 /**
- * One polling tick: snapshot → extract → debounce → maybe retrieve.
+ * POST the stable draft query to the dashboard for the full memory-pipeline pass
+ * (Working + Observational retrieval). Fail-open.
+ *
+ * @param {string} query
+ */
+function sendQuery(query) {
+  return postJson('/api/live-context/query', {
+    query,
+    agent: AGENT,
+    sessionId: SESSION_ID,
+    tmuxSession: SESSION,
+    project: PROJECT,
+    cwd: PROJECT_DIR,
+    budget: BUDGET,
+    ts: new Date().toISOString(),
+  });
+}
+
+/**
+ * Stream the in-progress draft to the dashboard heading bar (no retrieval). An
+ * empty string clears the heading when the input box empties. Fail-open.
+ *
+ * @param {string} query  current draft text ('' to clear)
+ */
+function sendDraft(query) {
+  return postJson('/api/live-context/draft', {
+    query,
+    agent: AGENT,
+    sessionId: SESSION_ID,
+    project: PROJECT,
+    ts: new Date().toISOString(),
+  });
+}
+
+/**
+ * Record a query the user actually submitted to the CLI (box cleared after Enter)
+ * into the dashboard "Recent Queries" log. Fail-open.
+ *
+ * @param {string} query  the submitted query text
+ */
+function sendSubmitted(query) {
+  return postJson('/api/live-context/submitted', {
+    query,
+    agent: AGENT,
+    sessionId: SESSION_ID,
+    project: PROJECT,
+    ts: new Date().toISOString(),
+  });
+}
+
+/**
+ * One polling tick: snapshot → extract → stream draft / detect submit → maybe retrieve.
  */
 async function tick() {
   if (stopped) return;
@@ -186,9 +247,26 @@ async function tick() {
   const now = Date.now();
 
   if (draft !== lastDraft) {
-    // Draft changed (still typing) — reset the stability timer.
+    // Draft changed — reset the stability timer and react to the change.
     lastDraft = draft;
     lastDraftAt = now;
+
+    if (draft == null || draft === '') {
+      // Input box emptied. If we had a non-empty draft, treat the box clearing
+      // as a submission (the user pressed Enter) and log it as a Recent Query.
+      const submitted = lastNonEmptyDraft;
+      lastNonEmptyDraft = null;
+      // Clear the live heading regardless.
+      sendDraft('');
+      if (submitted && submitted.trim()) {
+        process.stderr.write(`[live-query-monitor] submitted → "${submitted.slice(0, 80)}"\n`);
+        sendSubmitted(submitted);
+      }
+    } else {
+      // Still typing — stream the in-progress draft to the heading bar.
+      lastNonEmptyDraft = draft;
+      sendDraft(draft);
+    }
     return;
   }
 
