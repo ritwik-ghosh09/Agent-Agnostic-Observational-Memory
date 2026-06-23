@@ -194,6 +194,46 @@ Automatic health monitoring and self-healing with real-time dashboard
 
 ![Health Supervision Hierarchy](docs/images/supervisor-restart-hierarchy.png)
 
+#### [📊 Token Usage Telemetry](docs/architecture/token-usage.md)
+Real-time LLM token-consumption visibility on the Health Dashboard (`http://localhost:3032/token-usage`).
+- Every `/api/complete` call through the LLM CLI Proxy (port `12435`) is recorded with provider, model, process, token counts and latency
+- The proxy serves `/api/token-usage/summary`, `/api/token-usage/recent` and `/api/llm/settings`, read directly by the dashboard
+- Per-hour, per-user JSON exports under `.data/llm-proxy-export/` survive restarts and merge across teammates after `git pull`
+- Per-process provider pins (the ⚙ Settings dialog) let you force a service to a specific provider + model
+
+The repo wrapper (`src/llm-proxy/llm-proxy.mjs`) fronts the upstream `@rapid/llm-proxy` package: it starts the package on an internal port and exposes the token-usage endpoints on `12435` while transparently proxying completions and recording usage.
+
+```mermaid
+graph TD
+    subgraph Callers[Cognitive Processes]
+        OW[observation-writer]
+        HC[health-coordinator]
+        SA[semantic-analyzer]
+    end
+
+    subgraph Proxy[LLM CLI Proxy · port 12435]
+        FRONT[Front server<br/>llm-proxy.mjs]
+        STORE[(Token-Usage Store<br/>in-memory + JSON export)]
+        UP[Upstream @rapid/llm-proxy<br/>internal free port]
+    end
+
+    DASH[Health Dashboard UI<br/>/token-usage]
+
+    OW -->|POST /api/complete + process| FRONT
+    HC -->|POST /api/complete + process| FRONT
+    SA -->|POST /api/complete + process| FRONT
+
+    FRONT -->|forward completion| UP
+    UP -->|tokens, model, latency| FRONT
+    FRONT -->|record| STORE
+    STORE -->|hourly JSON| EXPORT[(.data/llm-proxy-export/<br/>YYYY/MM/...json)]
+
+    DASH -->|GET /api/token-usage/summary| FRONT
+    DASH -->|GET /api/token-usage/recent| FRONT
+    DASH -->|GET/PUT /api/llm/settings| FRONT
+    FRONT -->|aggregated JSON| DASH
+```
+
 #### [📋 Live Session Logging (LSL)](docs/lsl/)
 Real-time conversation classification and routing with security redaction
 - 5-layer classification system
