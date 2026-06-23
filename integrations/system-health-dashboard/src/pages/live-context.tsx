@@ -1,11 +1,29 @@
-import { Fragment } from 'react'
-import { useLiveContextWebSocket } from '@/hooks/useLiveContextWebSocket'
-import type { LiveContextEntry, LiveSubmitted, RankedResult } from '@/hooks/useLiveContextWebSocket'
+import { Fragment, useEffect, useMemo, useState } from 'react'
+import { httpBase, useLiveContextWebSocket } from '@/hooks/useLiveContextWebSocket'
+import type {
+  LiveContextEntry,
+  LiveContextRerankRequest,
+  LiveContextRerankResponse,
+  LiveSubmitted,
+  RankedResult,
+} from '@/hooks/useLiveContextWebSocket'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Brain, Database, Radio, Terminal, AlertTriangle, Send, Loader2, ListOrdered } from 'lucide-react'
+import {
+  Brain,
+  Database,
+  Radio,
+  Terminal,
+  AlertTriangle,
+  Send,
+  Loader2,
+  ListOrdered,
+  ChevronUp,
+  ChevronDown,
+} from 'lucide-react'
 
 const WORKING_HEADERS = ['Working Memory', 'Previous Session']
 const OBSERVATIONAL_HEADERS = ['Insights', 'Digests', 'Entities', 'Observations']
@@ -208,9 +226,115 @@ function formatScore(score: number): string {
   return Number.isFinite(score) ? score.toFixed(3) : '—'
 }
 
-/** Ranked read-only sidebar containing every retrieval candidate for the live query. */
-function RankedResultsSidebar({ results }: { results: RankedResult[] }) {
-  const ordered = [...results].sort((a, b) => a.rank - b.rank)
+function resultItemKey(result: RankedResult): string {
+  return `${result.tier}:${result.id}`
+}
+
+type SaveStatus =
+  | { kind: 'idle'; message: string | null }
+  | { kind: 'saving'; message: string }
+  | { kind: 'success'; message: string }
+  | { kind: 'error'; message: string }
+
+/** Ranked sidebar containing every retrieval candidate for the live query. */
+function RankedResultsSidebar({ entry }: { entry: LiveContextEntry | null }) {
+  const original = useMemo(
+    () => (entry?.rankedResults ?? []).slice().sort((a, b) => a.rank - b.rank),
+    [entry]
+  )
+  const [ordered, setOrdered] = useState<RankedResult[]>(original)
+  const [baselineKeys, setBaselineKeys] = useState<string[]>(original.map(resultItemKey))
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: 'idle', message: null })
+
+  useEffect(() => {
+    setOrdered(original)
+    setBaselineKeys(original.map(resultItemKey))
+    setSaveStatus({ kind: 'idle', message: null })
+  }, [entry?.id, original])
+
+  const orderedKeys = ordered.map(resultItemKey)
+  const isModified =
+    orderedKeys.length === baselineKeys.length && orderedKeys.some((key, index) => key !== baselineKeys[index])
+  const isSaving = saveStatus.kind === 'saving'
+
+  const moveResult = (fromIndex: number, direction: -1 | 1) => {
+    const toIndex = fromIndex + direction
+    if (toIndex < 0 || toIndex >= ordered.length || isSaving) return
+    setOrdered((current) => {
+      const next = current.slice()
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
+      return next
+    })
+    setSaveStatus({ kind: 'idle', message: null })
+  }
+
+  const resetOrder = () => {
+    const byKey = new Map(original.map((result) => [resultItemKey(result), result]))
+    const reset = baselineKeys.map((key) => byKey.get(key)).filter((result): result is RankedResult => Boolean(result))
+    setOrdered(reset.length === original.length ? reset : original)
+    setSaveStatus({ kind: 'idle', message: null })
+  }
+
+  const saveRanking = async () => {
+    if (!entry || !isModified || isSaving) return
+    const queryText = entry.query || entry.meta?.query || ''
+    if (!queryText.trim()) {
+      setSaveStatus({ kind: 'error', message: 'Cannot save ranking without a query.' })
+      return
+    }
+
+    const request: LiveContextRerankRequest = {
+      schemaVersion: 1,
+      liveContextEntryId: entry.id,
+      queryText,
+      context: {
+        agent: entry.agent,
+        project: entry.project,
+        cwd: entry.cwd,
+        sessionId: entry.sessionId,
+        tmuxSession: entry.tmuxSession,
+      },
+      originalRanking: original.map((result, index) => ({
+        itemKey: resultItemKey(result),
+        id: result.id,
+        tier: result.tier,
+        originalRank: result.rank || index + 1,
+        rawScore: result.rawScore,
+        rrfScore: result.rrfScore,
+        tierWeight: result.tierWeight,
+        title: result.title,
+        snippet: result.snippet,
+      })),
+      humanRanking: ordered.map((result, index) => ({
+        itemKey: resultItemKey(result),
+        humanRank: index + 1,
+      })),
+      capturedAt: new Date().toISOString(),
+      source: 'dashboard-live-context',
+    }
+
+    setSaveStatus({ kind: 'saving', message: 'Saving ranking…' })
+    try {
+      const response = await fetch(`${httpBase()}/api/live-context/rerank`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      })
+      const payload = (await response.json().catch(() => ({}))) as Partial<LiveContextRerankResponse>
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error || `Save failed (${response.status})`)
+      }
+      setBaselineKeys(orderedKeys)
+      setSaveStatus({
+        kind: 'success',
+        message: payload.eventId ? `Ranking saved (${payload.eventId.slice(0, 8)}).` : 'Ranking saved.',
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not save ranking.'
+      setSaveStatus({ kind: 'error', message })
+    }
+  }
 
   return (
     <Card className="flex min-h-[28rem] flex-col overflow-hidden">
@@ -218,20 +342,49 @@ function RankedResultsSidebar({ results }: { results: RankedResult[] }) {
         <CardTitle className="flex items-center justify-between gap-2 text-sm">
           <span className="flex items-center gap-2">
             <ListOrdered className="h-3.5 w-3.5 text-primary" /> All Results
+            {isModified && <Badge variant="outline" className="text-[10px] normal-case">modified</Badge>}
           </span>
-          <Badge variant="outline">{results.length}</Badge>
+          <Badge variant="outline">{original.length}</Badge>
         </CardTitle>
+        {isModified && (
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <span className="text-[11px] text-muted-foreground">Human order has unsaved changes.</span>
+            <div className="flex gap-1.5">
+              <Button variant="ghost" size="sm" onClick={resetOrder} disabled={isSaving}>
+                Reset
+              </Button>
+              <Button size="sm" onClick={saveRanking} disabled={isSaving}>
+                {isSaving ? 'Saving…' : 'Save ranking'}
+              </Button>
+            </div>
+          </div>
+        )}
+        {saveStatus.message && (
+          <div
+            className={`mt-2 text-[11px] ${
+              saveStatus.kind === 'error'
+                ? 'text-destructive'
+                : saveStatus.kind === 'success'
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-muted-foreground'
+            }`}
+          >
+            {saveStatus.message}
+          </div>
+        )}
       </CardHeader>
       <ScrollArea className="flex-1">
         <div className="space-y-2 p-2">
           {ordered.length === 0 ? (
-            <p className="px-2 py-3 text-xs italic text-muted-foreground">No results yet.</p>
+            <p className="px-2 py-3 text-xs italic text-muted-foreground">
+              {entry ? 'No results for this query.' : 'No results yet.'}
+            </p>
           ) : (
-            ordered.map((result) => (
-              <div key={result.id} className="rounded-md border border-border/60 px-3 py-2 text-sm">
+            ordered.map((result, index) => (
+              <div key={resultItemKey(result)} className="rounded-md border border-border/60 px-3 py-2 text-sm">
                 <div className="flex items-start gap-2">
                   <span className="mt-0.5 w-7 shrink-0 text-xs font-semibold text-muted-foreground">
-                    #{result.rank}
+                    #{index + 1}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
@@ -244,7 +397,30 @@ function RankedResultsSidebar({ results }: { results: RankedResult[] }) {
                     <div className="mt-1 flex items-center gap-2 text-[10px] uppercase text-muted-foreground/70">
                       <span>score {formatScore(result.rawScore)}</span>
                       <span>rrf {formatScore(result.rrfScore)}</span>
+                      {index + 1 !== result.rank && <span>was #{result.rank}</span>}
                     </div>
+                  </div>
+                  <div className="flex shrink-0 flex-col gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => moveResult(index, -1)}
+                      disabled={index === 0 || isSaving}
+                      aria-label={`Move result ${index + 1} up`}
+                    >
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => moveResult(index, 1)}
+                      disabled={index === ordered.length - 1 || isSaving}
+                      aria-label={`Move result ${index + 1} down`}
+                    >
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -403,7 +579,7 @@ export function LiveContextPage() {
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
               <MemoryColumns entry={displayedEntry} typing={typing} />
-              <RankedResultsSidebar results={displayedEntry?.rankedResults ?? []} />
+              <RankedResultsSidebar entry={displayedEntry} />
             </div>
           </div>
         </ScrollArea>

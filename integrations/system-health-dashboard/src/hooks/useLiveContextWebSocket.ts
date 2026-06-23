@@ -41,6 +41,47 @@ export interface RankedResult {
   title: string
 }
 
+export interface LiveContextRerankOriginalItem {
+  itemKey: string
+  id: string
+  tier: RankedResult['tier']
+  originalRank: number
+  rawScore: number
+  rrfScore: number
+  tierWeight: number
+  title: string
+  snippet: string
+}
+
+export interface LiveContextRerankHumanItem {
+  itemKey: string
+  humanRank: number
+}
+
+export interface LiveContextRerankRequest {
+  schemaVersion: 1
+  liveContextEntryId: string
+  queryText: string
+  context: {
+    agent: string
+    project: string | null
+    cwd: string | null
+    sessionId: string | null
+    tmuxSession: string | null
+  }
+  originalRanking: LiveContextRerankOriginalItem[]
+  humanRanking: LiveContextRerankHumanItem[]
+  capturedAt: string
+  source: 'dashboard-live-context'
+}
+
+export interface LiveContextRerankResponse {
+  ok: boolean
+  eventId?: string
+  persisted?: boolean
+  error?: string
+}
+
 interface WsMessage {
   type: string
   payload?: unknown
@@ -80,7 +121,7 @@ function getWsUrl(): string {
   return `${protocol}//${host}:${API_PORT}/api/live-context/ws`
 }
 
-function httpBase(): string {
+export function httpBase(): string {
   if (typeof window === 'undefined') return `http://localhost:${API_PORT}`
   return `${window.location.protocol}//${window.location.hostname}:${API_PORT}`
 }
