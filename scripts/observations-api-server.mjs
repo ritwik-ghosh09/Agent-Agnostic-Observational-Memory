@@ -26,6 +26,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'node:path';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { ObservationWriter } from '../src/live-logging/ObservationWriter.js';
 import { ObservationConsolidator } from '../src/live-logging/ObservationConsolidator.js';
@@ -92,6 +93,138 @@ function ensureRetrieval() {
     process.stderr.write(`[obs-api] retrieval init failed (lazy retry on first request): ${err.message}\n`);
   });
   return _retrieval;
+}
+
+const RERANK_FEEDBACK_COLLECTION = 'human_rerank_feedback';
+const RERANK_FEEDBACK_VECTOR_SIZE = 384;
+const MAX_FEEDBACK_QUERY_CHARS = 2000;
+const MAX_FEEDBACK_TITLE_CHARS = 160;
+let _rerankFeedbackCollectionInit = null;
+
+function sha256Hex(value) {
+  return crypto.createHash('sha256').update(String(value), 'utf8').digest('hex');
+}
+
+function normalizeOptionalString(value) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function getFeedbackUserHash(context) {
+  const identifier =
+    normalizeOptionalString(process.env.USER)
+    || normalizeOptionalString(process.env.USERNAME)
+    || normalizeOptionalString(process.env.LOGNAME)
+    || normalizeOptionalString(context?.sessionId)
+    || 'unknown-user';
+  return sha256Hex(identifier);
+}
+
+function validateRerankFeedbackBody(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return { error: 'request body must be an object' };
+  }
+
+  const queryText = typeof body.queryText === 'string' ? body.queryText.trim() : '';
+  if (!queryText) {
+    return { error: 'queryText (string) is required' };
+  }
+  if (queryText.length > MAX_FEEDBACK_QUERY_CHARS) {
+    return { error: `queryText must be ${MAX_FEEDBACK_QUERY_CHARS} characters or less` };
+  }
+
+  if (!Array.isArray(body.originalRanking) || body.originalRanking.length === 0) {
+    return { error: 'originalRanking (non-empty array) is required' };
+  }
+  if (!Array.isArray(body.humanRanking) || body.humanRanking.length === 0) {
+    return { error: 'humanRanking (non-empty array) is required' };
+  }
+
+  const originalByKey = new Map();
+  for (const item of body.originalRanking) {
+    if (!item || typeof item !== 'object' || typeof item.itemKey !== 'string' || !item.itemKey.trim()) {
+      return { error: 'every originalRanking item must include itemKey' };
+    }
+    const itemKey = item.itemKey.trim();
+    if (originalByKey.has(itemKey)) {
+      return { error: `duplicate originalRanking itemKey: ${itemKey}` };
+    }
+    originalByKey.set(itemKey, item);
+  }
+
+  const humanByKey = new Map();
+  for (const item of body.humanRanking) {
+    if (!item || typeof item !== 'object' || typeof item.itemKey !== 'string' || !item.itemKey.trim()) {
+      return { error: 'every humanRanking item must include itemKey' };
+    }
+    const itemKey = item.itemKey.trim();
+    if (humanByKey.has(itemKey)) {
+      return { error: `duplicate humanRanking itemKey: ${itemKey}` };
+    }
+    const humanRank = Number(item.humanRank);
+    if (!Number.isInteger(humanRank) || humanRank < 1) {
+      return { error: `humanRanking item ${itemKey} must include positive integer humanRank` };
+    }
+    humanByKey.set(itemKey, humanRank);
+  }
+
+  if (originalByKey.size !== humanByKey.size) {
+    return { error: 'originalRanking and humanRanking itemKeys must match' };
+  }
+  for (const itemKey of originalByKey.keys()) {
+    if (!humanByKey.has(itemKey)) {
+      return { error: 'originalRanking and humanRanking itemKeys must match' };
+    }
+  }
+
+  return { queryText, originalByKey, humanByKey };
+}
+
+async function ensureRerankFeedbackCollection(qdrant) {
+  if (_rerankFeedbackCollectionInit) return _rerankFeedbackCollectionInit;
+  _rerankFeedbackCollectionInit = (async () => {
+    const collections = await qdrant.getCollections();
+    const exists = collections.collections.some((collection) => collection.name === RERANK_FEEDBACK_COLLECTION);
+    if (!exists) {
+      await qdrant.createCollection(RERANK_FEEDBACK_COLLECTION, {
+        vectors: {
+          size: RERANK_FEEDBACK_VECTOR_SIZE,
+          distance: 'Cosine',
+        },
+      });
+      process.stderr.write(
+        `[obs-api] created Qdrant collection ${RERANK_FEEDBACK_COLLECTION} (${RERANK_FEEDBACK_VECTOR_SIZE}-dim Cosine)\n`
+      );
+    }
+
+    const payloadIndexes = [
+      ['project', 'keyword'],
+      ['agent', 'keyword'],
+      ['userHash', 'keyword'],
+      ['capturedAt', 'keyword'],
+      ['schemaVersion', 'integer'],
+    ];
+    for (const [fieldName, fieldSchema] of payloadIndexes) {
+      try {
+        await qdrant.createPayloadIndex(RERANK_FEEDBACK_COLLECTION, {
+          field_name: fieldName,
+          field_schema: fieldSchema,
+        });
+      } catch (err) {
+        const message = String(err?.message || err);
+        if (!message.toLowerCase().includes('already exists')) {
+          process.stderr.write(
+            `[obs-api] payload index ${RERANK_FEEDBACK_COLLECTION}.${fieldName} not created: ${message}\n`
+          );
+        }
+      }
+    }
+  })();
+  try {
+    await _rerankFeedbackCollectionInit;
+  } catch (err) {
+    _rerankFeedbackCollectionInit = null;
+    throw err;
+  }
 }
 
 // Phase 35 plan 35-04 - pruner factory + 1h interval scheduler.
@@ -1090,6 +1223,116 @@ app.post('/api/retrieve', async (req, res) => {
     process.stderr.write(`[obs-api] /retrieve error: ${err.message}\n`);
     if (isCorruptionError(err)) invalidateDb();
     res.status(500).json({ error: 'Retrieval failed' });
+  }
+});
+
+/**
+ * POST /api/rerank-feedback — capture a human-reordered retrieval result list.
+ * Stores one compact event per save in Qdrant collection human_rerank_feedback.
+ */
+app.post('/api/rerank-feedback', async (req, res) => {
+  const validated = validateRerankFeedbackBody(req.body || {});
+  if (validated.error) {
+    return res.status(400).json({ ok: false, error: validated.error });
+  }
+
+  const body = req.body || {};
+  const context = body.context && typeof body.context === 'object' && !Array.isArray(body.context)
+    ? body.context
+    : {};
+  const eventId = crypto.randomUUID();
+  const capturedAt = normalizeOptionalString(body.capturedAt) || new Date().toISOString();
+  const schemaVersion = Number.isInteger(Number(body.schemaVersion)) ? Number(body.schemaVersion) : 1;
+
+  try {
+    const retrieval = ensureRetrieval();
+    await retrieval.initialize();
+    const queryEmbedding = await retrieval.embeddingService.embedOne(validated.queryText);
+    if (!Array.isArray(queryEmbedding) || queryEmbedding.length !== RERANK_FEEDBACK_VECTOR_SIZE) {
+      throw new Error(`query embedding must be ${RERANK_FEEDBACK_VECTOR_SIZE} dimensions`);
+    }
+
+    await ensureRerankFeedbackCollection(retrieval.qdrantClient);
+
+    const itemSignals = [...validated.originalByKey.entries()].map(([itemKey, original]) => {
+      const originalRank = Number(original.originalRank);
+      const humanRank = validated.humanByKey.get(itemKey);
+      return {
+        itemKey,
+        tier: normalizeOptionalString(original.tier) || 'unknown',
+        title: normalizeOptionalString(original.title)?.slice(0, MAX_FEEDBACK_TITLE_CHARS) || null,
+        originalRank: Number.isFinite(originalRank) ? originalRank : null,
+        humanRank,
+        rankDelta: Number.isFinite(originalRank) ? originalRank - humanRank : null,
+      };
+    });
+
+    await retrieval.qdrantClient.upsert(RERANK_FEEDBACK_COLLECTION, {
+      wait: true,
+      points: [
+        {
+          id: eventId,
+          vector: queryEmbedding,
+          payload: {
+            eventId,
+            liveContextEntryId: normalizeOptionalString(body.liveContextEntryId),
+            queryHash: sha256Hex(validated.queryText),
+            queryText: validated.queryText,
+            project: normalizeOptionalString(context.project),
+            agent: normalizeOptionalString(context.agent),
+            cwd: normalizeOptionalString(context.cwd),
+            sessionId: normalizeOptionalString(context.sessionId),
+            tmuxSession: normalizeOptionalString(context.tmuxSession),
+            userHash: getFeedbackUserHash(context),
+            capturedAt,
+            schemaVersion,
+            source: normalizeOptionalString(body.source) || 'unknown',
+            itemSignals,
+          },
+        },
+      ],
+    });
+
+    res.json({ ok: true, eventId, persisted: true });
+  } catch (err) {
+    process.stderr.write(`[obs-api] /rerank-feedback error: ${err.message}\n`);
+    res.status(503).json({ ok: false, error: 'Rerank feedback persistence unavailable' });
+  }
+});
+
+/**
+ * GET /api/rerank-feedback?limit=N — debug/audit view of recently captured
+ * rerank events. Vectors are intentionally omitted.
+ */
+app.get('/api/rerank-feedback', async (req, res) => {
+  const rawLimit = Number(req.query?.limit);
+  const limit = Number.isInteger(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : 20;
+
+  try {
+    const retrieval = ensureRetrieval();
+    await retrieval.initialize();
+    await ensureRerankFeedbackCollection(retrieval.qdrantClient);
+    const result = await retrieval.qdrantClient.scroll(RERANK_FEEDBACK_COLLECTION, {
+      limit,
+      with_payload: true,
+      with_vector: false,
+    });
+    const data = (result.points || [])
+      .map((point) => ({ id: point.id, payload: point.payload || {} }))
+      .sort((a, b) => {
+        const aTime = Date.parse(String(a.payload.capturedAt || ''));
+        const bTime = Date.parse(String(b.payload.capturedAt || ''));
+        return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
+      });
+    res.json({
+      ok: true,
+      collection: RERANK_FEEDBACK_COLLECTION,
+      data,
+      nextPageOffset: result.next_page_offset || null,
+    });
+  } catch (err) {
+    process.stderr.write(`[obs-api] GET /rerank-feedback error: ${err.message}\n`);
+    res.status(503).json({ ok: false, error: 'Rerank feedback audit unavailable' });
   }
 });
 
