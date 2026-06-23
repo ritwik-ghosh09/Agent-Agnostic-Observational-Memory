@@ -14,6 +14,20 @@ import { countTokens } from 'gpt-tokenizer';
 export const TIER_ORDER = ['insights', 'digests', 'kg_entities', 'observations'];
 
 /**
+ * Minimum reserved slots per tier (G2 fix).
+ *
+ * Without this, the lowest-weight tier (observations) monopolizes the token
+ * budget: observations appear in semantic + keyword + recency lists and their
+ * summary_preview text wins topic-overlap boosts, so they accumulate the highest
+ * RRF scores and a pure global budget-walk emits *only* `## Observations` even
+ * though higher-weight insights/digests cleared the similarity threshold and are
+ * present in the fused set. Reserving at least one slot per non-empty tier (walked
+ * in decreasing-weight TIER_ORDER) guarantees the intended
+ * Insights > Digests > Entities > Observations blend actually reaches the agent.
+ */
+const MIN_TIER_SLOTS = 1;
+
+/**
  * Max results per tier to prevent low-precision flooding.
  * MiniLM-L6-v2 cosine similarities cluster high (0.75-0.82) across all
  * project documents, so the Qdrant threshold alone cannot filter irrelevant
@@ -137,41 +151,71 @@ export function assembleBudgetedMarkdown(sortedResults, budget = 1000) {
 
   const tierCounts = Object.fromEntries(TIER_ORDER.map((t) => [t, 0]));
   const seenSignatures = new Set();
+  const includedIds = new Set();
 
-  for (const result of sortedResults) {
-    // Skip if this tier has reached its cap
+  // Helper: attempt to add a single result to its bucket. Returns true if the
+  // result was added (in full or truncated), false if skipped/over budget.
+  const tryAdd = (result, { allowTruncate }) => {
     const cap = TIER_MAX_RESULTS[result.tier] ?? 5;
-    if ((tierCounts[result.tier] ?? 0) >= cap) continue;
+    if ((tierCounts[result.tier] ?? 0) >= cap) return false;
+    if (!buckets[result.tier]) return false;
 
-    // Skip if we've already included a near-identical result (content dedup)
     const sig = contentSignature(result);
-    if (sig && seenSignatures.has(sig)) continue;
+    if (sig && seenSignatures.has(sig)) return false;
 
     const formatted = formatResult(result);
     const tokens = countTokens(formatted);
 
     if (tokensUsed + tokens > budget) {
+      if (!allowTruncate) return false;
       const remaining = budget - tokensUsed;
-      if (remaining > 50) {
-        const truncated = truncateResult(result, remaining);
-        if (truncated) {
-          const tf = formatResult(truncated);
-          if (buckets[result.tier]) {
-            buckets[result.tier].push(tf);
-            tierCounts[result.tier] = (tierCounts[result.tier] ?? 0) + 1;
-          }
-          tokensUsed += countTokens(tf);
-        }
-      }
-      break;
+      if (remaining <= 50) return false;
+      const truncated = truncateResult(result, remaining);
+      if (!truncated) return false;
+      const tf = formatResult(truncated);
+      buckets[result.tier].push(tf);
+      tierCounts[result.tier] += 1;
+      if (sig) seenSignatures.add(sig);
+      tokensUsed += countTokens(tf);
+      return true;
     }
 
-    if (buckets[result.tier]) {
-      buckets[result.tier].push(formatted);
-      tierCounts[result.tier] = (tierCounts[result.tier] ?? 0) + 1;
-      if (sig) seenSignatures.add(sig);
-    }
+    buckets[result.tier].push(formatted);
+    tierCounts[result.tier] += 1;
+    if (sig) seenSignatures.add(sig);
     tokensUsed += tokens;
+    return true;
+  };
+
+  // Pass 1 (G2 fix): reserve MIN_TIER_SLOTS for each non-empty tier, walked in
+  // decreasing-weight TIER_ORDER. This guarantees higher-weight tiers
+  // (insights/digests) that cleared the similarity threshold are represented
+  // even when lower-weight observations dominate the global RRF ranking.
+  for (const tier of TIER_ORDER) {
+    const tierResults = sortedResults.filter((r) => r.tier === tier);
+    let reserved = 0;
+    for (const result of tierResults) {
+      if (reserved >= MIN_TIER_SLOTS) break;
+      if (includedIds.has(result.id)) continue;
+      if (tryAdd(result, { allowTruncate: true })) {
+        includedIds.add(result.id);
+        reserved += 1;
+      }
+    }
+  }
+
+  // Pass 2: greedy fill of remaining budget in RRF-sorted order.
+  for (const result of sortedResults) {
+    if (result.id != null && includedIds.has(result.id)) continue;
+    const formatted = formatResult(result);
+    const tokens = countTokens(formatted);
+    if (tokensUsed + tokens > budget) {
+      tryAdd(result, { allowTruncate: true });
+      break;
+    }
+    if (tryAdd(result, { allowTruncate: false }) && result.id != null) {
+      includedIds.add(result.id);
+    }
   }
 
   // Build final markdown with tier headers (D-05)
