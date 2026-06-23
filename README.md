@@ -485,7 +485,7 @@ so the mechanism is fully **agent-agnostic** and works for **GitHub Copilot CLI*
 How it works:
 
 - **Capture** — every coding agent runs inside the shared tmux wrapper. `scripts/live-query-monitor.js` polls the pane (`tmux capture-pane -p`) and extracts the current input-box draft with [`InputDraftExtractor`](src/live-logging/InputDraftExtractor.js) (structure-first parsing of the box border + prompt marker; placeholders and UI noise are filtered out).
-- **Draft stream** — on every change, the draft is POSTed to `/api/live-context/draft` and streamed straight into the **main heading bar**, so you see the prompt update live as you type.
+- **Draft stream** — on every change, the draft is POSTed to `/api/live-context/draft` and streamed straight into the **main heading bar**, so you see the prompt update live as you type. The same payload also carries the **enhanced conversation context** — the deterministic topic summary (`paneContext`) that [`buildRetrievalQuery`](src/hooks/query-builder.js) appends as `[context: …]` — which is rendered on a muted sub-line **directly beneath the typed query** for seamless visibility of exactly what enrichment will be sent to retrieval. The enrichment is purely deterministic string extraction (no LLM call), so streaming it adds no inference cost.
 - **Debounce + retrieve** — once the draft is *stable* (unchanged for **3 s**) and new, it is passed through the Knowledge Context Injection memory pipeline (`/api/retrieve` → `RetrievalService`), which returns **Working Memory (≤300 tokens)** and **Observational memory (≤700 tokens)** for the live query.
 - **Ranked candidates** — the same response also carries `rankedResults`, the full pre-token-budget Observational Memory candidate list in final ranked order, so dashboard views can inspect every match even when the rendered markdown is truncated.
 - **Human rerank capture** — the **All Results** sidebar lets a user move candidates up/down, then save the human order. The dashboard forwards the event to the host Observations API, which embeds the query and stores compact rank-delta signals in Qdrant collection `human_rerank_feedback`. These signals close a **learned rerank loop**: similar future queries automatically promote the items humans preferred (see *Learned rerank boost* below).
@@ -505,7 +505,7 @@ graph TD
         C --> D{"Draft state?"}
     end
 
-    D -->|"changed (still typing)"| E["POST /api/live-context/draft"]
+    D -->|"changed (still typing)"| E["POST /api/live-context/draft<br/>query + enhanced context"]
     D -->|"stable for 3s"| F["POST /api/live-context/query"]
     D -->|"non-empty → empty (Enter)"| G["POST /api/live-context/submitted"]
 
@@ -519,7 +519,7 @@ graph TD
         G --> K["Submitted log + broadcast LIVE_SUBMITTED"]
     end
 
-    H -->|WebSocket| L["Heading bar<br/>live typing"]
+    H -->|WebSocket| L["Heading bar<br/>live typing + context sub-line"]
     J -->|WebSocket markdown| M["Working | Observational columns"]
     J -->|WebSocket rankedResults| Q["All Results sidebar<br/>rank asc + tier + score"]
     K -->|WebSocket| N["Recent Queries log"]
