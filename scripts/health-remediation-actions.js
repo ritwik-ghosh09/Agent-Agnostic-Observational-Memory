@@ -13,11 +13,11 @@
  * - Escalation when auto-healing fails
  */
 
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync, writeFileSync } from 'fs';
+import { existsSync, writeFileSync, openSync, closeSync, mkdirSync } from 'fs';
 import ProcessStateManager from './process-state-manager.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -566,23 +566,35 @@ export class HealthRemediationActions {
   }
 
   /**
-   * Restart LLM CLI Proxy via launchctl kickstart -k.
-   * Single path used by both the dashboard "Restart" button (Phase 33 33-15)
-   * and the new auto-heal FSM (Plan 34-03) — one place to test.
+   * Restart the LLM CLI Proxy (port 12435).
+   *
+   * Single path used by the dashboard "Restart" button (Phase 33 33-15), the
+   * 60s semantic auto-heal FSM (Plan 34-03) AND the 3s liveness watchdog
+   * (Plan 34-xx). Cross-platform by design:
+   *   - macOS (darwin): `launchctl kickstart -k` re-runs start-llm-proxy.sh via
+   *     the launchd plist (com.coding.llm-cli-proxy), re-fetching the PAC so
+   *     R3 (VPN/CN flap re-detection) keeps working.
+   *   - Linux / Windows: there is no launchd, so kill whatever holds port 12435
+   *     and respawn the canonical wrapper `src/llm-proxy/llm-proxy.mjs` detached
+   *     (mirrors SERVICE_CONFIGS.llmCliProxy.startFn in start-services-robust.js).
+   *
+   * Previously this was macOS-only (`launchctl kickstart`), so on Linux the
+   * auto-heal silently failed and a dead proxy stayed dead — the recurring
+   * "LLM-proxy health" issue. Result shape preserved for the dashboard consumer.
    */
   async restartLLMCLIProxy(details) {
-    // Phase 34 D-05: rewritten from raw port-kill+process-respawn to
-    // launchctl kickstart -k. The previous implementation skipped
-    // start-llm-proxy.sh, so PAC was never re-fetched and HTTPS_PROXY stayed
-    // stale — defeating R3 (VPN/CN flap re-detection). `kickstart -k`
-    // SIGTERMs the running proxy, waits 5s, SIGKILLs if needed, and respawns
-    // via launchd — which re-runs start-llm-proxy.sh from scratch. Inherits
-    // plist EnvironmentVariables (PATH, LLM_PROXY_PORT). Result shape
-    // preserved for the dashboard Restart button consumer.
+    const reason = details?.reason ?? 'unspecified';
+    if (process.platform === 'darwin') {
+      return this._restartLLMCLIProxyLaunchd(reason);
+    }
+    return this._restartLLMCLIProxyHostProcess(reason);
+  }
+
+  /** macOS path: launchctl kickstart -k gui/$UID/com.coding.llm-cli-proxy. */
+  async _restartLLMCLIProxyLaunchd(reason) {
     try {
       const { execFile } = await import('node:child_process');
       const uid = process.getuid();
-      const reason = details?.reason ?? 'unspecified';
       this.log(`[HealthRemediationActions] Restarting LLM CLI Proxy via launchctl kickstart -k (reason: ${reason})...`);
       return await new Promise((resolve) => {
         execFile('launchctl',
@@ -600,9 +612,178 @@ export class HealthRemediationActions {
         );
       });
     } catch (error) {
-      this.log(`[HealthRemediationActions] restartLLMCLIProxy threw: ${error.message}`, 'ERROR');
+      this.log(`[HealthRemediationActions] restartLLMCLIProxy (launchd) threw: ${error.message}`, 'ERROR');
       return { success: false, message: error.message };
     }
+  }
+
+  /**
+   * Linux / Windows path: free port 12435 then respawn the wrapper detached.
+   * @param {string} reason
+   */
+  async _restartLLMCLIProxyHostProcess(reason) {
+    // Serialize restarts. The 3s liveness watchdog AND the 60s semantic FSM can
+    // both dispatch a restart; two concurrent respawns race to bind port 12435
+    // and the loser crashes with EADDRINUSE (the proxy's listen 'error' is
+    // unhandled → process exits), which the watchdog then "heals" again — a
+    // self-inflicted restart loop. One restart at a time eliminates the race.
+    if (this._proxyRestartLock) {
+      this.log('[HealthRemediationActions] proxy restart already in progress — skipping concurrent request', 'INFO');
+      return { success: true, message: 'restart already in progress', reason, skipped: true };
+    }
+    this._proxyRestartLock = true;
+    try {
+      const port = parseInt(process.env.LLM_CLI_PROXY_PORT || process.env.LLM_PROXY_PORT || '12435', 10);
+      const wrapperEntry = join(this.codingRoot, 'src/llm-proxy/llm-proxy.mjs');
+
+      if (!existsSync(wrapperEntry)) {
+        return { success: false, message: `wrapper not found: ${wrapperEntry}`, reason };
+      }
+
+      this.log(`[HealthRemediationActions] Restarting LLM CLI Proxy (host process, port ${port}, reason: ${reason})...`);
+
+      // 1. Kill whatever currently holds the port (graceful, then forced).
+      await this._killProcessOnPort(port);
+
+      // 2. Wait until the port is ACTUALLY free before respawning. Without this
+      //    the new front server hits EADDRINUSE because the old socket lingers,
+      //    crashes, and triggers another heal cycle.
+      const freed = await this._waitForPortFree(port, 5000);
+      if (!freed) {
+        // Last resort: force-kill again and proceed; better to try than to bail.
+        await this._killProcessOnPort(port);
+        await this._waitForPortFree(port, 2000);
+      }
+
+      // 3. Respawn the canonical wrapper detached so it outlives the coordinator.
+      const dataDir = join(this.codingRoot, '.data');
+      try { mkdirSync(dataDir, { recursive: true }); } catch { /* exists */ }
+      const logFile = join(dataDir, 'llm-cli-proxy.log');
+      const logFd = openSync(logFile, 'a');
+      const child = spawn('node', [wrapperEntry], {
+        detached: true,
+        stdio: ['ignore', logFd, logFd],
+        cwd: this.codingRoot,
+        env: { ...process.env, LLM_PROXY_PORT: String(port) }
+      });
+      closeSync(logFd);
+      child.unref();
+
+      // 4. Confirm it binds and is fully ready (poll /health for 200 up to ~15s,
+      //    covering the in-process upstream's slow provider init).
+      const ok = await this._waitForProxyHealth(port, 15000);
+      if (ok) {
+        this.log(`[HealthRemediationActions] LLM CLI Proxy healthy after respawn (pid ${child.pid})`);
+        return { success: true, message: `llm-cli-proxy respawned on port ${port} (pid ${child.pid})`, pid: child.pid, reason };
+      }
+      // Process is up but not yet answering — still report success on spawn so
+      // the watchdog's settle window applies; the next probe will re-evaluate.
+      this.log(`[HealthRemediationActions] LLM CLI Proxy respawned (pid ${child.pid}) but /health not green within 8s`, 'WARN');
+      return { success: true, message: `llm-cli-proxy respawned on port ${port} (pid ${child.pid}); health pending`, pid: child.pid, reason };
+    } catch (error) {
+      this.log(`[HealthRemediationActions] restartLLMCLIProxy (host) threw: ${error.message}`, 'ERROR');
+      return { success: false, message: error.message, reason };
+    } finally {
+      this._proxyRestartLock = false;
+    }
+  }
+
+  /**
+   * Poll until no process LISTENS on <port> (cross-platform), or timeout.
+   * @param {number} port
+   * @param {number} timeoutMs
+   * @returns {Promise<boolean>} true once the port is free
+   */
+  async _waitForPortFree(port, timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      let inUse = false;
+      try {
+        if (process.platform === 'win32') {
+          const { stdout } = await execAsync(`netstat -ano | findstr :${port}`, { timeout: 3000 });
+          inUse = /LISTENING/i.test(stdout);
+        } else {
+          const { stdout } = await execAsync(`lsof -ti:${port} -sTCP:LISTEN 2>/dev/null || true`, { timeout: 3000 });
+          inUse = stdout.trim().length > 0;
+        }
+      } catch { inUse = false; }
+      if (!inUse) return true;
+      await new Promise(r => setTimeout(r, 200));
+    }
+    return false;
+  }
+
+  /**
+   * Cross-platform "kill whatever LISTENS on <port>".
+   *
+   * CRITICAL: match the LISTENING socket only. `lsof -i:PORT` (and
+   * `netstat | findstr :PORT`) also match CLIENT connections whose *remote*
+   * port is PORT — e.g. the health-coordinator's own /health probes to the
+   * proxy. Killing those PIDs would terminate the coordinator itself. Restrict
+   * to listeners (`-sTCP:LISTEN` / "LISTENING") and never kill our own PID.
+   * @param {number} port
+   */
+  async _killProcessOnPort(port) {
+    const selfPid = process.pid;
+    if (process.platform === 'win32') {
+      try {
+        const { stdout } = await execAsync(`netstat -ano | findstr :${port}`, { timeout: 4000 });
+        const pids = [...new Set(
+          stdout.split('\n')
+            .filter(l => /LISTENING/i.test(l))
+            .map(l => l.trim().split(/\s+/).pop())
+            .filter(p => /^\d+$/.test(p) && parseInt(p, 10) !== selfPid)
+        )];
+        for (const pid of pids) {
+          try { await execAsync(`taskkill /F /PID ${pid}`, { timeout: 4000 }); } catch { /* gone */ }
+        }
+      } catch { /* nothing listening */ }
+      return;
+    }
+
+    // Unix (Linux/macOS) — listeners only.
+    const listeners = async () => {
+      try {
+        const { stdout } = await execAsync(`lsof -ti:${port} -sTCP:LISTEN 2>/dev/null || true`, { timeout: 4000 });
+        return stdout.trim().split('\n')
+          .filter(Boolean)
+          .map(p => parseInt(p, 10))
+          .filter(p => Number.isInteger(p) && p !== selfPid);
+      } catch { return []; }
+    };
+
+    const pids = await listeners();
+    if (pids.length === 0) return;
+
+    for (const pid of pids) {
+      try { process.kill(pid, 'SIGTERM'); } catch { /* already gone */ }
+    }
+    // Give graceful shutdown a moment, then force-kill anything still bound.
+    await new Promise(r => setTimeout(r, 800));
+    for (const pid of await listeners()) {
+      try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
+    }
+  }
+
+  /**
+   * Poll http://localhost:<port>/health until it returns HTTP 200 or timeout.
+   * Confirms the freshly-spawned proxy is fully ready (front + in-process
+   * upstream both up), not merely that the front socket is accepting.
+   * @param {number} port
+   * @param {number} timeoutMs
+   * @returns {Promise<boolean>}
+   */
+  async _waitForProxyHealth(port, timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    const url = `http://localhost:${port}/health`;
+    while (Date.now() < deadline) {
+      try {
+        const r = await fetch(url, { signal: AbortSignal.timeout(2000) });
+        if (r.ok) return true;
+      } catch { /* not up yet */ }
+      await new Promise(res => setTimeout(res, 400));
+    }
+    return false;
   }
 
   /**
