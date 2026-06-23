@@ -432,6 +432,7 @@ How it works:
 - **Draft stream** — on every change, the draft is POSTed to `/api/live-context/draft` and streamed straight into the **main heading bar**, so you see the prompt update live as you type.
 - **Debounce + retrieve** — once the draft is *stable* (unchanged for **3 s**) and new, it is passed through the Knowledge Context Injection memory pipeline (`/api/retrieve` → `RetrievalService`), which returns **Working Memory (≤300 tokens)** and **Observational memory (≤700 tokens)** for the live query.
 - **Ranked candidates** — the same response also carries `rankedResults`, the full pre-token-budget Observational Memory candidate list in final ranked order, so dashboard views can inspect every match even when the rendered markdown is truncated.
+- **Human rerank capture** — the **All Results** sidebar lets a user move candidates up/down, then save the human order. The dashboard forwards the event to the host Observations API, which embeds the query and stores compact rank-delta signals in Qdrant collection `human_rerank_feedback`. This captures feedback only; retrieval-time learned boosting is separate.
 - **Submitted log** — when you press Enter (the input box clears), the sent query is POSTed to `/api/live-context/submitted` and appended to the **Recent Queries** log on the left — a history of prompts actually submitted to the CLI.
 - **Display** — the **Live Context** tab renders four zones in real time over a dedicated WebSocket: the heading bar (live typing), the Recent Queries log (submitted prompts), the Working | Observational memory columns, and an **All Results** sidebar listing every ranked candidate with tier and score.
 
@@ -466,6 +467,27 @@ graph TD
     J -->|WebSocket markdown| M["Working | Observational columns"]
     J -->|WebSocket rankedResults| Q["All Results sidebar<br/>rank asc + tier + score"]
     K -->|WebSocket| N["Recent Queries log"]
+```
+
+Human rerank capture flow:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Sidebar as All Results Sidebar
+    participant Dashboard as Dashboard API :3033
+    participant Host as Observations API :12436
+    participant Qdrant as Qdrant human_rerank_feedback
+
+    User->>Sidebar: Move results up/down
+    User->>Sidebar: Save ranking
+    Sidebar->>Dashboard: POST /api/live-context/rerank
+    Dashboard->>Host: POST /api/rerank-feedback
+    Host->>Host: embed query + hash user/query + rank deltas
+    Host->>Qdrant: upsert compact feedback event
+    Qdrant-->>Host: persisted
+    Host-->>Dashboard: { ok, eventId, persisted }
+    Dashboard-->>Sidebar: save status
 ```
 
 Configuration: enabled per agent via `AGENT_ENABLE_LIVE_CONTEXT=true` (default) in
