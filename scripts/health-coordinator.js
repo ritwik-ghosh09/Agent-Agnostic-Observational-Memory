@@ -969,6 +969,46 @@ function latestCopilotMtimeForProject(projectPath) {
 }
 
 /**
+ * Enumerate the cwd of every Copilot CLI session whose transcript was written
+ * recently (events.jsonl mtime within ETM_TRANSCRIPT_ACTIVE_MS).
+ *
+ * discoverProjectCandidates() only walks the Agentic dir, so an active Copilot
+ * session rooted elsewhere (e.g. the user's HOME) is invisible to the ETM safety
+ * net — its monitor dies on the 30-min idle exit and the heartbeat lapses
+ * permanently with nothing to respawn it. Surfacing these cwds as extra
+ * candidates lets the safety net auto-heal the ETM for whatever project the user
+ * is actively working in, wherever it lives.
+ */
+function activeCopilotProjectPaths(now) {
+  const out = new Set();
+  try {
+    const baseDir = path.join(os.homedir(), '.copilot', 'session-state');
+    if (!fs.existsSync(baseDir)) return out;
+    for (const dir of fs.readdirSync(baseDir)) {
+      const eventsPath = path.join(baseDir, dir, 'events.jsonl');
+      let st;
+      try { st = fs.statSync(eventsPath); } catch { continue; }
+      if (now - st.mtime.getTime() > ETM_TRANSCRIPT_ACTIVE_MS) continue; // not active
+      try {
+        const fd = fs.openSync(eventsPath, 'r');
+        const buf = Buffer.alloc(2048);
+        const bytesRead = fs.readSync(fd, buf, 0, 2048, 0);
+        fs.closeSync(fd);
+        const firstLine = buf.toString('utf-8', 0, bytesRead).split('\n')[0];
+        const startEvent = JSON.parse(firstLine);
+        const cwd = startEvent?.data?.context?.cwd;
+        if (startEvent?.type === 'session.start' && typeof cwd === 'string' && cwd) {
+          out.add(cwd);
+        }
+      } catch { continue; }
+    }
+  } catch {
+    // best-effort — fall back to Agentic-dir discovery only
+  }
+  return out;
+}
+
+/**
  * Walk Agentic dir up to depth 2 to enumerate real on-disk project paths.
  * This covers both `Agentic/<name>` and `Agentic/_work/<name>` layouts.
  */
@@ -1035,7 +1075,15 @@ function ensureEtmForActiveProjects() {
   // gets spawned for them.
   const tmuxOpen = tmuxOpenProjectPaths(agenticDir);
 
-  for (const projectPath of discoverProjectCandidates(agenticDir)) {
+  // Active Copilot CLI sessions may be rooted OUTSIDE the Agentic dir (e.g. the
+  // user's HOME). Union those cwds into the candidate set so the safety net can
+  // respawn the ETM for whatever project the user is actively working in,
+  // wherever it lives — otherwise its monitor dies on the idle-exit and the
+  // heartbeat lapses permanently with nothing to revive it.
+  const copilotActive = activeCopilotProjectPaths(now);
+  const candidatePaths = new Set([...discoverProjectCandidates(agenticDir), ...copilotActive]);
+
+  for (const projectPath of candidatePaths) {
     const projectName = path.basename(projectPath);
     if (coveredProjects.has(projectName)) continue;
 
@@ -1143,29 +1191,68 @@ function refreshLslStaleness() {
 const NETWORK_PROBE_INTERVAL_MS = 30_000;
 
 /**
+ * Resolve the local corporate proxy endpoint (host + port).
+ *
+ * The legacy detect-network.sh assumed `px` on 127.0.0.1:3128, but lidec hosts
+ * run proxydetox on a different port (e.g. 48157), and the coordinator — started
+ * by systemd WITHOUT the user's shell proxy env — cannot read it from
+ * http(s)_proxy. Probing the hard-coded 3128 made the dashboard's "Local proxy"
+ * and "Internet" checks report FALSE failures even though egress was fine.
+ *
+ * Resolution order (first hit wins):
+ *   1. http(s)_proxy env, when the coordinator happens to have it.
+ *   2. The canonical proxydetox controller (`<controller> env`).
+ *   3. Legacy px default 127.0.0.1:3128.
+ * `configured` is true for (1)/(2) — a proxy is genuinely expected — and false
+ * for the (3) fallback so non-proxy hosts don't show a phantom proxy.
+ */
+function resolveLocalProxyEndpoint() {
+  const envUrl = process.env.https_proxy || process.env.HTTPS_PROXY ||
+                 process.env.http_proxy || process.env.HTTP_PROXY;
+  if (envUrl) {
+    try {
+      const u = new URL(envUrl);
+      return { host: u.hostname, port: parseInt(u.port, 10) || 3128, configured: true };
+    } catch { /* malformed — fall through */ }
+  }
+  const controller = process.env.PROXYDETOX_CONTROLLER ||
+    '/opt/lidec/bin/lidec-proxydetox-controller.sh';
+  if (fs.existsSync(controller)) {
+    try {
+      const r = spawnSync(controller, ['env'], { encoding: 'utf8', timeout: 4000 });
+      if (r.status === 0 && r.stdout) {
+        const m = r.stdout.match(/^\s*https?_proxy=https?:\/\/([^:/\s]+):(\d+)/im);
+        if (m) return { host: m[1], port: parseInt(m[2], 10), configured: true };
+      }
+    } catch { /* controller unavailable — fall through */ }
+  }
+  return { host: '127.0.0.1', port: 3128, configured: false };
+}
+
+/**
  * Detect network location and proxy status.
  * Logic ported from coding/scripts/detect-network.sh:
- *   1. Check if px/proxydetox is listening on 127.0.0.1:3128
+ *   1. Check if the local proxy (proxydetox/px) is listening
  *   2. Check if BMW PAC host resolves (→ corporate/CN)
- *   3. Check VPN interfaces (utun*)
+ *   3. Probe a CONNECT tunnel for functional egress
  *   4. Determine: corporate | vpn | home
  */
 async function pollNetworkStatus() {
   const netState = currentState.network;
 
-  // 1. Is the local proxy active?
-  //    px-toggle unsets proxy env vars when disabling, but may leave the
-  //    process listening on :3128. Treat proxy as inactive when none of the
-  //    standard env vars point to it — that's the user's intent signal.
-  const proxyEnvSet = !!(process.env.http_proxy || process.env.https_proxy ||
-                         process.env.HTTP_PROXY || process.env.HTTPS_PROXY);
+  // 1. Resolve the local proxy endpoint and check it is live. Resolving from the
+  //    proxydetox controller (not a hard-coded port) means we probe the RIGHT
+  //    port even when the coordinator runs under systemd without the user's
+  //    shell proxy env. `configured` separates a real proxy host from the
+  //    legacy 3128 fallback so non-proxy hosts don't report a phantom proxy.
+  const proxyEndpoint = resolveLocalProxyEndpoint();
   const portListening = await new Promise(resolve => {
-    const sock = net.connect({ host: '127.0.0.1', port: 3128, timeout: 2000 });
+    const sock = net.connect({ host: proxyEndpoint.host, port: proxyEndpoint.port, timeout: 2000 });
     sock.once('connect', () => { sock.destroy(); resolve(true); });
     sock.once('error', () => resolve(false));
     sock.once('timeout', () => { sock.destroy(); resolve(false); });
   });
-  netState.proxy_running = proxyEnvSet && portListening;
+  netState.proxy_running = proxyEndpoint.configured && portListening;
 
   // 2. Can we resolve BMW PAC host? (indicates CN)
   const pacResolved = await new Promise(resolve => {
@@ -1185,58 +1272,42 @@ async function pollNetworkStatus() {
     netState.location = 'home';       // direct internet, no corporate access
   }
 
-  // 5. Check if proxy is functional (can reach external host via proxy)
+  // 4. proxy_functional + internet_reachable via a single CONNECT tunnel test
+  //    through the resolved proxy. proxydetox speaks HTTP CONNECT, not a bare
+  //    GET, so a 200 on CONNECT is the authoritative "external egress works"
+  //    signal — and it doubles as the internet-reachability check.
   if (netState.proxy_running) {
-    netState.proxy_functional = await new Promise(resolve => {
-      const req = http.get('http://127.0.0.1:3128/', {
-        timeout: 5000,
-        headers: { Host: 'api.github.com' }
-      }, res => {
-        res.resume();
-        // Any response from the proxy (even 407) means it's functional
-        resolve(res.statusCode < 502);
+    const connectOk = await new Promise(resolve => {
+      const req = http.request({
+        host: proxyEndpoint.host, port: proxyEndpoint.port,
+        method: 'CONNECT', path: 'api.github.com:443', timeout: 5000
       });
+      req.on('connect', (res) => { resolve(res.statusCode === 200); req.destroy(); });
       req.on('error', () => resolve(false));
       req.on('timeout', () => { req.destroy(); resolve(false); });
+      req.end();
     });
+    netState.proxy_functional = connectOk;
+    netState.internet_reachable = connectOk;
   } else {
     netState.proxy_functional = false;
-  }
-
-  // 6. Can we reach the internet? (either directly or via proxy)
-  netState.internet_reachable = await new Promise(resolve => {
-    const opts = { timeout: 5000, method: 'HEAD' };
-    if (netState.proxy_running) {
-      // Via proxy
-      const proxyReq = http.request({
-        host: '127.0.0.1', port: 3128,
-        method: 'CONNECT', path: 'api.github.com:443',
-        timeout: 5000
-      });
-      proxyReq.on('connect', (res) => {
-        resolve(res.statusCode === 200);
-        proxyReq.destroy();
-      });
-      proxyReq.on('error', () => resolve(false));
-      proxyReq.on('timeout', () => { proxyReq.destroy(); resolve(false); });
-      proxyReq.end();
-    } else {
-      // Direct
-      const req = https.get('https://api.github.com/', opts, res => {
+    // No local proxy → test direct egress (home network).
+    netState.internet_reachable = await new Promise(resolve => {
+      const req = https.get('https://api.github.com/', { timeout: 5000, method: 'HEAD' }, res => {
         res.resume();
         resolve(res.statusCode < 500);
       });
       req.on('error', () => resolve(false));
       req.on('timeout', () => { req.destroy(); resolve(false); });
-    }
-  });
+    });
+  }
 
   netState.last_probe_end = new Date().toISOString();
 
   // Also update proxy.networkMode to match (backwards compat for dashboard)
   currentState.proxy.networkMode = netState.location === 'home' ? 'public' : netState.location;
 
-  log(`network: location=${netState.location} proxy_env=${proxyEnvSet} port_listening=${portListening} proxy_running=${netState.proxy_running} proxy_functional=${netState.proxy_functional} internet=${netState.internet_reachable}`);
+  log(`network: location=${netState.location} proxy_endpoint=${proxyEndpoint.host}:${proxyEndpoint.port} configured=${proxyEndpoint.configured} port_listening=${portListening} proxy_running=${netState.proxy_running} proxy_functional=${netState.proxy_functional} internet=${netState.internet_reachable}`);
 }
 
 async function runAllChecks() {

@@ -4208,6 +4208,25 @@ ORDER BY m.time_created ASC;`;
               }
             } catch (e) { this.debug(`OpenCode session check failed: ${e.message}`); }
           }
+
+          // Check Copilot CLI sessions — the events.jsonl for this project. A
+          // recently-touched transcript means the user is still working here, so
+          // we must NOT exit (otherwise the monitor dies mid-session and the
+          // heartbeat lapses until the coordinator notices). Mirrors the tmux
+          // (Claude) and OpenCode guards above.
+          if (!hasActiveSession) {
+            try {
+              const copilotTranscript = this.findCopilotTranscript();
+              if (copilotTranscript && fs.existsSync(copilotTranscript)) {
+                const ageMs = Date.now() - fs.statSync(copilotTranscript).mtime.getTime();
+                if (ageMs < this.idleTimeout) {
+                  hasActiveSession = true;
+                  this.lastActivityTime = Date.now();
+                  this.debug(`⏰ Copilot session still active (transcript touched ${Math.round(ageMs/1000)}s ago)`);
+                }
+              }
+            } catch (e) { this.debug(`Copilot session check failed: ${e.message}`); }
+          }
         } catch { /* checks failed — proceed with exit */ }
 
         if (hasActiveSession) {
