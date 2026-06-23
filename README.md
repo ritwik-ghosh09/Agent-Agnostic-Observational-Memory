@@ -433,7 +433,7 @@ How it works:
 - **Debounce + retrieve** — once the draft is *stable* (unchanged for **3 s**) and new, it is passed through the Knowledge Context Injection memory pipeline (`/api/retrieve` → `RetrievalService`), which returns **Working Memory (≤300 tokens)** and **Observational memory (≤700 tokens)** for the live query.
 - **Ranked candidates** — the same response also carries `rankedResults`, the full pre-token-budget Observational Memory candidate list in final ranked order, so dashboard views can inspect every match even when the rendered markdown is truncated.
 - **Submitted log** — when you press Enter (the input box clears), the sent query is POSTed to `/api/live-context/submitted` and appended to the **Recent Queries** log on the left — a history of prompts actually submitted to the CLI.
-- **Display** — the **Live Context** tab renders three zones in real time over a dedicated WebSocket: the heading bar (live typing), the Recent Queries log (submitted prompts), and the two columns (Working | Observational memory for the live query).
+- **Display** — the **Live Context** tab renders four zones in real time over a dedicated WebSocket: the heading bar (live typing), the Recent Queries log (submitted prompts), the Working | Observational memory columns, and an **All Results** sidebar listing every ranked candidate with tier and score.
 
 ```mermaid
 graph TD
@@ -456,14 +456,15 @@ graph TD
         E --> H["Broadcast LIVE_DRAFT"]
         F --> I["Knowledge Context Injection<br/>/api/retrieve → RetrievalService<br/>markdown + meta + rankedResults"]
         I --> O["Token-budgeted context<br/>Working ≤300 + Observational ≤700 tok"]
-        I --> P["Full ranked candidates<br/>pre-budget Observational Memory"]
+        I --> P["rankedResults[]<br/>full pre-budget candidate list"]
         O --> J["Ring buffer + broadcast LIVE_CONTEXT"]
         P --> J
         G --> K["Submitted log + broadcast LIVE_SUBMITTED"]
     end
 
     H -->|WebSocket| L["Heading bar<br/>live typing"]
-    J -->|WebSocket| M["Working | Observational columns<br/>+ ranked results payload"]
+    J -->|WebSocket markdown| M["Working | Observational columns"]
+    J -->|WebSocket rankedResults| Q["All Results sidebar<br/>rank asc + tier + score"]
     K -->|WebSocket| N["Recent Queries log"]
 ```
 

@@ -16,15 +16,29 @@ export interface LiveContextEntry {
   receivedAt: string
   /** Combined Working + Observational memory markdown ('' when retrieval failed). */
   markdown: string
+  /** Full ranked retrieval candidate list (best rank first after sorting in the UI). */
+  rankedResults: RankedResult[]
   meta: {
     query?: string
     budget?: number
     results_count?: number
+    ranked_count?: number
     tokens_used?: number
     working_memory_tokens?: number
     latency_ms?: number
   } | null
   error: string | null
+}
+
+export interface RankedResult {
+  id: string
+  tier: 'insights' | 'digests' | 'kg_entities' | 'observations'
+  rank: number
+  rawScore: number
+  rrfScore: number
+  tierWeight: number
+  snippet: string
+  title: string
 }
 
 interface WsMessage {
@@ -88,9 +102,13 @@ export function useLiveContextWebSocket() {
 
   const addEntry = useCallback((entry: LiveContextEntry) => {
     if (!entry || !entry.id) return
+    const normalized: LiveContextEntry = {
+      ...entry,
+      rankedResults: Array.isArray(entry.rankedResults) ? entry.rankedResults : [],
+    }
     setEntries((prev) => {
-      if (prev.some((e) => e.id === entry.id)) return prev
-      return [entry, ...prev].slice(0, MAX_ENTRIES)
+      if (prev.some((e) => e.id === normalized.id)) return prev
+      return [normalized, ...prev].slice(0, MAX_ENTRIES)
     })
   }, [])
 
@@ -163,7 +181,10 @@ export function useLiveContextWebSocket() {
     fetch(`${httpBase()}/api/live-context?limit=${MAX_ENTRIES}`)
       .then((r) => (r.ok ? r.json() : { data: [] }))
       .then((d: { data?: LiveContextEntry[] }) => {
-        const seed = (d.data || []).slice().reverse() // newest first
+        const seed = (d.data || []).slice().reverse().map((entry) => ({
+          ...entry,
+          rankedResults: Array.isArray(entry.rankedResults) ? entry.rankedResults : [],
+        })) // newest first
         setEntries((prev) => {
           const ids = new Set(prev.map((e) => e.id))
           const merged = [...seed.filter((e) => !ids.has(e.id)), ...prev]

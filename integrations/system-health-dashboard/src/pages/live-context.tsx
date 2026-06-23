@@ -1,11 +1,11 @@
 import { Fragment } from 'react'
 import { useLiveContextWebSocket } from '@/hooks/useLiveContextWebSocket'
-import type { LiveContextEntry, LiveSubmitted } from '@/hooks/useLiveContextWebSocket'
+import type { LiveContextEntry, LiveSubmitted, RankedResult } from '@/hooks/useLiveContextWebSocket'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Brain, Database, Radio, Terminal, AlertTriangle, Send, Loader2 } from 'lucide-react'
+import { Brain, Database, Radio, Terminal, AlertTriangle, Send, Loader2, ListOrdered } from 'lucide-react'
 
 const WORKING_HEADERS = ['Working Memory', 'Previous Session']
 const OBSERVATIONAL_HEADERS = ['Insights', 'Digests', 'Entities', 'Observations']
@@ -114,6 +114,20 @@ const AGENT_COLORS: Record<string, string> = {
   opencode: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
 }
 
+const TIER_COLORS: Record<RankedResult['tier'], string> = {
+  insights: 'bg-violet-500/15 text-violet-600 dark:text-violet-400',
+  digests: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+  kg_entities: 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400',
+  observations: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+}
+
+const TIER_LABELS: Record<RankedResult['tier'], string> = {
+  insights: 'insights',
+  digests: 'digests',
+  kg_entities: 'entities',
+  observations: 'observations',
+}
+
 function MemoryColumn({
   icon,
   title,
@@ -187,6 +201,58 @@ function MemoryColumns({ entry, typing }: { entry: LiveContextEntry | null; typi
         empty={emptyFor('observational')}
       />
     </div>
+  )
+}
+
+function formatScore(score: number): string {
+  return Number.isFinite(score) ? score.toFixed(3) : '—'
+}
+
+/** Ranked read-only sidebar containing every retrieval candidate for the live query. */
+function RankedResultsSidebar({ results }: { results: RankedResult[] }) {
+  const ordered = [...results].sort((a, b) => a.rank - b.rank)
+
+  return (
+    <Card className="flex min-h-[28rem] flex-col overflow-hidden">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center justify-between gap-2 text-sm">
+          <span className="flex items-center gap-2">
+            <ListOrdered className="h-3.5 w-3.5 text-primary" /> All Results
+          </span>
+          <Badge variant="outline">{results.length}</Badge>
+        </CardTitle>
+      </CardHeader>
+      <ScrollArea className="flex-1">
+        <div className="space-y-2 p-2">
+          {ordered.length === 0 ? (
+            <p className="px-2 py-3 text-xs italic text-muted-foreground">No results yet.</p>
+          ) : (
+            ordered.map((result) => (
+              <div key={result.id} className="rounded-md border border-border/60 px-3 py-2 text-sm">
+                <div className="flex items-start gap-2">
+                  <span className="mt-0.5 w-7 shrink-0 text-xs font-semibold text-muted-foreground">
+                    #{result.rank}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <Badge className={TIER_COLORS[result.tier]}>{TIER_LABELS[result.tier]}</Badge>
+                      <span className="truncate font-medium text-foreground/90">{result.title}</span>
+                    </div>
+                    <p className="mt-1 max-h-10 overflow-hidden text-xs leading-5 text-muted-foreground">
+                      {result.snippet}
+                    </p>
+                    <div className="mt-1 flex items-center gap-2 text-[10px] uppercase text-muted-foreground/70">
+                      <span>score {formatScore(result.rawScore)}</span>
+                      <span>rrf {formatScore(result.rrfScore)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </ScrollArea>
+    </Card>
   )
 }
 
@@ -286,6 +352,7 @@ export function LiveContextPage() {
   const headingQuery = draft?.query || latest?.query || ''
   const headingAgent = draft?.agent || latest?.agent || ''
   const headingProject = draft?.project || latest?.project || null
+  const displayedEntry = typing ? null : latest
 
   return (
     <div className="flex h-[calc(100vh-3rem)] flex-col gap-4 p-6">
@@ -334,7 +401,10 @@ export function LiveContextPage() {
               </Alert>
             )}
 
-            <MemoryColumns entry={typing ? null : latest} typing={typing} />
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
+              <MemoryColumns entry={displayedEntry} typing={typing} />
+              <RankedResultsSidebar results={displayedEntry?.rankedResults ?? []} />
+            </div>
           </div>
         </ScrollArea>
       </div>
