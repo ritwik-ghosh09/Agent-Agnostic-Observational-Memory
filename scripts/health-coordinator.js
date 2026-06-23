@@ -762,40 +762,50 @@ function evaluateAutoHealFSM() {
  * a real value). Plan 34-03 will add VPN/CN flap kickstart on transition;
  * THIS PLAN ONLY OBSERVES.
  */
+// Last mode the PROXY itself reported via /health. Flap detection must compare
+// proxy-reported-mode over time against THIS — never against
+// currentState.proxy.networkMode, which detectNetworkLocation() also writes from
+// the coordinator's own (frequently divergent) network probe. Comparing the two
+// divergent sources caused a permanent corporate<->public restart storm.
+let _lastProxyReportedMode = 'unknown';
 async function pollProxyMode() {
   try {
-    const prevMode = currentState.proxy.networkMode;
+    const prevMode = _lastProxyReportedMode;
     const r = await fetch(`${PROXY_URL}/health`, {
       signal: AbortSignal.timeout(PROXY_MODE_POLL_TIMEOUT_MS)
     });
     if (!r.ok) {
       currentState.proxy.networkMode = 'unknown';
+      _lastProxyReportedMode = 'unknown';
       return;
     }
     const body = await r.json();
     const mode = body?.networkMode;
-    currentState.proxy.networkMode = (mode === 'vpn' || mode === 'corporate' || mode === 'public') ? mode : 'unknown';
+    const reported = (mode === 'vpn' || mode === 'corporate' || mode === 'public') ? mode : 'unknown';
+    currentState.proxy.networkMode = reported;
+    _lastProxyReportedMode = reported;
 
     // Phase 34 R3 / D-05: VPN/CN flap re-detection.
-    // Trigger kickstart ONLY on real-value <-> real-value transitions
-    // (vpn -> public OR public -> vpn). Transitions involving 'unknown'
-    // are coordinator-side noise (proxy startup, transient errors) and
-    // are NOT actionable. Flap kickstart does NOT push to
-    // kickstart_timestamps — flap is a USER ACTION (network changed),
-    // not a proxy-failure response, so cooldown does not gate it.
+    // Trigger kickstart ONLY on real-value <-> real-value transitions in the
+    // PROXY's OWN reported mode over time (e.g. the user actually moved networks).
+    // Transitions involving 'unknown' are coordinator-side noise (proxy startup,
+    // transient errors) and are NOT actionable. Flap kickstart does NOT push to
+    // kickstart_timestamps — flap is a USER ACTION (network changed), not a
+    // proxy-failure response, so cooldown does not gate it.
     const realModes = new Set(['vpn', 'corporate', 'public']);
     if (
       realModes.has(prevMode) &&
-      realModes.has(currentState.proxy.networkMode) &&
-      prevMode !== currentState.proxy.networkMode
+      realModes.has(reported) &&
+      prevMode !== reported
     ) {
-      log(`proxy networkMode flip ${prevMode} -> ${currentState.proxy.networkMode}, dispatching restart_llm_cli_proxy`, 'INFO');
+      log(`proxy networkMode flip ${prevMode} -> ${reported}, dispatching restart_llm_cli_proxy`, 'INFO');
       getRemediationDispatcher()
         .then(d => d.executeAction('restart_llm_cli_proxy', { reason: 'networkMode-flip' }))
         .catch(err => log(`networkMode-flip kickstart failed: ${err.message}`, 'ERROR'));
     }
   } catch (err) {
     currentState.proxy.networkMode = 'unknown';
+    _lastProxyReportedMode = 'unknown';
   }
 }
 

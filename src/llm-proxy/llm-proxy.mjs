@@ -30,7 +30,73 @@
 
 import http from 'node:http';
 import net from 'node:net';
+import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { TokenUsageStore } from './token-usage-store.mjs';
+
+/**
+ * Discover the corporate proxy (proxydetox) endpoint for LLM provider egress.
+ *
+ * Order: explicit `HTTPS_PROXY`/`https_proxy` env, then the canonical proxydetox
+ * controller. Returns the proxy URL or `null` (no proxy / not a proxydetox host).
+ *
+ * Why this is needed: the proxy is frequently respawned by the health-coordinator
+ * watchdog / systemd, which run WITHOUT the interactive shell's proxy
+ * environment. A missing proxy makes every completion attempt a direct egress
+ * that hangs on the corporate network → the health pipeline reports
+ * `semantic_ok=false` (timeout) even though the proxy process is "up". Resolving
+ * the endpoint ourselves makes provider egress work on every restart path.
+ */
+function resolveProxyUrl() {
+  const fromEnv = process.env.HTTPS_PROXY || process.env.https_proxy;
+  if (fromEnv && fromEnv.trim()) return fromEnv.trim();
+
+  const controller = process.env.PROXYDETOX_CONTROLLER
+    || '/opt/lidec/bin/lidec-proxydetox-controller.sh';
+  if (!existsSync(controller)) return null; // not a proxydetox host (e.g. macOS).
+
+  try {
+    const out = execFileSync(controller, ['env'], { encoding: 'utf8', timeout: 4000 });
+    const m = out.match(/^\s*https?_proxy=(.+)$/im);
+    return m ? m[1].trim() : null;
+  } catch {
+    return null; // controller unavailable — caller falls back to direct fetch.
+  }
+}
+
+/**
+ * Route the upstream's LLM egress through the corporate proxy reliably.
+ *
+ * Two upstream proxy paths are broken on this Node 20 host:
+ *   1. `proxy-bridge/server.mjs` uses a NESTED `undici@8` whose `ProxyAgent`
+ *      throws (`webidl.util.markAsUncloneable is not a function`) → falls back
+ *      to `globalThis.fetch`.
+ *   2. `providers/copilot-provider.js`, when `HTTPS_PROXY` is set, builds its own
+ *      raw HTTP CONNECT tunnel that times out (~10 s) against proxydetox.
+ * Both surface as `semantic_ok=false` (completion timeout) while the proxy looks
+ * "up".
+ *
+ * Fix: install a global dispatcher using the repo's top-level `undici@6` (which
+ * IS Node-20 compatible and verified to tunnel through proxydetox), then CLEAR
+ * `HTTPS_PROXY` from the environment. With the proxy var unset, both upstream
+ * code paths route through `globalThis.fetch` — now proxy-aware via the global
+ * dispatcher — instead of their broken proxy implementations. No-op when no
+ * proxy is configured or undici is unavailable (e.g. macOS dev → direct fetch).
+ */
+async function installProxyDispatcher(proxyUrl) {
+  if (!proxyUrl) return;
+  try {
+    const { setGlobalDispatcher, ProxyAgent } = await import('undici');
+    setGlobalDispatcher(new ProxyAgent(proxyUrl));
+    // Force upstream provider + bridge onto the (now proxy-aware) global fetch,
+    // bypassing their broken proxy implementations on this Node/undici combo.
+    delete process.env.HTTPS_PROXY;
+    delete process.env.https_proxy;
+    log(`global fetch dispatcher routed through proxy ${proxyUrl} (HTTPS_PROXY cleared for upstream)`);
+  } catch (err) {
+    logErr(`could not install proxy dispatcher: ${err.message}; leaving HTTPS_PROXY as-is`);
+  }
+}
 
 const PUBLIC_PORT = parseInt(
   process.env.LLM_PROXY_PORT || process.env.LLM_CLI_PROXY_PORT || '12435',
@@ -57,6 +123,12 @@ function findFreePort() {
 // hosts several adjacent services (DMR 12434, obs-api 12436, …), so a fixed
 // PUBLIC+1 offset is unsafe — probe the OS for a guaranteed-free port instead.
 const INTERNAL_PORT = await findFreePort();
+
+// Resolve the corporate proxy endpoint and route LLM egress through it BEFORE
+// the upstream loads, so provider fetches succeed on every restart path
+// (watchdog / systemd / shell). Clears HTTPS_PROXY so the upstream uses our
+// proxy-aware global fetch instead of its own broken proxy implementations.
+await installProxyDispatcher(resolveProxyUrl());
 
 // Redirect the upstream package to the internal port BEFORE importing it.
 process.env.LLM_PROXY_PORT = String(INTERNAL_PORT);
