@@ -4720,6 +4720,7 @@ class SystemHealthAPIServer {
             typedAt: body.ts || null,
             receivedAt: new Date().toISOString(),
             markdown: '',
+            rankedResults: [],
             meta: null,
             error: null,
         };
@@ -4742,6 +4743,7 @@ class SystemHealthAPIServer {
             if (upstream.ok) {
                 const result = await upstream.json();
                 entry.markdown = result.markdown || '';
+                entry.rankedResults = result.rankedResults || [];
                 entry.meta = result.meta || null;
             } else {
                 entry.error = `retrieval upstream ${upstream.status}`;

@@ -1060,7 +1060,7 @@ app.post('/api/insights/:id/resynthesize', async (req, res) => {
 /**
  * POST /api/retrieve — retrieve relevant knowledge for a query.
  * Body: { query: string, budget?: number, threshold?: number, context?: any }
- * Returns: { markdown: string, meta: { ... } }
+ * Returns: { markdown: string, rankedResults: Array<object>, meta: { ... } }
  */
 app.post('/api/retrieve', async (req, res) => {
   const startMs = Date.now();

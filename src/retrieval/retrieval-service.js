@@ -22,6 +22,35 @@ import { buildWorkingMemory } from './working-memory.js';
 
 /** Qdrant collection names matching embedding-config.json. */
 const COLLECTIONS = ['insights', 'digests', 'kg_entities', 'observations'];
+const RANKED_RESULT_SNIPPET_CHARS = 200;
+
+/**
+ * Convert a fused retrieval candidate into the compact, pre-budget ranked shape
+ * consumed by dashboard clients.
+ *
+ * @param {object} item - RRF-fused retrieval candidate
+ * @param {number} index - Zero-based index after final sorting
+ * @returns {{ id: string, tier: string, rank: number, rawScore: number, rrfScore: number, tierWeight: number, snippet: string, title: string }}
+ */
+function toRankedResult(item, index) {
+  const payload = item.payload || {};
+  const snippetSource = payload.summary_preview || payload.text || payload.content || '';
+  const snippet = String(snippetSource)
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, RANKED_RESULT_SNIPPET_CHARS);
+
+  return {
+    id: item.id,
+    tier: item.tier,
+    rank: index + 1,
+    rawScore: item.score,
+    rrfScore: item.rrfScore,
+    tierWeight: item.tierWeight,
+    snippet,
+    title: payload.topic || payload.theme || payload.entityType || payload.agent || '',
+  };
+}
 
 /**
  * Orchestrates hybrid retrieval: embed query, parallel semantic + keyword search,
@@ -97,7 +126,7 @@ export class RetrievalService {
    * @param {object} [options]
    * @param {number} [options.budget] - Token budget (default from constructor)
    * @param {number} [options.threshold] - Qdrant score threshold (default from constructor)
-   * @returns {Promise<{ markdown: string, meta: { query: string, budget: number, results_count: number, latency_ms: number } }>}
+   * @returns {Promise<{ markdown: string, rankedResults: Array<{ id: string, tier: string, rank: number, rawScore: number, rrfScore: number, tierWeight: number, snippet: string, title: string }>, meta: { query: string, budget: number, results_count: number, ranked_count: number, tokens_used: number, working_memory_tokens: number, latency_ms: number } }>}
    */
   async retrieve(query, options = {}) {
     const { budget = this.defaultBudget, threshold = this.scoreThreshold, context = null } = options;
@@ -155,6 +184,7 @@ export class RetrievalService {
     this._applyFreshnessRerank(fused);
 
     fused.sort((a, b) => b.rrfScore - a.rrfScore);
+    const rankedResults = fused.map(toRankedResult);
 
     // Step 5: Token-budgeted markdown assembly (semantic budget after WM)
     const { markdown, tokensUsed } = assembleBudgetedMarkdown(fused, effectiveSemanticBudget);
@@ -165,10 +195,12 @@ export class RetrievalService {
     // Return D-06 response shape (latency_ms set by caller)
     return {
       markdown: finalMarkdown,
+      rankedResults,
       meta: {
         query,
         budget,
         results_count: fused.length,
+        ranked_count: rankedResults.length,
         tokens_used: wm.tokens + tokensUsed,
         working_memory_tokens: wm.tokens,
         latency_ms: 0,

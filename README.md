@@ -431,6 +431,7 @@ How it works:
 - **Capture** — every coding agent runs inside the shared tmux wrapper. `scripts/live-query-monitor.js` polls the pane (`tmux capture-pane -p`) and extracts the current input-box draft with [`InputDraftExtractor`](src/live-logging/InputDraftExtractor.js) (structure-first parsing of the box border + prompt marker; placeholders and UI noise are filtered out).
 - **Draft stream** — on every change, the draft is POSTed to `/api/live-context/draft` and streamed straight into the **main heading bar**, so you see the prompt update live as you type.
 - **Debounce + retrieve** — once the draft is *stable* (unchanged for **3 s**) and new, it is passed through the Knowledge Context Injection memory pipeline (`/api/retrieve` → `RetrievalService`), which returns **Working Memory (≤300 tokens)** and **Observational memory (≤700 tokens)** for the live query.
+- **Ranked candidates** — the same response also carries `rankedResults`, the full pre-token-budget Observational Memory candidate list in final ranked order, so dashboard views can inspect every match even when the rendered markdown is truncated.
 - **Submitted log** — when you press Enter (the input box clears), the sent query is POSTed to `/api/live-context/submitted` and appended to the **Recent Queries** log on the left — a history of prompts actually submitted to the CLI.
 - **Display** — the **Live Context** tab renders three zones in real time over a dedicated WebSocket: the heading bar (live typing), the Recent Queries log (submitted prompts), and the two columns (Working | Observational memory for the live query).
 
@@ -453,13 +454,16 @@ graph TD
 
     subgraph DASH["Health Dashboard API :3033"]
         E --> H["Broadcast LIVE_DRAFT"]
-        F --> I["Knowledge Context Injection<br/>/api/retrieve → RetrievalService<br/>Working ≤300 + Observational ≤700 tok"]
-        I --> J["Ring buffer + broadcast LIVE_CONTEXT"]
+        F --> I["Knowledge Context Injection<br/>/api/retrieve → RetrievalService<br/>markdown + meta + rankedResults"]
+        I --> O["Token-budgeted context<br/>Working ≤300 + Observational ≤700 tok"]
+        I --> P["Full ranked candidates<br/>pre-budget Observational Memory"]
+        O --> J["Ring buffer + broadcast LIVE_CONTEXT"]
+        P --> J
         G --> K["Submitted log + broadcast LIVE_SUBMITTED"]
     end
 
     H -->|WebSocket| L["Heading bar<br/>live typing"]
-    J -->|WebSocket| M["Working | Observational columns"]
+    J -->|WebSocket| M["Working | Observational columns<br/>+ ranked results payload"]
     K -->|WebSocket| N["Recent Queries log"]
 ```
 
