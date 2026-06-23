@@ -4834,14 +4834,17 @@ class SystemHealthAPIServer {
      * it to the heading bar. Transient: stored only as `currentLiveDraft`, never
      * buffered, never retrieved. An empty/whitespace query clears the heading.
      *
-     * Body: { query, agent, sessionId, project, ts }
+     * Body: { query, context, agent, sessionId, project, ts }
+     * context is the deterministic conversation context shown beneath the typed query.
      */
     handleLiveContextDraft(req, res) {
         const body = req.body || {};
         const query = typeof body.query === 'string' ? body.query.trim() : '';
+        const context = typeof body.context === 'string' ? body.context.trim().slice(0, 300) : '';
 
         const payload = {
             query: query.slice(0, 500),
+            context,
             agent: body.agent || 'agent',
             sessionId: body.sessionId || null,
             project: body.project || null,
