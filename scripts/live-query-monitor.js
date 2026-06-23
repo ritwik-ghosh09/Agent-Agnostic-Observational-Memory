@@ -234,11 +234,13 @@ function sendQuery(query, rawDraft) {
  * Stream the in-progress draft to the dashboard heading bar (no retrieval). An
  * empty string clears the heading when the input box empties. Fail-open.
  *
- * @param {string} query  current draft text ('' to clear)
+ * @param {string} query    current draft text ('' to clear)
+ * @param {string} context  deterministic pane context for the draft ('' to clear)
  */
-function sendDraft(query) {
+function sendDraft(query, context = '') {
   return postJson('/api/live-context/draft', {
     query,
+    context: typeof context === 'string' ? context.slice(0, 300) : '',
     agent: AGENT,
     sessionId: SESSION_ID,
     project: PROJECT,
@@ -289,7 +291,7 @@ async function tick() {
       const submitted = lastNonEmptyDraft;
       lastNonEmptyDraft = null;
       // Clear the live heading regardless.
-      sendDraft('');
+      sendDraft('', '');
       if (submitted && submitted.trim()) {
         process.stderr.write(`[live-query-monitor] submitted → "${submitted.slice(0, 80)}"\n`);
         sendSubmitted(submitted);
@@ -297,7 +299,7 @@ async function tick() {
     } else {
       // Still typing — stream the in-progress draft to the heading bar.
       lastNonEmptyDraft = draft;
-      sendDraft(draft);
+      sendDraft(draft, paneContext(pane, draft));
     }
     return;
   }
