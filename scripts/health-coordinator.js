@@ -223,7 +223,13 @@ const currentState = {
     kickstart_timestamps: [],            // sliding window for D-06 cooldown FSM
     consecutive_failures: 0,             // resets on success
     last_probe_end: null,                // ISO timestamp of last semantic probe completion
-    reason: null                         // last failure classification: 'http_<code>'|'timeout'|'empty_content'|'oksub_missing'|null
+    reason: null,                        // last failure classification: 'http_<code>'|'timeout'|'empty_content'|'oksub_missing'|null
+    // 3-second liveness watchdog (fast crash/hang auto-heal — independent of the
+    // 60s semantic FSM). liveness_ok reflects the last /health probe outcome.
+    liveness_ok: null,                   // null until first probe; true|false after
+    liveness_probe_end: null,            // ISO timestamp of last liveness probe
+    liveness_restart_count: 0,           // running counter of watchdog-triggered restarts
+    last_liveness_restart_at: null       // ISO timestamp of last watchdog restart dispatch
   },
   // Network environment detection — single source of truth for CN/VPN/home
   // and local proxy (px/proxydetox) status. Polled every 30s.
@@ -451,6 +457,27 @@ const PROXY_MODE_POLL_TIMEOUT_MS = 2_000;         // GET /health is fast; 2s bud
 const PROXY_KICKSTART_WINDOW_MS = 5 * 60_000;     // D-06: 5 min sliding window
 const PROXY_KICKSTART_MAX = 3;                    // D-06: 3 kickstarts then cooldown
 
+// ----- 3-second liveness watchdog (fast crash/hang auto-heal) -----
+// The 60s semantic FSM above guards LLM *quality* (does /api/complete return a
+// sane answer). It is deliberately slow (60s probe + 60s sustained gate) to
+// avoid restarting on a single flaky completion. It does NOT protect against
+// the proxy process crashing or hanging — that can leave summarization dead for
+// up to ~2 minutes. This watchdog closes that gap: probe GET /health every 3s
+// and restart the proxy the instant it stops responding. A post-restart settle
+// window prevents respawn storms while a fresh proxy is still binding.
+const PROXY_LIVENESS_INTERVAL_MS = parseInt(process.env.PROXY_LIVENESS_INTERVAL_MS || '3000', 10); // every 3s
+const PROXY_LIVENESS_TIMEOUT_MS = parseInt(process.env.PROXY_LIVENESS_TIMEOUT_MS || '4000', 10);   // /health must answer in 4s (tolerates brief event-loop blocking)
+// Settle must exceed the proxy's cold-start time. The front binds 12435 within
+// ~1s, but its in-process upstream (@rapid/llm-proxy) only binds after probing
+// providers — under no-internet the copilot init aborts after ~10s, blocking the
+// shared event loop. A 20s settle guarantees we never probe (and false-restart)
+// a freshly-spawned proxy that is still finishing that init.
+const PROXY_LIVENESS_SETTLE_MS = parseInt(process.env.PROXY_LIVENESS_SETTLE_MS || '20000', 10);    // grace after a restart dispatch
+let _proxyLivenessTimer = null;
+let _proxyLivenessBusy = false;            // re-entrancy guard (probe + restart can exceed 3s)
+let _proxyRestartInFlight = false;         // true while a respawn is being dispatched
+let _proxyLastRestartAt = 0;               // epoch ms of last watchdog restart dispatch
+
 async function pollKnowledgePipeline() {
   const probeEndedAt = () => new Date().toISOString();
   let body;
@@ -586,7 +613,13 @@ async function pollProxySemantic() {
       messages: [{ role: 'user', content: 'say OK' }],
       provider: 'copilot',
       tier: 'haiku',
-      maxTokens: 5
+      // The copilot provider resolves this probe to a reasoning model
+      // (claude-sonnet-4.6) which spends output budget on hidden thinking
+      // tokens before emitting visible content. A tiny budget (e.g. 5) gets
+      // fully consumed by thinking, yielding empty content and a false
+      // 'empty_content' semantic_ok=false. 64 reliably leaves room for the
+      // visible 'OK' reply while keeping the probe cheap.
+      maxTokens: 64
     };
     const prevSemantic = currentState.proxy.semantic_ok;
     let r;
@@ -766,6 +799,75 @@ async function pollProxyMode() {
   }
 }
 
+/**
+ * 3-second liveness watchdog. Probes GET /health; on any failure or
+ * no-response, restarts the proxy immediately (crash/hang auto-heal).
+ *
+ * Design notes:
+ *   - Runs on its OWN timer (PROXY_LIVENESS_INTERVAL_MS, default 3000ms),
+ *     independent of the 5s tick and the 60s semantic FSM.
+ *   - Respects the same D-07 kill-switch (rules.services.llm_cli_proxy.auto_heal).
+ *   - Calls the remediation method DIRECTLY (not executeAction) so the library's
+ *     hourly cap can't leave a dead proxy un-healed for the rest of the hour.
+ *     Storm protection comes instead from PROXY_LIVENESS_SETTLE_MS: after a
+ *     restart we skip probing/restarting until the new proxy has had time to
+ *     bind. Net effect: zero restarts while healthy, at most one restart per
+ *     settle window while down — self-heals the instant the cause clears.
+ */
+async function pollProxyLiveness() {
+  if (_proxyLivenessBusy) return;          // previous cycle still running
+  _proxyLivenessBusy = true;
+  try {
+    const now = Date.now();
+
+    // Settle window: a restart was just dispatched — let the new proxy bind
+    // before probing again so we don't spawn a second one on top of it.
+    if (_proxyRestartInFlight || (now - _proxyLastRestartAt) < PROXY_LIVENESS_SETTLE_MS) {
+      return;
+    }
+
+    let alive = false;
+    try {
+      // "Fails OR does not respond" → healthy only on HTTP 200. A crash yields
+      // ECONNREFUSED, a hang yields a timeout, and a front-up/upstream-dead
+      // state yields 502 — all are unhealthy and must heal. Cold-start
+      // false-positives are prevented by PROXY_LIVENESS_SETTLE_MS (we don't
+      // probe for ~20s after a restart, by which time the in-process upstream
+      // has finished its slow provider init), NOT by tolerating non-200 here.
+      const r = await fetch(`${PROXY_URL}/health`, {
+        signal: AbortSignal.timeout(PROXY_LIVENESS_TIMEOUT_MS)
+      });
+      alive = r.ok;
+    } catch {
+      alive = false;
+    }
+    currentState.proxy.liveness_ok = alive;
+    currentState.proxy.liveness_probe_end = new Date().toISOString();
+    if (alive) return;
+
+    // D-07 kill-switch: honour the same rule the semantic FSM uses.
+    const rule = RULES?.rules?.services?.llm_cli_proxy;
+    if (!rule || rule.auto_heal !== true) return;
+
+    _proxyRestartInFlight = true;
+    _proxyLastRestartAt = now;
+    currentState.proxy.liveness_restart_count += 1;
+    currentState.proxy.last_liveness_restart_at = new Date(now).toISOString();
+    log(`proxy liveness FAIL — restarting llm-cli-proxy (3s watchdog, restart #${currentState.proxy.liveness_restart_count})`, 'WARN');
+    try {
+      const d = await getRemediationDispatcher();
+      const res = await d.restartLLMCLIProxy({ reason: 'liveness-3s-watchdog' });
+      log(`proxy liveness restart dispatched: success=${res?.success} ${res?.message || ''}`, res?.success ? 'INFO' : 'ERROR');
+    } catch (err) {
+      log(`proxy liveness restart failed: ${err.message}`, 'ERROR');
+    } finally {
+      _proxyRestartInFlight = false;
+    }
+  } finally {
+    _proxyLivenessBusy = false;
+  }
+}
+
 // ETM spawn safety net (Phase 33 fills the gap left by removing the legacy
 // per-project LSL coordinator). Discovers projects with an actively-written
 // Claude transcript and ensures an enhanced-transcript-monitor process is
@@ -814,6 +916,46 @@ function tmuxOpenProjectPaths(agenticDir) {
  */
 function encodeClaudeProjectDir(projectPath) {
   return projectPath.replace(/[\/_]/g, '-');
+}
+
+/**
+ * Latest mtime (ms) of any Copilot CLI transcript (events.jsonl under
+ * ~/.copilot/session-state/<id>/) whose session.start cwd matches the given
+ * project path. Mirrors ETM.findCopilotTranscript's matching so the safety
+ * net can recognise Copilot activity, not just Claude activity. Without this
+ * the coordinator never respawns ETM after its 30-min idle exit in a
+ * Copilot-only session and the heartbeat lapses permanently. Returns 0 when
+ * nothing matches.
+ */
+function latestCopilotMtimeForProject(projectPath) {
+  try {
+    const baseDir = path.join(os.homedir(), '.copilot', 'session-state');
+    if (!fs.existsSync(baseDir)) return 0;
+    let latest = 0;
+    for (const dir of fs.readdirSync(baseDir)) {
+      const eventsPath = path.join(baseDir, dir, 'events.jsonl');
+      let st;
+      try { st = fs.statSync(eventsPath); } catch { continue; }
+      const m = st.mtime.getTime();
+      if (m <= latest) continue; // only a fresher session can change the result
+      // Confirm this session belongs to the project via its session.start cwd.
+      try {
+        const fd = fs.openSync(eventsPath, 'r');
+        const buf = Buffer.alloc(2048);
+        const bytesRead = fs.readSync(fd, buf, 0, 2048, 0);
+        fs.closeSync(fd);
+        const firstLine = buf.toString('utf-8', 0, bytesRead).split('\n')[0];
+        const startEvent = JSON.parse(firstLine);
+        if (startEvent.type === 'session.start' &&
+            startEvent.data?.context?.cwd === projectPath) {
+          latest = m;
+        }
+      } catch { continue; }
+    }
+    return latest;
+  } catch {
+    return 0;
+  }
 }
 
 /**
@@ -866,7 +1008,6 @@ function ensureEtmForActiveProjects() {
   if (!homeDir) return;
   const agenticDir = path.dirname(REPO_ROOT);
   const claudeProjectsDir = path.join(homeDir, '.claude', 'projects');
-  if (!fs.existsSync(claudeProjectsDir)) return;
   const monitorScript = path.join(REPO_ROOT, 'scripts', 'enhanced-transcript-monitor.js');
   if (!fs.existsSync(monitorScript)) return;
 
@@ -889,20 +1030,28 @@ function ensureEtmForActiveProjects() {
     if (coveredProjects.has(projectName)) continue;
 
     const transcriptDir = path.join(claudeProjectsDir, encodeClaudeProjectDir(projectPath));
-    if (!fs.existsSync(transcriptDir)) continue;
 
+    // Freshest activity across BOTH transcript backends ETM can read:
+    //   - Claude Code:  ~/.claude/projects/<encoded>/*.jsonl
+    //   - Copilot CLI:  ~/.copilot/session-state/<id>/events.jsonl
+    // ETM auto-discovers both at runtime, so the respawn gate must too.
     let latestMtime = 0;
-    try {
-      for (const f of fs.readdirSync(transcriptDir)) {
-        if (!f.endsWith('.jsonl')) continue;
-        const m = fs.statSync(path.join(transcriptDir, f)).mtime.getTime();
-        if (m > latestMtime) latestMtime = m;
+    if (fs.existsSync(transcriptDir)) {
+      try {
+        for (const f of fs.readdirSync(transcriptDir)) {
+          if (!f.endsWith('.jsonl')) continue;
+          const m = fs.statSync(path.join(transcriptDir, f)).mtime.getTime();
+          if (m > latestMtime) latestMtime = m;
+        }
+      } catch {
+        // fall through — Copilot activity may still make this project active
       }
-    } catch {
-      continue;
     }
+    const copilotMtime = latestCopilotMtimeForProject(projectPath);
+    if (copilotMtime > latestMtime) latestMtime = copilotMtime;
+
     // Gate: transcript fresh OR an open tmux session is rooted at this
-    // project (which means the user has a Claude window open right now,
+    // project (which means the user has an agent window open right now,
     // even if no prompt has been sent recently).
     const transcriptFresh = latestMtime > 0 && (now - latestMtime) <= ETM_TRANSCRIPT_ACTIVE_MS;
     const tmuxAlive = tmuxOpen.has(projectPath);
@@ -1514,11 +1663,18 @@ function startTickLoop() {
   tickTimer = setInterval(() => { tick(); }, TICK_MS);
   // Run once immediately so /health/state returns a fresh generated_at right away.
   tick();
+  // 3-second liveness watchdog runs on its own cadence (decoupled from the 5s
+  // tick) so a crashed/hung proxy is restarted within ~3s, not up to ~2min.
+  _proxyLivenessTimer = setInterval(() => { pollProxyLiveness(); }, PROXY_LIVENESS_INTERVAL_MS);
 }
 function stopTickLoop() {
   if (tickTimer) {
     clearInterval(tickTimer);
     tickTimer = null;
+  }
+  if (_proxyLivenessTimer) {
+    clearInterval(_proxyLivenessTimer);
+    _proxyLivenessTimer = null;
   }
 }
 
