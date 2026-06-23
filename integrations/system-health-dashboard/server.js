@@ -335,6 +335,7 @@ class SystemHealthAPIServer {
         // Live Memory Context API — preview of Working + Observational memory for
         // the prompt a user has typed but not yet submitted in the CLI.
         this.app.post('/api/live-context/query', this.handleLiveContextQuery.bind(this));
+        this.app.post('/api/live-context/rerank', this.handleLiveContextRerank.bind(this));
         this.app.get('/api/live-context', this.handleGetLiveContext.bind(this));
         // Live typing draft (streamed to the heading bar) + submitted-query log.
         this.app.post('/api/live-context/draft', this.handleLiveContextDraft.bind(this));
@@ -4689,6 +4690,56 @@ class SystemHealthAPIServer {
         } catch (err) {
             process.stderr.write(`[RetrievalAPI] forward error: ${err.message}\n`);
             res.status(502).json({ error: 'Observations API unreachable' });
+        }
+    }
+
+    /**
+     * POST /api/live-context/rerank — thin dashboard forwarder for human ranking
+     * captures. Persistence and embedding ownership live in the host Observations API.
+     */
+    async handleLiveContextRerank(req, res) {
+        const body = req.body || {};
+        const queryText = typeof body.queryText === 'string' ? body.queryText.trim() : '';
+        const originalRanking = Array.isArray(body.originalRanking) ? body.originalRanking : [];
+        const humanRanking = Array.isArray(body.humanRanking) ? body.humanRanking : [];
+
+        if (!queryText) {
+            res.status(400).json({ ok: false, error: 'queryText (string) is required' });
+            return;
+        }
+        if (originalRanking.length === 0) {
+            res.status(400).json({ ok: false, error: 'originalRanking (non-empty array) is required' });
+            return;
+        }
+        if (humanRanking.length === 0) {
+            res.status(400).json({ ok: false, error: 'humanRanking (non-empty array) is required' });
+            return;
+        }
+
+        const originalKeys = new Set(originalRanking.map((item) => item?.itemKey).filter((key) => typeof key === 'string'));
+        const humanKeys = new Set(humanRanking.map((item) => item?.itemKey).filter((key) => typeof key === 'string'));
+        if (
+            originalKeys.size !== originalRanking.length
+            || humanKeys.size !== humanRanking.length
+            || originalKeys.size !== humanKeys.size
+            || [...originalKeys].some((key) => !humanKeys.has(key))
+        ) {
+            res.status(400).json({ ok: false, error: 'originalRanking and humanRanking itemKeys must match' });
+            return;
+        }
+
+        const base = process.env.OBS_API_URL || 'http://host.docker.internal:12436';
+        try {
+            const upstream = await fetch(`${base}/api/rerank-feedback`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const upstreamBody = await upstream.text();
+            res.status(upstream.status).type(upstream.headers.get('content-type') || 'application/json').send(upstreamBody);
+        } catch (err) {
+            process.stderr.write(`[LiveContextRerankAPI] forward error: ${err.message}\n`);
+            res.status(502).json({ ok: false, error: 'Observations API unreachable for rerank feedback' });
         }
     }
 
