@@ -234,6 +234,41 @@ graph TD
     FRONT -->|aggregated JSON| DASH
 ```
 
+##### 🩺 LLM-Proxy Liveness Auto-Heal (3-second watchdog)
+
+The `health-coordinator` continuously supervises the LLM CLI Proxy so it never
+stays down. Two cooperating layers heal it:
+
+- **3-second liveness watchdog** — probes `GET /health` every 3s. If the proxy
+  fails (`HTTP ≠ 200`) or does not respond (crash → `ECONNREFUSED`, hang →
+  timeout), it is restarted immediately.
+- **60-second semantic FSM** — probes a real `POST /api/complete` and restarts
+  on sustained quality failure (`semantic_ok=false`).
+
+Restarts are **cross-platform** (macOS `launchctl`; Linux/Windows free port
+`12435` and respawn the wrapper detached), **serialized** to avoid `EADDRINUSE`
+races, and guarded by a **20-second post-restart settle window** so a freshly
+spawned proxy is never restarted while its upstream is still warming up. State
+is surfaced on `GET /health/state` (`proxy.liveness_ok`, `liveness_restart_count`).
+
+```mermaid
+graph TD
+    START([health-coordinator<br/>systemd user service]) --> TIMER[Liveness timer<br/>every 3s]
+    TIMER --> SETTLE{Within 20s<br/>post-restart<br/>settle window?}
+    SETTLE -->|Yes| SKIP[Skip this cycle]
+    SETTLE -->|No| PROBE[GET /health<br/>4s timeout]
+    PROBE --> OK{HTTP 200?}
+    OK -->|Yes| HEALTHY[liveness_ok = true<br/>no action]
+    OK -->|No: non-200 / refused / timeout| KILLSW{auto_heal<br/>enabled?}
+    KILLSW -->|No kill-switch| DISABLED[Skip — alert only]
+    KILLSW -->|Yes| RESTART[restart_llm_cli_proxy<br/>free port 12435 + respawn]
+    RESTART --> WAIT[Wait for /health 200<br/>then start 20s settle]
+    WAIT --> TIMER
+    HEALTHY --> TIMER
+    SKIP --> TIMER
+```
+
+
 #### [📋 Live Session Logging (LSL)](docs/lsl/)
 Real-time conversation classification and routing with security redaction
 - 5-layer classification system
