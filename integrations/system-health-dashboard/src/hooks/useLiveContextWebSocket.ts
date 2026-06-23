@@ -90,6 +90,7 @@ interface WsMessage {
 /** Live typing draft streamed to the heading bar (transient). */
 export interface LiveDraft {
   query: string
+  context: string
   agent: string
   sessionId: string | null
   project: string | null
@@ -188,7 +189,7 @@ export function useLiveContextWebSocket() {
         } else if (msg.type === 'LIVE_DRAFT' && msg.payload) {
           const d = msg.payload as LiveDraft
           // Empty query clears the heading.
-          setDraft(d.query ? d : null)
+          setDraft(d.query ? { ...d, context: typeof d.context === 'string' ? d.context : '' } : null)
         } else if (msg.type === 'LIVE_SUBMITTED' && msg.payload) {
           addSubmitted(msg.payload as LiveSubmitted)
         }

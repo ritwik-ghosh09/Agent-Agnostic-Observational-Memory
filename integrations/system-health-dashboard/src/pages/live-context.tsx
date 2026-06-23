@@ -435,6 +435,7 @@ function RankedResultsSidebar({ entry }: { entry: LiveContextEntry | null }) {
 /** Main heading bar — streams the prompt the user is typing in the CLI. */
 function HeadingCard({
   query,
+  context,
   agent,
   project,
   isTyping,
@@ -442,6 +443,7 @@ function HeadingCard({
   resultsCount,
 }: {
   query: string
+  context: string
   agent: string
   project: string | null
   isTyping: boolean
@@ -479,6 +481,11 @@ function HeadingCard({
           <span className="text-muted-foreground">❯ </span>
           {query || <span className="italic text-muted-foreground">Waiting for typing…</span>}
         </div>
+        {context && (
+          <div className="mt-1 text-xs text-muted-foreground/80 break-words">
+            <span className="font-medium">context:</span> {context}
+          </div>
+        )}
       </CardContent>
     </Card>
   )
@@ -526,6 +533,7 @@ export function LiveContextPage() {
   // "typing" = a live draft exists that differs from the last retrieved query.
   const typing = !!draft && draft.query.length > 0 && draft.query !== latest?.query
   const headingQuery = draft?.query || latest?.query || ''
+  const headingContext = draft?.context || ''
   const headingAgent = draft?.agent || latest?.agent || ''
   const headingProject = draft?.project || latest?.project || null
   const displayedEntry = typing ? null : latest
@@ -563,6 +571,7 @@ export function LiveContextPage() {
           <div className="space-y-4 pr-2">
             <HeadingCard
               query={headingQuery}
+              context={headingContext}
               agent={headingAgent}
               project={headingProject}
               isTyping={typing}
