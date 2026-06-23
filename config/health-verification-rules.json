@@ -121,7 +121,7 @@
         "description": "LLM CLI Proxy - runs on host as launchd-managed daemon (com.coding.llm-cli-proxy). Coordinator probes /health every tick AND issues a tier-pinned semantic probe (POST /api/complete with provider:'copilot', tier:'haiku', single-token 'OK' prompt) every 60s. Required for observation summarization.",
         "auto_heal": true,
         "auto_heal_action": "restart_llm_cli_proxy",
-        "auto_heal_note": "Phase 34: coordinator dispatches restart on sustained semantic_ok=false (>=60s) via launchctl kickstart -k gui/$UID/com.coding.llm-cli-proxy. Cooldown 3/5min then alert-only. Kill-switch: set auto_heal=false here + POST http://localhost:3034/health/refresh.",
+        "auto_heal_note": "Cross-platform auto-heal. macOS: launchctl kickstart -k gui/$UID/com.coding.llm-cli-proxy. Linux/Windows: kill PID on port 12435 + respawn src/llm-proxy/llm-proxy.mjs detached. Two triggers: (1) 3s liveness watchdog restarts on any /health crash/hang (settle window prevents respawn storms); (2) 60s semantic FSM restarts on sustained semantic_ok=false (>=60s), cooldown 3/5min. Kill-switch: set auto_heal=false here + POST http://localhost:3034/health/refresh.",
         "cooldown": {
           "max_kickstarts": 3,
           "window_seconds": 300
@@ -147,7 +147,7 @@
         "service_name": "enhanced-transcript-monitor",
         "service_type": "per-project",
         "dynamic_discovery": true,
-        "project_path": "/Users/q284340/Agentic/coding",
+        "project_path": "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory",
         "description": "Live Session Logging (LSL) transcript monitor - CRITICAL for session history",
         "auto_heal": true,
         "auto_heal_action": "restart_transcript_monitor",
