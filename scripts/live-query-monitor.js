@@ -45,6 +45,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { extractDraft, getProfile } from '../src/live-logging/InputDraftExtractor.js';
+import { isSubstantivePrompt, buildRetrievalQuery } from '../src/hooks/query-builder.js';
 
 const SESSION = process.env.LQM_SESSION;
 const AGENT = (process.env.LQM_AGENT || 'agent').toLowerCase();
@@ -128,6 +129,34 @@ function capturePane() {
   }
 }
 
+/**
+ * Build conversation context for query enrichment from the visible tmux pane.
+ *
+ * The live path has no JSONL transcript (the prompt is unsent), so the pane text
+ * itself is the conversation analog. We strip the in-progress draft so the
+ * context reflects prior turns only, collapse whitespace, and keep the tail.
+ *
+ * @param {string} pane   full `capture-pane -p` text
+ * @param {string} draft  the current draft to exclude from context
+ * @returns {string} a compact context summary ('' when nothing useful)
+ */
+function paneContext(pane, draft) {
+  try {
+    if (!pane) return '';
+    let text = pane;
+    if (draft) {
+      const idx = text.lastIndexOf(draft);
+      if (idx !== -1) text = text.slice(0, idx);
+    }
+    const collapsed = text.replace(/\s+/g, ' ').trim();
+    if (!collapsed) return '';
+    // Keep the tail (most recent turns); buildRetrievalQuery re-caps anyway.
+    return collapsed.slice(-1000);
+  } catch {
+    return '';
+  }
+}
+
 /** True when the target tmux session still exists. */
 function sessionAlive() {
   try {
@@ -184,11 +213,13 @@ function postJson(path, payload) {
  * POST the stable draft query to the dashboard for the full memory-pipeline pass
  * (Working + Observational retrieval). Fail-open.
  *
- * @param {string} query
+ * @param {string} query     the enriched + capped query sent to retrieval (Path-A parity)
+ * @param {string} rawDraft  the original typed draft (for display)
  */
-function sendQuery(query) {
+function sendQuery(query, rawDraft) {
   return postJson('/api/live-context/query', {
     query,
+    rawDraft,
     agent: AGENT,
     sessionId: SESSION_ID,
     tmuxSession: SESSION,
@@ -243,7 +274,8 @@ async function tick() {
     return;
   }
 
-  const draft = extractDraft(capturePane(), PROFILE);
+  const pane = capturePane();
+  const draft = extractDraft(pane, PROFILE);
   const now = Date.now();
 
   if (draft !== lastDraft) {
@@ -279,8 +311,14 @@ async function tick() {
   if (stableLongEnough && isNewQuery && cooledDown) {
     lastSentQuery = draft;
     lastSentAt = now;
-    process.stderr.write(`[live-query-monitor] query → "${draft.slice(0, 80)}"\n`);
-    await sendQuery(draft);
+    // Path-A parity: gate on substantive prompts, enrich with pane context, and
+    // apply the same prompt-priority cap as the UserPromptSubmit hook.
+    if (!isSubstantivePrompt(draft)) {
+      return;
+    }
+    const query = buildRetrievalQuery(draft, paneContext(pane, draft));
+    process.stderr.write(`[live-query-monitor] query → "${query.slice(0, 80)}"\n`);
+    await sendQuery(query, draft);
   }
 }
 
