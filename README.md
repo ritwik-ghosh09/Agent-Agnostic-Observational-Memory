@@ -389,9 +389,10 @@ so the mechanism is fully **agent-agnostic** and works for **GitHub Copilot CLI*
 How it works:
 
 - **Capture** — every coding agent runs inside the shared tmux wrapper. `scripts/live-query-monitor.js` polls the pane (`tmux capture-pane -p`) and extracts the current input-box draft with [`InputDraftExtractor`](src/live-logging/InputDraftExtractor.js) (structure-first parsing of the box border + prompt marker; placeholders and UI noise are filtered out).
-- **Debounce** — the draft must be *stable* (unchanged for ~600 ms) and new before a retrieval fires, so keystrokes don't spam the service.
-- **Retrieve** — the dashboard receives the draft, retrieves Working + Observational memory from the host Observations API, buffers it, and broadcasts it.
-- **Display** — the new **Live Context** tab in the Health Dashboard shows the query, its Working Memory, and its Observational Memory in real time over a dedicated WebSocket.
+- **Draft stream** — on every change, the draft is POSTed to `/api/live-context/draft` and streamed straight into the **main heading bar**, so you see the prompt update live as you type.
+- **Debounce + retrieve** — once the draft is *stable* (unchanged for **3 s**) and new, it is passed through the Knowledge Context Injection memory pipeline (`/api/retrieve` → `RetrievalService`), which returns **Working Memory (≤300 tokens)** and **Observational memory (≤700 tokens)** for the live query.
+- **Submitted log** — when you press Enter (the input box clears), the sent query is POSTed to `/api/live-context/submitted` and appended to the **Recent Queries** log on the left — a history of prompts actually submitted to the CLI.
+- **Display** — the **Live Context** tab renders three zones in real time over a dedicated WebSocket: the heading bar (live typing), the Recent Queries log (submitted prompts), and the two columns (Working | Observational memory for the live query).
 
 ```mermaid
 graph TD
@@ -403,18 +404,23 @@ graph TD
 
     subgraph MON["Host monitor"]
         B --> C["InputDraftExtractor<br/>box + prompt-marker parse"]
-        C --> D{"Draft stable,<br/>new and non-noise?"}
+        C --> D{"Draft state?"}
     end
 
-    D -->|no| B
-    D -->|yes| E["POST /api/live-context/query"]
+    D -->|"changed (still typing)"| E["POST /api/live-context/draft"]
+    D -->|"stable for 3s"| F["POST /api/live-context/query"]
+    D -->|"non-empty → empty (Enter)"| G["POST /api/live-context/submitted"]
 
     subgraph DASH["Health Dashboard API :3033"]
-        E --> F["Retrieve Working +<br/>Observational memory"]
-        F --> G["Ring buffer + broadcast<br/>/api/live-context/ws"]
+        E --> H["Broadcast LIVE_DRAFT"]
+        F --> I["Knowledge Context Injection<br/>/api/retrieve → RetrievalService<br/>Working ≤300 + Observational ≤700 tok"]
+        I --> J["Ring buffer + broadcast LIVE_CONTEXT"]
+        G --> K["Submitted log + broadcast LIVE_SUBMITTED"]
     end
 
-    G -->|WebSocket| H["Live Context tab<br/>Working | Observational"]
+    H -->|WebSocket| L["Heading bar<br/>live typing"]
+    J -->|WebSocket| M["Working | Observational columns"]
+    K -->|WebSocket| N["Recent Queries log"]
 ```
 
 Configuration: enabled per agent via `AGENT_ENABLE_LIVE_CONTEXT=true` (default) in
