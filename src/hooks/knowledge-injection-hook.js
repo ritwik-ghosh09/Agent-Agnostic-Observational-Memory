@@ -14,91 +14,19 @@
  * Uses shared retrieval-client.js for HTTP calls.
  */
 
-import fs from 'node:fs';
-import readline from 'node:readline';
 import { callRetrieval } from './retrieval-client.js';
+import {
+  isSubstantivePrompt,
+  extractConversationTopics,
+  buildRetrievalQuery,
+} from './query-builder.js';
 
 // Absolute safety ceiling -- never let the hook hang Claude Code
 const SAFETY_TIMEOUT_MS = 5000;
 const safetyTimer = setTimeout(() => process.exit(0), SAFETY_TIMEOUT_MS);
 safetyTimer.unref();
 
-const MIN_WORDS = 4;
-const MAX_QUERY_CHARS = 500;
 const MAX_OUTPUT_CHARS = 9500;
-const TRANSCRIPT_TAIL_BYTES = 50000; // Read last ~50KB of transcript
-const MAX_CONTEXT_CHARS = 300;       // Context summary for query enrichment
-
-/**
- * Extract conversation topics from the session transcript JSONL.
- * Reads the tail of the file to get recent messages, extracts user
- * and assistant text to build a topic summary for query enrichment.
- *
- * @param {string} transcriptPath - Path to the .jsonl transcript file
- * @returns {string} Topic summary (max MAX_CONTEXT_CHARS chars)
- */
-function extractConversationTopics(transcriptPath) {
-  try {
-    if (!transcriptPath || !fs.existsSync(transcriptPath)) return '';
-
-    const stat = fs.statSync(transcriptPath);
-    const start = Math.max(0, stat.size - TRANSCRIPT_TAIL_BYTES);
-    const fd = fs.openSync(transcriptPath, 'r');
-    const buf = Buffer.alloc(Math.min(stat.size, TRANSCRIPT_TAIL_BYTES));
-    fs.readSync(fd, buf, 0, buf.length, start);
-    fs.closeSync(fd);
-
-    const tail = buf.toString('utf8');
-    // If we started mid-line, skip the first partial line
-    const lines = tail.split('\n');
-    if (start > 0) lines.shift();
-
-    // Parse JSONL lines, collect recent human/assistant text.
-    // IMPORTANT: Skip system-reminder content to avoid feedback loops —
-    // previously injected insights/digests would contaminate the query
-    // context, causing the same results to be re-retrieved every turn.
-    const snippets = [];
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      try {
-        const msg = JSON.parse(line);
-
-        // Helper: extract text, filtering out system-reminder blocks
-        const extractText = (content) => {
-          if (typeof content === 'string') {
-            // Skip if it's a system-reminder injection
-            if (content.includes('<system-reminder>') || content.includes('## Insights') || content.includes('## Digests')) return null;
-            return content.slice(0, 200);
-          }
-          if (Array.isArray(content)) {
-            const parts = [];
-            for (const block of content) {
-              if (block.type !== 'text' || !block.text) continue;
-              // Skip system-reminder content blocks
-              if (block.text.includes('<system-reminder>') || block.text.includes('## Insights') || block.text.includes('## Digests')) continue;
-              parts.push(block.text.slice(0, 200));
-            }
-            return parts.length > 0 ? parts.join(' ') : null;
-          }
-          return null;
-        };
-
-        if (msg.role === 'user' || msg.role === 'assistant') {
-          const text = extractText(msg.content);
-          if (text) snippets.push(text);
-        }
-      } catch {
-        // Skip unparseable lines
-      }
-    }
-
-    // Take last 5 snippets as topic context
-    const recent = snippets.slice(-5).join(' ');
-    return recent.slice(0, MAX_CONTEXT_CHARS);
-  } catch {
-    return ''; // Fail-open
-  }
-}
 
 async function main() {
   try {
@@ -122,15 +50,8 @@ async function main() {
 
     const prompt = (input.prompt || '').trim();
 
-    // 3. Filter: empty prompt
-    if (!prompt) return;
-
-    // 4. Filter: slash commands
-    if (prompt.startsWith('/')) return;
-
-    // 5. Filter: short prompts (< MIN_WORDS words)
-    const wordCount = prompt.split(/\s+/).length;
-    if (wordCount < MIN_WORDS) return;
+    // 3-5. Filter: empty / slash-command / short prompts (shared rule)
+    if (!isSubstantivePrompt(prompt)) return;
 
     // 6. Build project context for relevance boosting (D-10)
     const context = {
@@ -141,19 +62,13 @@ async function main() {
       agent: 'claude',
     };
 
-    // 7. Extract conversation topics from transcript for query enrichment
+    // 7-9. Build the retrieval query via the shared query-builder so the tmux
+    //      live-draft path (live-query-monitor) produces an identical query and
+    //      the dashboard "Live Context" preview matches what gets injected.
+    //      Prompt-priority budgeting keeps the user's prompt intact within the
+    //      500-char cap; appended [context: …] only fills leftover space (G1).
     const conversationContext = extractConversationTopics(input.transcript_path);
-
-    // 8. Build enriched query: prompt + conversation topic context
-    //    This gives the embedding model actual semantic signal about what
-    //    the conversation is about, not just the current short prompt.
-    let enrichedQuery = prompt;
-    if (conversationContext) {
-      enrichedQuery = `${prompt} [context: ${conversationContext}]`;
-    }
-
-    // 9. Truncate query for retrieval (server rejects > 500 chars)
-    const query = enrichedQuery.slice(0, MAX_QUERY_CHARS);
+    const query = buildRetrievalQuery(prompt, conversationContext);
 
     // 10. Call retrieval service with context.
     // threshold=0.70: MiniLM-L6-v2 same-project cosine similarities cluster
