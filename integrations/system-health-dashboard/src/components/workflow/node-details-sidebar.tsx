@@ -1221,6 +1221,17 @@ export function UKBNodeDetailsSidebar({
   if (!agent) return null
 
   const Icon = agent.icon
+  const hasLLM = agent.usesLLM === true
+  const hasLLMOverride = hasOverride === true
+  const globalLLMModeLabel = String(globalLLMMode)
+  const stepDurationMs: number | undefined = typeof stepInfo?.duration === 'number' ? stepInfo.duration : undefined
+  const tokensUsed: number | undefined = typeof stepInfo?.tokensUsed === 'number' ? stepInfo.tokensUsed : undefined
+  const stepOutputs = stepInfo?.outputs
+  const visibleOutputKeys = stepOutputs ? Object.keys(stepOutputs).filter(k => !k.startsWith('_')) : []
+  const stepError = typeof stepInfo?.error === 'string' ? stepInfo.error : undefined
+  const llmErrorText = stepOutputs?.llmError == null ? '' : String(stepOutputs.llmError)
+  const llmUsageOutput = stepOutputs?.llmUsage
+  const hasLLMUsage = llmUsageOutput !== null && typeof llmUsageOutput === 'object'
 
   const getStatusBadge = (status?: string) => {
     switch (status) {
@@ -1281,13 +1292,13 @@ export function UKBNodeDetailsSidebar({
         </div>
 
         {/* LLM Mode Control - Only show for agents that use LLM */}
-        {agent.usesLLM ? (
+        {hasLLM ? (
           <>
             <Separator />
             <div className="space-y-3">
               <h4 className="font-medium text-sm flex items-center gap-2">
                 LLM Mode
-                {hasOverride && (
+                {hasLLMOverride && (
                   <span className="text-xs text-yellow-600 font-normal">(override)</span>
                 )}
               </h4>
@@ -1363,7 +1374,7 @@ export function UKBNodeDetailsSidebar({
                     P
                   </button>
                 </div>
-                {hasOverride && (
+                {hasLLMOverride && (
                   <button
                     onClick={async () => {
                       dispatch(clearAgentLLMOverride(agentId))
@@ -1376,21 +1387,20 @@ export function UKBNodeDetailsSidebar({
                       }
                     }}
                     className="p-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                    title={`Reset to global (${globalLLMMode})`}
+                    title={`Reset to global (${globalLLMModeLabel})`}
                   >
                     <RotateCcw className="h-3 w-3" />
                   </button>
                 )}
               </div>
               <div className="text-xs text-muted-foreground">
-                Global: {globalLLMMode.charAt(0).toUpperCase() + globalLLMMode.slice(1)}
+                Global: {globalLLMModeLabel.charAt(0).toUpperCase() + globalLLMModeLabel.slice(1)}
               </div>
             </div>
           </>
         ) : null}
 
-        {/* Step Execution Details - Always show with available data */}
-        <div><Separator className="" /></div>
+        <div className="h-px w-full bg-border" />
         <div className="space-y-3">
           <h4 className="font-medium text-sm">Execution Details</h4>
           <div className="space-y-2 text-sm">
@@ -1408,31 +1418,29 @@ export function UKBNodeDetailsSidebar({
               </span>
             </div>
 
-            {/* Duration - only show if we have it */}
-            {stepInfo?.duration != null && stepInfo.duration > 0 ? (
+            {stepDurationMs != null && stepDurationMs > 0 && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground flex items-center gap-1">
                   <Timer className="h-3 w-3" />
                   Duration
                 </span>
-                <span>{formatDurationMs(stepInfo.duration)}</span>
+                <span>{formatDurationMs(stepDurationMs)}</span>
               </div>
-            ) : undefined}
+            )}
 
-            {/* Tokens - only show if we have it */}
-            {stepInfo?.tokensUsed !== undefined && stepInfo.tokensUsed > 0 && (
+            {tokensUsed !== undefined && tokensUsed > 0 && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground flex items-center gap-1">
                   <Hash className="h-3 w-3" />
                   Tokens Used
                 </span>
-                <span>{stepInfo.tokensUsed.toLocaleString()}</span>
+                <span>{tokensUsed.toLocaleString()}</span>
               </div>
             )}
 
             {/* LLM Usage Details - show model by provider and token breakdown */}
-            {stepInfo?.outputs?.llmUsage && (() => {
-              const llmUsage = stepInfo.outputs.llmUsage as Record<string, any>
+            {hasLLMUsage && (() => {
+              const llmUsage = llmUsageOutput as Record<string, any>
               return (
               <div className="space-y-1 pt-1 border-t border-dashed mt-1">
                 {/* Combined LLM display: model by provider */}
@@ -1474,7 +1482,7 @@ export function UKBNodeDetailsSidebar({
             })()}
 
             {/* Show message if no timing data yet */}
-            {!stepInfo?.duration && resolvedStatus === 'completed' && (
+            {stepDurationMs == null && resolvedStatus === 'completed' && (
               <div className="text-xs text-muted-foreground italic">
                 Timing data will be available in next workflow run
               </div>
@@ -1483,7 +1491,7 @@ export function UKBNodeDetailsSidebar({
         </div>
 
         {/* Error Information */}
-        {stepInfo?.error && (
+        {stepError && (
           <>
             <Separator />
             <div className="space-y-2">
@@ -1492,14 +1500,14 @@ export function UKBNodeDetailsSidebar({
                 Error
               </h4>
               <div className="text-xs bg-red-50 border border-red-200 rounded p-2 text-red-800 break-words">
-                {stepInfo.error}
+                {stepError}
               </div>
             </div>
           </>
         )}
 
         {/* LLM Error Warning - show when LLM failed but step continued with fallback */}
-        {stepInfo?.outputs?.llmError && !stepInfo?.error && (
+        {llmErrorText && !stepError && (
           <>
             <Separator />
             <div className="space-y-2">
@@ -1508,7 +1516,7 @@ export function UKBNodeDetailsSidebar({
                 LLM Call Failed
               </h4>
               <div className="text-xs bg-amber-50 border border-amber-200 rounded p-2 text-amber-800 break-words">
-                <div>{String(stepInfo.outputs.llmError)}</div>
+                <div>{llmErrorText}</div>
                 <div className="text-amber-500 text-[10px] mt-1 italic">Using rule-based fallback</div>
               </div>
             </div>
@@ -1516,7 +1524,7 @@ export function UKBNodeDetailsSidebar({
         )}
 
         {/* Results Summary - show stats and key outcomes */}
-        {stepInfo?.outputs && Object.keys(stepInfo.outputs).filter(k => !k.startsWith('_')).length > 0 && (
+        {stepOutputs && visibleOutputKeys.length > 0 && (
           <>
             <Separator />
             <div className="space-y-2">
@@ -1525,9 +1533,9 @@ export function UKBNodeDetailsSidebar({
                 Results
               </h4>
               {/* Semantic Summary based on agent type - uses aggregated totals for historical workflows */}
-              <StepResultSummary agentId={agentId} outputs={stepInfo.outputs} aggregatedSteps={aggregatedSteps} status={resolvedStatus} />
+              <StepResultSummary agentId={agentId} outputs={stepOutputs} aggregatedSteps={aggregatedSteps} status={resolvedStatus} />
               {/* Only show detailed results if we DON'T have aggregated data (which would contradict it) */}
-              {!aggregatedSteps && <StepResultDetails outputs={stepInfo.outputs} />}
+              {!aggregatedSteps && <StepResultDetails outputs={stepOutputs} />}
             </div>
           </>
         )}

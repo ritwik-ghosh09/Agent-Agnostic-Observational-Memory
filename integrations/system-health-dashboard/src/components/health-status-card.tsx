@@ -9,7 +9,7 @@ import { Logger, LogCategories } from '@/utils/logging'
 
 interface StatusItem {
   name: string
-  status: 'operational' | 'warning' | 'error' | 'offline'
+  status: 'operational' | 'warning' | 'error' | 'offline' | 'unknown'
   description: string
   tooltip?: string
   action?: {

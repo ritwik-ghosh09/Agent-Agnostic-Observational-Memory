@@ -512,7 +512,7 @@ export function TokenUsagePage() {
                         <Cell key={p.provider} fill={getProviderColor(p.provider)} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(val: number) => formatTokens(val)} />
+                    <Tooltip formatter={(val: unknown) => formatTokens(Number(val ?? 0))} />
                     <Legend
                       verticalAlign="bottom"
                       wrapperStyle={{ paddingTop: '12px' }}
@@ -577,7 +577,7 @@ export function TokenUsagePage() {
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} minTickGap={24} />
                     <YAxis tickFormatter={formatTokens} tick={{ fontSize: 11 }} />
                     <Tooltip
-                      formatter={(val: number, name: string) => [formatTokens(val), name]}
+                      formatter={(val: unknown, name: unknown) => [formatTokens(Number(val ?? 0)), String(name)]}
                       labelStyle={{ color: '#999' }}
                       contentStyle={{ backgroundColor: '#1e1e2e', border: '1px solid #333' }}
                     />
@@ -755,7 +755,7 @@ export function TokenUsagePage() {
                     <XAxis dataKey="hour" tick={{ fontSize: 11 }} />
                     <YAxis tickFormatter={formatTokens} tick={{ fontSize: 11 }} />
                     <Tooltip
-                      formatter={(val: number, name: string) => [formatTokens(val), name]}
+                      formatter={(val: unknown, name: unknown) => [formatTokens(Number(val ?? 0)), String(name)]}
                       labelStyle={{ color: '#999' }}
                       contentStyle={{ backgroundColor: '#1e1e2e', border: '1px solid #333' }}
                     />
