@@ -74,6 +74,10 @@ services:
       # In-container readers (dashboard, constraint-monitor) reach the host
       # coordinator via host.docker.internal (extra_hosts wires this on Linux).
       - HEALTH_COORDINATOR_URL=http://host.docker.internal:3034
+      # NOTE: the Live Context monitor (live-query-monitor) runs on the HOST, not
+      # in this container — host tmux server sockets cannot cross the Docker
+      # Desktop VM bind-mount boundary. It is launched per session by
+      # scripts/tmux-session-wrapper.sh. See docker/supervisord.conf for details.
     ports:
       - "8080:8080"     # VKB Server
       - "3848:3848"     # Semantic Analysis SSE
