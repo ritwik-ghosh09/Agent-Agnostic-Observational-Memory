@@ -432,7 +432,7 @@ How it works:
 - **Draft stream** — on every change, the draft is POSTed to `/api/live-context/draft` and streamed straight into the **main heading bar**, so you see the prompt update live as you type.
 - **Debounce + retrieve** — once the draft is *stable* (unchanged for **3 s**) and new, it is passed through the Knowledge Context Injection memory pipeline (`/api/retrieve` → `RetrievalService`), which returns **Working Memory (≤300 tokens)** and **Observational memory (≤700 tokens)** for the live query.
 - **Ranked candidates** — the same response also carries `rankedResults`, the full pre-token-budget Observational Memory candidate list in final ranked order, so dashboard views can inspect every match even when the rendered markdown is truncated.
-- **Human rerank capture** — the **All Results** sidebar lets a user move candidates up/down, then save the human order. The dashboard forwards the event to the host Observations API, which embeds the query and stores compact rank-delta signals in Qdrant collection `human_rerank_feedback`. This captures feedback only; retrieval-time learned boosting is separate.
+- **Human rerank capture** — the **All Results** sidebar lets a user move candidates up/down, then save the human order. The dashboard forwards the event to the host Observations API, which embeds the query and stores compact rank-delta signals in Qdrant collection `human_rerank_feedback`. These signals close a **learned rerank loop**: similar future queries automatically promote the items humans preferred (see *Learned rerank boost* below).
 - **Submitted log** — when you press Enter (the input box clears), the sent query is POSTed to `/api/live-context/submitted` and appended to the **Recent Queries** log on the left — a history of prompts actually submitted to the CLI.
 - **Display** — the **Live Context** tab renders four zones in real time over a dedicated WebSocket: the heading bar (live typing), the Recent Queries log (submitted prompts), the Working | Observational memory columns, and an **All Results** sidebar listing every ranked candidate with tier and score.
 
@@ -489,6 +489,56 @@ sequenceDiagram
     Host-->>Dashboard: { ok, eventId, persisted }
     Dashboard-->>Sidebar: save status
 ```
+
+#### Learned rerank boost (closed feedback loop)
+
+Captured re-rankings are not just stored — for **future similar queries** they
+become a bounded, fail-open ranking signal. During retrieval, `RetrievalService`
+embeds the query, finds cosine-similar prior feedback events in
+`human_rerank_feedback` (top-K 10, threshold 0.85), and converts their per-item
+rank deltas into a clamped multiplier on `rrfScore` so human-promoted items rank
+higher. The boost is applied **after** freshness rerank and **before** the final
+sort, affecting both `rankedResults` and the token-budgeted markdown. It is a
+strict no-op whenever the feedback store is empty or unavailable, so cold-start
+behavior is identical to today.
+
+The multiplier is `clamp(1 + 0.30 × learnedSignal, 0.90, 1.25)` where
+`learnedSignal` blends each event's cosine similarity, exponential age decay
+(45-day half-life), project scope, and the normalized rank delta. Boosted items
+carry an optional `learnedRerank` `{ multiplier, signal, matchedEvents }` field
+for explainability. Tunables live as env-overridable constants at the top of
+[`src/retrieval/feedback-store.js`](src/retrieval/feedback-store.js)
+(`LEARNED_RERANK_THRESHOLD`, `LEARNED_RERANK_TOPK`,
+`LEARNED_RERANK_HALF_LIFE_DAYS`, `LEARNED_RERANK_COEFFICIENT`,
+`LEARNED_RERANK_MIN/MAX_MULTIPLIER`, `LEARNED_RERANK_GLOBAL`).
+
+```mermaid
+graph TD
+    subgraph CAPTURE["1. Capture (one-time, per human action)"]
+        A["Human re-orders results<br/>in All Results sidebar"]
+        A --> B["POST /api/rerank-feedback"]
+        B --> C["Embed query + derive<br/>rank-delta itemSignals"]
+        C --> D["Qdrant human_rerank_feedback<br/>1 point per event"]
+    end
+
+    subgraph RETRIEVE["2. Future similar query (every retrieve)"]
+        E["New query → embed vector"]
+        E --> F["FeedbackStore.findSimilar<br/>cosine topK=10, threshold 0.85<br/>project-scoped"]
+        D -.->|"similar events"| F
+        F --> G{"matches?"}
+        G -->|"none / store empty"| H["NO-OP<br/>scores unchanged"]
+        G -->|"≥1 match"| I["aggregateLearnedSignals<br/>similarity × age-decay × scope × delta"]
+        I --> J["rrfScore ×= clamp(1 + 0.30·signal, 0.90, 1.25)<br/>attach learnedRerank metadata"]
+    end
+
+    subgraph RANK["3. Ranking output"]
+        H --> K["Final sort + token-budget assembly"]
+        J --> K
+        K --> L["Human-promoted items rank higher<br/>for similar future queries"]
+        L -.->|"user may re-rank again"| A
+    end
+```
+
 
 Configuration: enabled per agent via `AGENT_ENABLE_LIVE_CONTEXT=true` (default) in
 `config/agents/*.sh`. Tunables (env): `LQM_POLL_MS`, `LQM_STABLE_MS`,
