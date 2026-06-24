@@ -20,6 +20,7 @@ import { rrfFuse, buildRecencyList, TIER_WEIGHTS, loadAgentProfiles } from './rr
 import { assembleBudgetedMarkdown } from './token-budget.js';
 import { buildWorkingMemory } from './working-memory.js';
 import { FeedbackStore, aggregateLearnedSignals } from './feedback-store.js';
+import { getSettings } from './retrieval-settings.js';
 
 /** Qdrant collection names matching embedding-config.json. */
 const COLLECTIONS = ['insights', 'digests', 'kg_entities', 'observations'];
@@ -147,6 +148,15 @@ export class RetrievalService {
   async retrieve(query, options = {}) {
     const { budget = this.defaultBudget, threshold = this.scoreThreshold, context = null } = options;
 
+    // Resolve persisted, globally-tunable retrieval settings (fail-open to
+    // defaults). These are authoritative for both retrieval paths (the
+    // KnowledgeInjectionHook via /api/retrieve and the dashboard live preview),
+    // so the hook's hardcoded threshold becomes a non-authoritative fallback.
+    const settings = getSettings();
+    const itemThreshold = Number.isFinite(settings?.queryItem?.threshold)
+      ? settings.queryItem.threshold
+      : threshold;
+
     // Ensure initialized
     if (!this._initialized) {
       await this.initialize();
@@ -163,12 +173,21 @@ export class RetrievalService {
 
     // Step 2: Parallel semantic + keyword search
     const [semanticResults, keywordHits] = await Promise.all([
-      this._semanticSearch(vector, 20, threshold),
+      this._semanticSearch(vector, 20, itemThreshold),
       this._keywordSearch(query),
     ]);
 
     // Step 3: Build recency list from combined unique results
     const recencyResults = buildRecencyList([...semanticResults, ...keywordHits]);
+
+    // Map of `${tier}:${id}` -> raw query↔item cosine, captured BEFORE fusion.
+    // Only semantic-origin items carry a true cosine in `.score`; keyword/recency
+    // items use non-cosine scores and must not be reshaped by the item exponential.
+    const semanticCosineByKey = new Map();
+    for (const r of semanticResults) {
+      if (r == null || r.tier == null || r.id == null) continue;
+      semanticCosineByKey.set(`${r.tier}:${r.id}`, Number(r.score));
+    }
 
     // Step 4: RRF fusion (with optional per-agent profile multipliers, D-04)
     let agentProfile = null;
@@ -199,11 +218,20 @@ export class RetrievalService {
     // tier; digests/kg_entities/observations don't have a verification field.
     this._applyFreshnessRerank(fused);
 
+    // Step 4.75: Query↔Item similarity emphasis (user-tunable). RRF fusion is
+    // rank-based, so the raw query↔item cosine is not otherwise reflected in the
+    // final score. When enabled, multiply each semantic-origin item's rrfScore by
+    // clamp(cosine,0,1)^exponent so near-duplicate items are emphasized and
+    // loosely-similar items de-emphasized. No-op when disabled (linear).
+    if (settings?.queryItem?.exponentialEnabled) {
+      this._applyQueryItemExponential(fused, semanticCosineByKey, settings.queryItem.exponent);
+    }
+
     // Step 4.8: Learned rerank (G6) — apply a bounded, fail-open boost to items
     // that humans previously promoted for similar queries. Strict no-op when the
     // feedback store is empty/unavailable. Runs after freshness and before the
     // final sort so it affects rankedResults and token-budget assembly.
-    await this._applyLearnedRerank(fused, query, vector, context);
+    await this._applyLearnedRerank(fused, query, vector, context, settings?.queryQuery);
 
     fused.sort((a, b) => b.rrfScore - a.rrfScore);
     const rankedResults = fused.map(toRankedResult);
@@ -436,14 +464,18 @@ export class RetrievalService {
    * @param {string} query - Final retrieval query text (unused; kept for signature/clarity)
    * @param {number[]} queryVector - 384-dim query embedding already computed in retrieve()
    * @param {object|null} context - Retrieval context; `context.project` scopes feedback
+   * @param {object} [qqSettings] - Query↔Query tuning: { threshold, exponentialEnabled, exponent }
    * @returns {Promise<void>}
    */
-  async _applyLearnedRerank(fused, query, queryVector, context = null) {
+  async _applyLearnedRerank(fused, query, queryVector, context = null, qqSettings = {}) {
     try {
       if (!this.feedbackStore || !Array.isArray(fused) || fused.length === 0) return;
       if (!Array.isArray(queryVector) || queryVector.length === 0) return;
 
-      const matchedEvents = await this.feedbackStore.findSimilar(queryVector, context);
+      const findOpts = Number.isFinite(qqSettings?.threshold)
+        ? { threshold: qqSettings.threshold }
+        : {};
+      const matchedEvents = await this.feedbackStore.findSimilar(queryVector, context, findOpts);
       if (!Array.isArray(matchedEvents) || matchedEvents.length === 0) return;
 
       // Stable item-key set for the current fused list: `${tier}:${id}`.
@@ -454,7 +486,16 @@ export class RetrievalService {
       }
       if (byKey.size === 0) return;
 
-      const signals = aggregateLearnedSignals(matchedEvents, new Set(byKey.keys()));
+      const aggOpts = {
+        exponentialEnabled: qqSettings?.exponentialEnabled,
+        exponent: qqSettings?.exponent,
+      };
+      const signals = aggregateLearnedSignals(
+        matchedEvents,
+        new Set(byKey.keys()),
+        Date.now(),
+        aggOpts
+      );
       if (signals.size === 0) return;
 
       for (const [itemKey, info] of signals) {
@@ -472,6 +513,46 @@ export class RetrievalService {
       // Fail-open: never let learned rerank degrade baseline retrieval.
       process.stderr.write(
         `[RetrievalService] Learned rerank skipped (non-fatal): ${err.message}\n`
+      );
+    }
+  }
+
+  /**
+   * Query↔Item similarity emphasis (user-tunable, fail-open).
+   *
+   * RRF fusion is rank-based, so the raw query↔item cosine is not otherwise
+   * reflected in the final score. When the Query↔Item exponential is enabled,
+   * multiply each semantic-origin item's rrfScore by clamp(cosine,0,1)^exponent.
+   * Items without a true cosine (keyword/recency-only origin, not present in the
+   * semantic cosine map) are left untouched. Neutral (no-op) when exponent <= 1
+   * and a near-no-op as cosine→1.
+   *
+   * @param {Array<object>} fused - Fused candidates with mutable rrfScore
+   * @param {Map<string, number>} semanticCosineByKey - `${tier}:${id}` -> cosine
+   * @param {number} exponent - Sharpness; higher emphasizes near-duplicate items
+   * @returns {void}
+   */
+  _applyQueryItemExponential(fused, semanticCosineByKey, exponent) {
+    try {
+      const k = Number(exponent);
+      if (!Number.isFinite(k) || k <= 1) return;
+      if (!(semanticCosineByKey instanceof Map) || semanticCosineByKey.size === 0) return;
+      if (!Array.isArray(fused)) return;
+
+      for (const item of fused) {
+        if (item == null || item.tier == null || item.id == null) continue;
+        if (!Number.isFinite(item.rrfScore)) continue;
+        const cosine = semanticCosineByKey.get(`${item.tier}:${item.id}`);
+        if (!Number.isFinite(cosine)) continue;
+        const clamped = Math.max(0, Math.min(1, cosine));
+        const weight = Math.pow(clamped, k);
+        item.rrfScore *= weight;
+        item.queryItemRerank = { cosine: clamped, exponent: k, weight };
+      }
+    } catch (err) {
+      // Fail-open: never let item-similarity emphasis degrade baseline retrieval.
+      process.stderr.write(
+        `[RetrievalService] Query-item exponential skipped (non-fatal): ${err.message}\n`
       );
     }
   }

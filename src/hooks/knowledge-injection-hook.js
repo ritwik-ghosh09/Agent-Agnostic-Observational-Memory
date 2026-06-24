@@ -70,17 +70,20 @@ async function main() {
     const conversationContext = extractConversationTopics(input.transcript_path);
     const query = buildRetrievalQuery(prompt, conversationContext);
 
-    // 10. Call retrieval service with context.
-    // threshold=0.70: MiniLM-L6-v2 same-project cosine similarities cluster
-    // at 0.75-0.82 (see retrieval-service.js _applyTopicRelevance), so a
-    // higher floor silently filtered out almost every legitimate insight or
-    // digest. The retrieval-service's topic-relevance pass (substring + exact-
-    // token overlap) does the actual ranking; the threshold's job is just to
-    // let the candidates in.
+    // 10. Call retrieval service with the actual submitted query + context.
+    //     We intentionally do NOT pass a threshold here. The query↔item and
+    //     query↔query thresholds (and their exponential reshaping) are owned by
+    //     the user-tunable GLOBAL retrieval settings, which retrieve() reads as
+    //     the single source of truth (src/retrieval/retrieval-settings.js). This
+    //     guarantees the UserPromptSubmit path and the dashboard live preview
+    //     score identically and honor the user's live slider/toggle changes.
+    //     (Default query↔item threshold is 0.70 — MiniLM-L6-v2 same-project
+    //     cosine similarities cluster at 0.75-0.82, so a higher floor silently
+    //     filtered out legitimate insights/digests; topic-relevance does the
+    //     actual ranking, the threshold just admits candidates.)
     const result = await callRetrieval({
       query,
       budget: 1000,
-      threshold: 0.70,
       context,
     });
     if (!result || !result.markdown || result.meta?.results_count === 0) return;

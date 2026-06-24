@@ -31,6 +31,7 @@ import { fileURLToPath } from 'node:url';
 import { ObservationWriter } from '../src/live-logging/ObservationWriter.js';
 import { ObservationConsolidator } from '../src/live-logging/ObservationConsolidator.js';
 import { RetrievalService } from '../src/retrieval/retrieval-service.js';
+import { getSettings as getRetrievalSettings, updateSettings as updateRetrievalSettings } from '../src/retrieval/retrieval-settings.js';
 import { ObservationPruner } from '../src/live-logging/ObservationPruner.js';
 import { ColdStoreReader } from '../src/live-logging/ColdStoreReader.js';
 // Phase 35 plan 35-04 - pure merge helpers extracted into a sibling module so
@@ -1223,6 +1224,35 @@ app.post('/api/retrieve', async (req, res) => {
     process.stderr.write(`[obs-api] /retrieve error: ${err.message}\n`);
     if (isCorruptionError(err)) invalidateDb();
     res.status(500).json({ error: 'Retrieval failed' });
+  }
+});
+
+/**
+ * GET /api/retrieval-settings — return the persisted, globally-tunable retrieval
+ * scoring settings (Query↔Query and Query↔Item thresholds + exponentials).
+ * Fail-open: always returns a valid settings object (defaults on any error).
+ */
+app.get('/api/retrieval-settings', (_req, res) => {
+  try {
+    res.json(getRetrievalSettings());
+  } catch (err) {
+    process.stderr.write(`[obs-api] GET /retrieval-settings error: ${err.message}\n`);
+    res.status(500).json({ error: 'Failed to read retrieval settings' });
+  }
+});
+
+/**
+ * PUT /api/retrieval-settings — validate + persist a partial settings update and
+ * return the saved settings. Out-of-range values are clamped by updateSettings.
+ */
+app.put('/api/retrieval-settings', (req, res) => {
+  try {
+    const partial = req.body && typeof req.body === 'object' ? req.body : {};
+    const saved = updateRetrievalSettings(partial);
+    res.json(saved);
+  } catch (err) {
+    process.stderr.write(`[obs-api] PUT /retrieval-settings error: ${err.message}\n`);
+    res.status(500).json({ error: 'Failed to update retrieval settings' });
   }
 });
 

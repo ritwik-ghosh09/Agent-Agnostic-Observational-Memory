@@ -48,6 +48,24 @@ export const CONFIDENCE_DIVISOR = numEnv('LEARNED_RERANK_CONFIDENCE_DIVISOR', 1.
 /** learnedSignal is clamped to +/- this magnitude before the multiplier is formed. */
 export const SIGNAL_CLAMP = 1.0;
 
+/**
+ * Default exponent for the query↔query similarity reshape (similarityWeight =
+ * score^EXPONENT). Higher = sharper falloff so only near-duplicate queries carry
+ * meaningful weight. Overridden per-call via the runtime retrieval settings.
+ */
+export const SIMILARITY_EXPONENT = numEnv('LEARNED_RERANK_SIMILARITY_EXPONENT', 3.0);
+
+/**
+ * Whether the exponential similarity reshape is applied by default. When false
+ * the raw cosine score is used as the weight (linear). Overridden per-call via
+ * the runtime retrieval settings.
+ */
+export const EXPONENTIAL_ENABLED_DEFAULT = (() => {
+  const raw = process.env.LEARNED_RERANK_EXPONENTIAL_ENABLED;
+  if (raw == null || raw === '') return true;
+  return raw === '1' || raw.toLowerCase() === 'true';
+})();
+
 /** Default per-user trust weight (design §2; per-user trust model is future work). */
 export const DEFAULT_USER_WEIGHT = 1.0;
 
@@ -88,6 +106,7 @@ function clamp(value, lo, hi) {
  * Pure and deterministic (time injected via `nowMs`) so it can be unit-tested
  * without Qdrant. Implements the design §2 / §4 math:
  *
+ *   similarityWeight = exponentialEnabled ? clamp(score,0,1) ^ exponent : score
  *   ageWeight    = 0.5 ^ (ageDays / HALF_LIFE_DAYS)
  *   eventWeight  = similarityWeight * ageWeight * scopeWeight * userWeight
  *   deltaNorm    = (originalRank - humanRank) / max(windowSize - 1, 1)
@@ -96,20 +115,32 @@ function clamp(value, lo, hi) {
  *   learnedSignal= clamp(weightedDelta * confidence, -1, 1)
  *   multiplier   = clamp(1 + COEFFICIENT * learnedSignal, MIN, MAX)
  *
+ * The similarityWeight reshape concentrates influence on near-duplicate queries:
+ * with the exponential enabled a query whose cosine to a past feedback query is
+ * only marginally above the admission floor contributes very little, while a
+ * near-duplicate (cosine→1) carries full weight. Disabled ⇒ linear (raw cosine).
+ *
  * Only itemKeys present in `fusedItemKeys` produce an entry — missing-candidate
  * recall is deliberately out of scope (design §3).
  *
  * @param {Array<{ score: number, scopeWeight?: number, userWeight?: number, payload: object }>} matchedEvents
  * @param {Set<string>|Iterable<string>} fusedItemKeys - stable `tier:id` keys in the current fused list
  * @param {number} [nowMs=Date.now()] - injected clock for deterministic decay
+ * @param {object} [opts] - runtime overrides from retrieval settings
+ * @param {boolean} [opts.exponentialEnabled=EXPONENTIAL_ENABLED_DEFAULT] - reshape score^exponent
+ * @param {number} [opts.exponent=SIMILARITY_EXPONENT] - exponent k when enabled
  * @returns {Map<string, { multiplier: number, signal: number, weightedDelta: number, confidence: number, matchedEvents: number }>}
  */
-export function aggregateLearnedSignals(matchedEvents, fusedItemKeys, nowMs = Date.now()) {
+export function aggregateLearnedSignals(matchedEvents, fusedItemKeys, nowMs = Date.now(), opts = {}) {
   const out = new Map();
   if (!Array.isArray(matchedEvents) || matchedEvents.length === 0) return out;
 
   const fusedSet = fusedItemKeys instanceof Set ? fusedItemKeys : new Set(fusedItemKeys || []);
   if (fusedSet.size === 0) return out;
+
+  const exponentialEnabled =
+    typeof opts.exponentialEnabled === 'boolean' ? opts.exponentialEnabled : EXPONENTIAL_ENABLED_DEFAULT;
+  const exponent = Number.isFinite(Number(opts.exponent)) ? Number(opts.exponent) : SIMILARITY_EXPONENT;
 
   // itemKey -> running accumulators
   const acc = new Map();
@@ -120,7 +151,12 @@ export function aggregateLearnedSignals(matchedEvents, fusedItemKeys, nowMs = Da
     const signals = Array.isArray(payload.itemSignals) ? payload.itemSignals : [];
     if (signals.length === 0) continue;
 
-    const similarityWeight = Number(event.score);
+    const rawScore = Number(event.score);
+    if (!Number.isFinite(rawScore) || rawScore <= 0) continue;
+    // Query↔query similarity reshape (linear unless the exponential is enabled).
+    const similarityWeight = exponentialEnabled
+      ? Math.pow(clamp(rawScore, 0, 1), exponent)
+      : rawScore;
     if (!Number.isFinite(similarityWeight) || similarityWeight <= 0) continue;
 
     const scopeWeight = Number.isFinite(Number(event.scopeWeight)) ? Number(event.scopeWeight) : 1.0;

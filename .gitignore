@@ -289,3 +289,6 @@ local_cache/
 # Per-machine sentinels for cadence-guarded consolidator passes
 .data/last-compaction-*.iso
 .data/last-verification-*.iso
+
+# Runtime-generated tunable retrieval scoring settings (state, not source)
+.observations/retrieval-settings.json

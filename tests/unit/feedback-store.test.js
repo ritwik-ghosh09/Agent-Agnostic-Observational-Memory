@@ -151,4 +151,73 @@ describe('aggregateLearnedSignals', () => {
     expect(gOut.get('insights:A').multiplier).toBeLessThan(pOut.get('insights:A').multiplier);
     expect(gOut.get('insights:A').multiplier).toBeGreaterThan(1.0);
   });
+
+  // ---- Query↔Query exponential reshape (opts) --------------------------------
+
+  test('(10) exponential OFF uses linear (raw cosine) weighting', () => {
+    const sig = [{ itemKey: 'insights:A', originalRank: 5, humanRank: 1 }];
+    const hi = aggregateLearnedSignals(
+      [mkEvent(sig, { windowSize: 10, score: 0.99 })],
+      new Set(['insights:A']),
+      NOW,
+      { exponentialEnabled: false }
+    );
+    const lo = aggregateLearnedSignals(
+      [mkEvent(sig, { windowSize: 10, score: 0.86 })],
+      new Set(['insights:A']),
+      NOW,
+      { exponentialEnabled: false }
+    );
+    // Linear: higher cosine still gives a (slightly) stronger boost via confidence.
+    expect(hi.get('insights:A').multiplier).toBeGreaterThan(lo.get('insights:A').multiplier);
+    expect(lo.get('insights:A').multiplier).toBeGreaterThan(1.0);
+  });
+
+  test('(11) exponential ON sharpens: monotonic falloff in query similarity', () => {
+    const sig = [{ itemKey: 'insights:A', originalRank: 5, humanRank: 1 }];
+    const mult = (score) =>
+      aggregateLearnedSignals(
+        [mkEvent(sig, { windowSize: 10, score })],
+        new Set(['insights:A']),
+        NOW,
+        { exponentialEnabled: true, exponent: 3.0 }
+      ).get('insights:A').multiplier;
+    const m99 = mult(0.99);
+    const m90 = mult(0.9);
+    const m85 = mult(0.85);
+    expect(m99).toBeGreaterThan(m90);
+    expect(m90).toBeGreaterThan(m85);
+    expect(m99).toBeGreaterThan(1.0);
+  });
+
+  test('(12) higher exponent widens the near-duplicate advantage', () => {
+    const sig = [{ itemKey: 'insights:A', originalRank: 5, humanRank: 1 }];
+    const at = (score, exponent) =>
+      aggregateLearnedSignals(
+        [mkEvent(sig, { windowSize: 10, score })],
+        new Set(['insights:A']),
+        NOW,
+        { exponentialEnabled: true, exponent }
+      ).get('insights:A').multiplier;
+    // For a sub-1.0 cosine, a larger exponent shrinks the boost (more de-emphasis).
+    expect(at(0.9, 5.0)).toBeLessThan(at(0.9, 3.0));
+    // A near-duplicate (cos≈1) is barely affected by the exponent.
+    expect(at(0.99, 5.0)).toBeGreaterThan(at(0.9, 5.0));
+  });
+
+  test('(13) exponential default (no opts) matches exponent 3.0', () => {
+    const sig = [{ itemKey: 'insights:A', originalRank: 5, humanRank: 1 }];
+    const dflt = aggregateLearnedSignals(
+      [mkEvent(sig, { windowSize: 10, score: 0.9 })],
+      new Set(['insights:A']),
+      NOW
+    ).get('insights:A').multiplier;
+    const explicit = aggregateLearnedSignals(
+      [mkEvent(sig, { windowSize: 10, score: 0.9 })],
+      new Set(['insights:A']),
+      NOW,
+      { exponentialEnabled: true, exponent: 3.0 }
+    ).get('insights:A').multiplier;
+    expect(dflt).toBeCloseTo(explicit, 10);
+  });
 });

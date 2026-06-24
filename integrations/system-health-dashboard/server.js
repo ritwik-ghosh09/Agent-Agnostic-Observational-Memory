@@ -332,9 +332,15 @@ class SystemHealthAPIServer {
         // Retrieval API (Phase 29)
         this.app.post('/api/retrieve', this.handleRetrieve.bind(this));
 
+        // Global, persisted retrieval scoring settings (Query↔Query / Query↔Item).
+        // Proxied to the host Observations API so the hook + preview share values.
+        this.app.get('/api/retrieval-settings', this.handleGetRetrievalSettings.bind(this));
+        this.app.put('/api/retrieval-settings', this.handlePutRetrievalSettings.bind(this));
+
         // Live Memory Context API — preview of Working + Observational memory for
         // the prompt a user has typed but not yet submitted in the CLI.
         this.app.post('/api/live-context/query', this.handleLiveContextQuery.bind(this));
+        this.app.post('/api/live-context/rerun', this.handleLiveContextRerun.bind(this));
         this.app.post('/api/live-context/rerank', this.handleLiveContextRerank.bind(this));
         this.app.get('/api/live-context', this.handleGetLiveContext.bind(this));
         // Live typing draft (streamed to the heading bar) + submitted-query log.
@@ -4691,6 +4697,109 @@ class SystemHealthAPIServer {
             process.stderr.write(`[RetrievalAPI] forward error: ${err.message}\n`);
             res.status(502).json({ error: 'Observations API unreachable' });
         }
+    }
+
+    /**
+     * GET /api/retrieval-settings — forward to the host Observations API so the
+     * dashboard reads the same persisted, global retrieval scoring settings the
+     * KnowledgeInjectionHook honors.
+     */
+    async handleGetRetrievalSettings(req, res) {
+        const base = process.env.OBS_API_URL || 'http://host.docker.internal:12436';
+        try {
+            const upstream = await fetch(`${base}/api/retrieval-settings`);
+            const body = await upstream.text();
+            res.status(upstream.status).type(upstream.headers.get('content-type') || 'application/json').send(body);
+        } catch (err) {
+            process.stderr.write(`[RetrievalSettings] GET forward error: ${err.message}\n`);
+            res.status(502).json({ error: 'Observations API unreachable' });
+        }
+    }
+
+    /**
+     * PUT /api/retrieval-settings — forward a partial settings update to the host
+     * Observations API (which validates, clamps, persists) and return the saved value.
+     */
+    async handlePutRetrievalSettings(req, res) {
+        const base = process.env.OBS_API_URL || 'http://host.docker.internal:12436';
+        try {
+            const upstream = await fetch(`${base}/api/retrieval-settings`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(req.body || {}),
+            });
+            const body = await upstream.text();
+            res.status(upstream.status).type(upstream.headers.get('content-type') || 'application/json').send(body);
+        } catch (err) {
+            process.stderr.write(`[RetrievalSettings] PUT forward error: ${err.message}\n`);
+            res.status(502).json({ error: 'Observations API unreachable' });
+        }
+    }
+
+    /**
+     * POST /api/live-context/rerun — re-run retrieval for the most recent live
+     * draft using the current (just-changed) global settings, then push + broadcast
+     * a fresh entry so the Live Context preview re-tunes immediately without the
+     * user retyping. No-op (ok:false) when the buffer is empty.
+     */
+    async handleLiveContextRerun(req, res) {
+        const latest = this.liveContextBuffer.length
+            ? this.liveContextBuffer[this.liveContextBuffer.length - 1]
+            : null;
+        if (!latest || !latest.query) {
+            res.json({ ok: false, reason: 'no recent live-context entry to rerun' });
+            return;
+        }
+
+        const entry = {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            query: latest.query,
+            rawDraft: latest.rawDraft || latest.query,
+            agent: latest.agent || 'agent',
+            sessionId: latest.sessionId || null,
+            tmuxSession: latest.tmuxSession || null,
+            project: latest.project || null,
+            cwd: latest.cwd || null,
+            typedAt: latest.typedAt || null,
+            receivedAt: new Date().toISOString(),
+            markdown: '',
+            rankedResults: [],
+            meta: null,
+            error: null,
+            rerun: true,
+        };
+
+        const base = process.env.OBS_API_URL || 'http://host.docker.internal:12436';
+        try {
+            const upstream = await fetch(`${base}/api/retrieve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query: entry.query,
+                    budget: 1000,
+                    context: { project: entry.project, cwd: entry.cwd, agent: entry.agent },
+                }),
+            });
+            if (upstream.ok) {
+                const result = await upstream.json();
+                entry.markdown = result.markdown || '';
+                entry.rankedResults = result.rankedResults || [];
+                entry.meta = result.meta || null;
+            } else {
+                entry.error = `retrieval upstream ${upstream.status}`;
+            }
+        } catch (err) {
+            entry.error = `retrieval unreachable: ${err.message}`;
+            process.stderr.write(`[LiveContext] rerun error: ${err.message}\n`);
+        }
+
+        this.liveContextBuffer.push(entry);
+        if (this.liveContextBuffer.length > this.LIVE_CONTEXT_BUFFER_MAX) {
+            this.liveContextBuffer.shift();
+        }
+        this.broadcastLiveContext(entry);
+
+        res.json({ ok: !entry.error, id: entry.id, hasContext: !entry.error && !!entry.markdown });
     }
 
     /**

@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { RetrievalTuningPanel } from '@/components/RetrievalTuningPanel'
 import {
   Brain,
   Database,
@@ -529,6 +530,14 @@ function RecentQueries({ items }: { items: LiveSubmitted[] }) {
 export function LiveContextPage() {
   const { entries, draft, submitted, isConnected } = useLiveContextWebSocket()
 
+  // After a settings change persists, re-run retrieval for the most recent draft
+  // so the preview re-tunes immediately without the user retyping.
+  const handleSettingsSaved = () => {
+    fetch(`${httpBase()}/api/live-context/rerun`, { method: 'POST' }).catch(() => {
+      /* fail-open: preview refreshes on next keystroke */
+    })
+  }
+
   const latest = entries[0] || null
   // "typing" = a live draft exists that differs from the last retrieved draft.
   // Compare against the entry's rawDraft (the original typed text), not query,
@@ -582,6 +591,8 @@ export function LiveContextPage() {
               latencyMs={latest?.meta?.latency_ms ?? null}
               resultsCount={latest?.meta?.results_count ?? null}
             />
+
+            <RetrievalTuningPanel onSaved={handleSettingsSaved} />
 
             {latest?.error && !typing && (
               <Alert variant="destructive">
