@@ -106,3 +106,52 @@ describe('assembleBudgetedMarkdown — per-tier minimum slots (G2)', () => {
     expect(occurrences).toBe(1);
   });
 });
+
+describe('assembleBudgetedMarkdown — includedKeys provenance (OM pill)', () => {
+  test('returns tier:id keys for every emitted item', () => {
+    const sorted = [
+      mkResult('i1', 'insights', 0.99, 'insight alpha'),
+      mkResult('d1', 'digests', 0.80, 'digest beta'),
+      mkResult('o1', 'observations', 0.70, 'observation gamma'),
+    ];
+    const { includedKeys } = assembleBudgetedMarkdown(sorted, 1000);
+    expect(includedKeys).toEqual(
+      expect.arrayContaining(['insights:i1', 'digests:d1', 'observations:o1'])
+    );
+    // Keys must use the `tier:id` form (matches the UI item key).
+    for (const key of includedKeys) {
+      expect(key).toMatch(/^(insights|digests|kg_entities|observations):/);
+    }
+  });
+
+  test('every includedKey corresponds to content present in the markdown', () => {
+    const items = [
+      mkResult('i1', 'insights', 0.99, 'insight alpha'),
+      mkResult('d1', 'digests', 0.80, 'digest beta'),
+      mkResult('o1', 'observations', 0.70, 'observation gamma'),
+    ];
+    const previewByKey = new Map(items.map((it) => [`${it.tier}:${it.id}`, it.payload.summary_preview]));
+    const { markdown, includedKeys } = assembleBudgetedMarkdown(items, 1000);
+    for (const key of includedKeys) {
+      const preview = previewByKey.get(key);
+      expect(preview).toBeTruthy();
+      expect(markdown).toContain(preview);
+    }
+  });
+
+  test('a deduped duplicate is excluded from includedKeys', () => {
+    const sorted = [
+      mkResult('i1', 'insights', 0.80, 'OKB Architecture overview'),
+      // Same normalized preview as i1 → deduped (never emitted).
+      { ...mkResult('i2', 'insights', 0.79, 'OKB Architecture overview'), id: 'i2' },
+    ];
+    const { includedKeys } = assembleBudgetedMarkdown(sorted, 1000);
+    expect(includedKeys).toContain('insights:i1');
+    expect(includedKeys).not.toContain('insights:i2');
+  });
+
+  test('empty input yields empty includedKeys', () => {
+    const { includedKeys } = assembleBudgetedMarkdown([], 1000);
+    expect(includedKeys).toEqual([]);
+  });
+});

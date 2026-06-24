@@ -46,6 +46,7 @@ export interface RankedResult {
   tierWeight: number
   snippet: string
   title: string
+  usedInObservational?: boolean
 }
 
 export interface LiveContextRerankOriginalItem {

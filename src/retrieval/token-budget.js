@@ -122,7 +122,11 @@ export function truncateResult(item, tokenBudget) {
  *
  * @param {Array<object>} sortedResults - RRF-fused results sorted by score descending
  * @param {number} budget - Token budget (default 1000 per D-08)
- * @returns {{ markdown: string, tokensUsed: number }}
+ * @returns {{ markdown: string, tokensUsed: number, includedKeys: string[] }}
+ *   `includedKeys` lists the `${tier}:${id}` of every ranked item actually
+ *   emitted into the Observational Memory markdown (provenance for the "OM"
+ *   indicator in the dashboard). Keyed by tier:id to match the UI item key and
+ *   avoid cross-tier id collisions.
  */
 /**
  * Compute a content fingerprint for dedup.
@@ -152,6 +156,15 @@ export function assembleBudgetedMarkdown(sortedResults, budget = 1000) {
   const tierCounts = Object.fromEntries(TIER_ORDER.map((t) => [t, 0]));
   const seenSignatures = new Set();
   const includedIds = new Set();
+  // Provenance: `${tier}:${id}` of every item emitted into the markdown. Recorded
+  // inside tryAdd so the final truncated-on-break item is captured too. Used to
+  // mark rankedResults.usedInObservational for the dashboard "OM" pill.
+  const includedKeys = new Set();
+
+  const recordKey = (result) => {
+    if (result == null || result.tier == null || result.id == null) return;
+    includedKeys.add(`${result.tier}:${result.id}`);
+  };
 
   // Helper: attempt to add a single result to its bucket. Returns true if the
   // result was added (in full or truncated), false if skipped/over budget.
@@ -177,6 +190,7 @@ export function assembleBudgetedMarkdown(sortedResults, budget = 1000) {
       tierCounts[result.tier] += 1;
       if (sig) seenSignatures.add(sig);
       tokensUsed += countTokens(tf);
+      recordKey(result);
       return true;
     }
 
@@ -184,6 +198,7 @@ export function assembleBudgetedMarkdown(sortedResults, budget = 1000) {
     tierCounts[result.tier] += 1;
     if (sig) seenSignatures.add(sig);
     tokensUsed += tokens;
+    recordKey(result);
     return true;
   };
 
@@ -226,5 +241,5 @@ export function assembleBudgetedMarkdown(sortedResults, budget = 1000) {
     }
   }
 
-  return { markdown: sections.join('\n\n'), tokensUsed };
+  return { markdown: sections.join('\n\n'), tokensUsed, includedKeys: [...includedKeys] };
 }

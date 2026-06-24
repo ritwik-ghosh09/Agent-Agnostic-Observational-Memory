@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { RetrievalTuningPanel } from '@/components/RetrievalTuningPanel'
 import {
   Brain,
@@ -237,6 +238,28 @@ type SaveStatus =
   | { kind: 'success'; message: string }
   | { kind: 'error'; message: string }
 
+/** Small "OM" pill marking a ranked item that populated the Observational Memory preview. */
+function ObservationalPill() {
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge
+            variant="outline"
+            aria-label="Used in Observational Memory"
+            className="cursor-default border-emerald-500/40 bg-emerald-500/10 px-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400"
+          >
+            OM
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs text-xs leading-relaxed">
+          Used to populate the Observational Memory preview for this query.
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
 /** Ranked sidebar containing every retrieval candidate for the live query. */
 function RankedResultsSidebar({ entry }: { entry: LiveContextEntry | null }) {
   const original = useMemo(
@@ -390,6 +413,7 @@ function RankedResultsSidebar({ entry }: { entry: LiveContextEntry | null }) {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <Badge className={TIER_COLORS[result.tier]}>{TIER_LABELS[result.tier]}</Badge>
+                      {result.usedInObservational && <ObservationalPill />}
                       <span className="truncate font-medium text-foreground/90">{result.title}</span>
                     </div>
                     <p className="mt-1 max-h-10 overflow-hidden text-xs leading-5 text-muted-foreground">

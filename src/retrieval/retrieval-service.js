@@ -32,7 +32,7 @@ const RANKED_RESULT_SNIPPET_CHARS = 200;
  *
  * @param {object} item - RRF-fused retrieval candidate
  * @param {number} index - Zero-based index after final sorting
- * @returns {{ id: string, tier: string, rank: number, rawScore: number, rrfScore: number, tierWeight: number, snippet: string, title: string, learnedRerank?: object }}
+ * @returns {{ id: string, tier: string, rank: number, rawScore: number, rrfScore: number, tierWeight: number, snippet: string, title: string, learnedRerank?: object, usedInObservational?: boolean }}
  */
 function toRankedResult(item, index) {
   const payload = item.payload || {};
@@ -237,7 +237,14 @@ export class RetrievalService {
     const rankedResults = fused.map(toRankedResult);
 
     // Step 5: Token-budgeted markdown assembly (semantic budget after WM)
-    const { markdown, tokensUsed } = assembleBudgetedMarkdown(fused, effectiveSemanticBudget);
+    const { markdown, tokensUsed, includedKeys } = assembleBudgetedMarkdown(fused, effectiveSemanticBudget);
+
+    // Provenance: mark which ranked items were actually emitted into the
+    // Observational Memory markdown so the dashboard can render an "OM" pill.
+    const observationalSet = new Set(includedKeys);
+    for (const r of rankedResults) {
+      r.usedInObservational = observationalSet.has(`${r.tier}:${r.id}`);
+    }
 
     // Combine: working memory prefix + semantic results
     const finalMarkdown = wm.markdown ? wm.markdown + '\n\n' + markdown : markdown;
