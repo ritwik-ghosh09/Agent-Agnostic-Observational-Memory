@@ -41,6 +41,11 @@ run_hook() {
   context="$(cat 2>/dev/null || true)"
   [ -z "$context" ] && context='{}'
 
+  # TEMP PROBE (remove): capture the real userPromptSubmitted payload shape.
+  if [ "$native_event" = "userPromptSubmitted" ]; then
+    printf '%s\n' "$context" >> /tmp/copilot-preprompt-probe.json 2>/dev/null || true
+  fi
+
   local handler="$CODING_REPO/lib/agent-api/hooks/copilot-bridge-handler.js"
   local result='{"allow":true}'
 

@@ -173,6 +173,13 @@ COPY --from=python-deps /coding/integrations/code-graph-rag/.venv ./integrations
 COPY --from=python-deps /coding/integrations/mcp-server-semantic-analysis/.embedding-venv ./integrations/mcp-server-semantic-analysis/.embedding-venv
 COPY integrations/code-graph-rag/ ./integrations/code-graph-rag/
 
+# Install tmux in the production stage (kept out of the shared `base` apt layer
+# so adding it doesn't bust the whole multi-stage build cache). The in-container
+# live-query-monitor uses `tmux -S /host-tmux/default capture-pane` to read the
+# active coding-* CLI pane from the host tmux server (socket bind-mounted in).
+RUN apt-get update && apt-get install -y --no-install-recommends tmux \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy configuration files
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/entrypoint.sh /entrypoint.sh

@@ -25113,7 +25113,7 @@
     "project": "obs-memory",
     "quality": "normal",
     "createdAt": "2026-06-18T14:07:47.538Z",
-    "digestedAt": "2026-06-21T00:32:49.509Z",
+    "digestedAt": "2026-06-22T18:37:47.130Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -25127,7 +25127,7 @@
     "project": "obs-memory",
     "quality": "normal",
     "createdAt": "2026-06-18T14:11:52.185Z",
-    "digestedAt": "2026-06-21T00:32:49.509Z",
+    "digestedAt": "2026-06-22T18:37:47.130Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -25147,7 +25147,7 @@
     "project": "obs-memory",
     "quality": "normal",
     "createdAt": "2026-06-18T14:47:27.176Z",
-    "digestedAt": "2026-06-21T00:32:49.509Z",
+    "digestedAt": "2026-06-22T18:37:47.130Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -25161,7 +25161,7 @@
     "project": "obs-memory",
     "quality": "normal",
     "createdAt": "2026-06-18T14:48:26.121Z",
-    "digestedAt": "2026-06-21T00:32:49.509Z",
+    "digestedAt": "2026-06-22T18:37:47.130Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -25177,7 +25177,7 @@
     "project": "obs-memory",
     "quality": "normal",
     "createdAt": "2026-06-18T16:33:40.409Z",
-    "digestedAt": "2026-06-21T00:32:49.509Z",
+    "digestedAt": "2026-06-22T18:37:47.130Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -25191,7 +25191,7 @@
     "project": "obs-memory",
     "quality": "normal",
     "createdAt": "2026-06-20T00:08:36.243Z",
-    "digestedAt": "2026-06-21T00:33:12.648Z",
+    "digestedAt": "2026-06-22T18:38:12.415Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -25205,7 +25205,7 @@
     "project": "obs-memory",
     "quality": "normal",
     "createdAt": "2026-06-20T15:34:08.611Z",
-    "digestedAt": "2026-06-21T00:33:12.648Z",
+    "digestedAt": "2026-06-22T18:38:12.415Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -25219,7 +25219,7 @@
     "project": "obs-memory",
     "quality": "normal",
     "createdAt": "2026-06-20T15:49:16.615Z",
-    "digestedAt": "2026-06-21T00:33:12.648Z",
+    "digestedAt": "2026-06-22T18:38:12.415Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -25233,7 +25233,7 @@
     "project": "obs-memory",
     "quality": "high",
     "createdAt": "2026-06-20T15:52:44.649Z",
-    "digestedAt": "2026-06-21T00:33:12.648Z",
+    "digestedAt": "2026-06-22T18:38:12.415Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -25247,7 +25247,7 @@
     "project": "obs-memory",
     "quality": "normal",
     "createdAt": "2026-06-20T16:42:01.754Z",
-    "digestedAt": "2026-06-21T00:33:12.648Z",
+    "digestedAt": "2026-06-22T18:38:12.415Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -25261,7 +25261,7 @@
     "project": "obs-memory",
     "quality": "normal",
     "createdAt": "2026-06-20T20:46:19.104Z",
-    "digestedAt": "2026-06-21T00:33:12.648Z",
+    "digestedAt": "2026-06-22T18:38:12.415Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -25270,17 +25270,19 @@
   },
   {
     "id": "8e8c58b8-23fe-4f59-87df-365f551fea59",
-    "summary": "Intent: Implement the plan described in Markdown_parsing.md step-by-step.\nApproach: The assistant began by reading the plan file and surveying existing codebase files (categorize script, FAU API, checkpoint patterns) to understand the architecture before writing any code.\nArtifacts: none\nResult: The exchange captures only the investigation phase — the assistant read relevant files to gather context but did not produce any implementation artifacts or code changes before the exchange ended.",
+    "summary": "Intent: Implement the plan described in Markdown_parsing.md step-by-step.\nApproach: The assistant began by reading the plan file and surveying existing codebase files (categorize script, FAU API, checkpoint patterns) to understand the architecture before writing any code.\nArtifacts: edited enhanced-transcript-monitor.js\nResult: The exchange captures only the investigation phase — the assistant read relevant files to gather context but did not produce any implementation artifacts or code changes before the exchange ended.",
     "agent": "copilot",
     "project": "coding",
     "quality": "normal",
     "createdAt": "2026-06-22T01:36:27.874Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-22T19:02:48.571Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
     },
-    "modifiedFiles": null
+    "modifiedFiles": [
+      "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory/scripts/enhanced-transcript-monitor.js"
+    ]
   },
   {
     "id": "2df7034f-b179-4819-8f35-4c3bb1f5b06a",
@@ -25289,6 +25291,909 @@
     "project": "coding",
     "quality": "high",
     "createdAt": "2026-06-22T02:05:10.664Z",
+    "digestedAt": "2026-06-22T18:39:25.939Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": null
+  },
+  {
+    "id": "3d86e586-12fa-4a1d-a4cd-3c5cbcfb9105",
+    "summary": "Intent: Fix two bugs in the Observations card: (1) the card captures an intermediate LLM response instead of the final one, and (2) file names/paths are not extracted into Artifacts.\nApproach: For the premature flush, a new `getCopilotCompletionState()` helper inspects `events.jsonl` to confirm the last assistant message has no pending tool requests before the prompt set is flushed. For missing artifacts, an agent-agnostic `_classifyToolFileArtifact()` helper was added to handle both Claude tool naming (`Edit`/`Write`/`Read` + `file_path`) and Copilot naming (`edit`/`create`/`view` + `path`/`filePath`).\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/scripts/enhanced-transcript-monitor.js\nResult: The monitor now defers the prompt-set flush until the Copilot session emits a final assistant message with no pending tool calls (or a session shutdown/new user prompt), preventing mid-turn captures; Copilot file operations are now correctly classified into `modifiedFiles`/`readFiles` and surfaced in the Artifacts field of every observation.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-22T02:26:17.934Z",
+    "digestedAt": "2026-06-22T19:02:48.571Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/scripts/enhanced-transcript-monitor.js"
+    ]
+  },
+  {
+    "id": "0ebac6cc-1555-4cdc-9bc8-0836f324d2e9",
+    "summary": "Intent: Summarize all changes made in the session and write them to a markdown file named \"Observations_modified.md\"\nApproach: Compiled a comprehensive summary of two bug fixes made to the enhanced-transcript-monitor.js script and documented them in a structured markdown file covering root cause analysis, solutions, validation results, and deployment notes.\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/Observations_modified.md\nResult: Created Observations_modified.md (253 lines) documenting two fixes to scripts/enhanced-transcript-monitor.js: (1) partial response capture prevention via a new getCopilotCompletionState() method that checks Copilot events.jsonl before flushing, and (2) missing artifact extraction via a new _classifyToolFileArtifact() method supporting tool naming conventions across Copilot, Claude, OpenCode, and Mastra agents.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-22T03:11:31.917Z",
+    "digestedAt": "2026-06-22T19:02:48.571Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/Observations_modified.md"
+    ]
+  },
+  {
+    "id": "dc04f6e8-e224-4f94-a15e-794f5051c586",
+    "summary": "Intent: Resolve the `enhanced_transcript_monitor` health violation in the obs-memory project.\nApproach: Investigated the live health coordinator state and verification rules to identify root causes: the rule's `project_path` pointed to a stale macOS path, and no Enhanced Transcript Monitor (ETM) process was running to send LSL heartbeats to the coordinator, keeping the service in `unknown` state. The fix corrected the config path so auto-heal remediation targets the correct Linux project directory, and the ETM was started detached to clear the live violation.\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/config/health-verification-rules.json\nResult: The stale macOS `project_path` (`/Users/<USER_ID_REDACTED>/Agentic/coding`) in the `enhanced_transcript_monitor` health verification rule was replaced with the correct Linux path, and the ETM was spawned detached so it could heartbeat the coordinator via `/signals`, flipping the service status from `unknown` to `running` and clearing the violation.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-22T03:18:11.029Z",
+    "digestedAt": "2026-06-22T19:02:48.571Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/config/health-verification-rules.json"
+    ]
+  },
+  {
+    "id": "7573b959-287e-4b65-a550-7a68ab54a52d",
+    "summary": "Intent: Fix failing Graph LevelDB and Semantic Readiness health checks, and ensure ETM is active.\nApproach: Diagnosed root causes via live health-verifier reports and direct probe testing rather than guessing: the LevelDB false-lock was a Linux-specific gap in the benign-process allowlist, and the semantic probe failure was a `maxTokens` budget too small for the resolved thinking model (`claude-sonnet-4.6`), not a proxy outage. Both fixes were applied to host-side scripts and activated by restarting the systemd user service.\nArtifacts: edited scripts/process-state-manager.js, edited scripts/health-coordinator.js\nResult: `process-state-manager.js` was updated to add `virtiofsd` (Linux Docker virtiofs daemon) to the benign LevelDB lock-holder list, resolving the false-positive lock failure. `health-coordinator.js` had its semantic readiness probe `maxTokens` bumped from 5 to 64, ensuring the `claude-sonnet-4.6` thinking model returns visible content reliably; after restarting `coding-health-coordinator.service`, both Graph LevelDB and Semantic Readiness reported as passing.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-22T11:45:41.734Z",
+    "digestedAt": "2026-06-22T19:02:48.571Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/scripts/process-state-manager.js",
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/scripts/health-coordinator.js"
+    ]
+  },
+  {
+    "id": "01367c18-a337-49d1-a05b-ab58f0d8fa28",
+    "summary": "Intent: Fix the Project Coverage tab in the Health Dashboard not showing the six components (SemanticAnalysis, KnowledgeManagement, ConstraintSystem, DockerizedServices, LiveLoggingSystem, LLMAbstraction) for the obs-memory project.\nApproach: The `PROJECT_COMPONENT_TAXONOMY` lookup in the observations API server was keyed by exact project name, and `obs-memory` had no entry, causing an empty taxonomy and blank Coverage tab. Adding a new taxonomy entry for `obs-memory` with the six components was sufficient without any dashboard or Docker changes.\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/scripts/observations-api-server.mjs\nResult: Added an `obs-memory` entry to `PROJECT_COMPONENT_TAXONOMY` mapping all six components with appropriate aliases, then restarted the obs-api process via `scripts/restart-obs-api.mjs`; the Coverage tab now lists all six components (currently shown as missing until insights referencing them are generated).",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-22T13:02:44.893Z",
+    "digestedAt": "2026-06-22T19:02:48.571Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/scripts/observations-api-server.mjs"
+    ]
+  },
+  {
+    "id": "86bf103d-02be-4c19-b815-45ed8942c1b5",
+    "summary": "Intent: Fix ETM heartbeats permanently lapsing beyond the stale threshold by ensuring the health coordinator automatically recovers/respawns ETM.\nApproach: Root cause was that the coordinator's `ensureEtmForActiveProjects` safety net only checked `~/.claude/projects/` jsonl freshness for transcript activity, making it blind to Copilot sessions writing to `~/.copilot/session-state/events.jsonl`; ETM's 30-min idle-exit therefore never triggered a respawn. The fix extended the freshness detection to include Copilot transcript paths, removed the Claude-only early-return gate, and restructured the per-project mtime check to consider both transcript sources.\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/scripts/health-coordinator.js\nResult: The health coordinator now detects active Copilot sessions (via `~/.copilot/session-state/` mtime) in addition to Claude sessions when deciding whether to respawn ETM, so ETM is automatically re-launched after its 30-min idle-exit regardless of which AI backend is active, eliminating the permanent heartbeat lapse in Copilot environments.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-22T13:08:46.077Z",
+    "digestedAt": "2026-06-22T19:02:48.571Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/scripts/health-coordinator.js"
+    ]
+  },
+  {
+    "id": "1827ce21-430e-485b-a169-88c10d061623",
+    "summary": "Intent: Fix the Health Dashboard so that backticked code/path/environment claims in Insights generated from Digests are verified by scoping them to the /obs-memory project root, and ensure Project Coverage correctly produces Truthfulness and Confidence values using the existing logic.\nApproach: The assistant investigated the verification pipeline by reading the claim extraction logic in `verify-insight-claims.mjs` and `ObservationConsolidator.js`, identifying that bare filenames (without a leading slash) are dropped by the PATH rule, yielding zero claims and a null verification ratio, which causes the dashboard to show UNVERIFIABLE and no Truthfulness/Confidence scores.\nArtifacts: edited ObservationConsolidator.js\nResult: Root cause identified but no code changes were made: bare filename references in Insights (e.g., `enhanced-transcript-monitor.js` without a path prefix) fail the PATH extraction rule, producing zero verifiable claims and preventing Truthfulness/Confidence from being computed in the Health Dashboard.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-22T14:04:06.155Z",
+    "digestedAt": "2026-06-22T19:02:48.571Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory/src/live-logging/ObservationConsolidator.js"
+    ]
+  },
+  {
+    "id": "56677ad2-37c7-4813-a84c-04671707e859",
+    "summary": "Intent: Scope digest and insight generation separately per project root so observations from different codebases are never summarized together.\nApproach: The assistant investigated the existing consolidation pipeline to understand how project identity is currently assigned and used, finding that partition machinery already exists but project identity is weak — using only `path.basename(projectPath)` which is collision-prone, and a classifier backfill that collapses unknowns into a single hardcoded `'coding'` bucket, causing cross-codebase merging.\nArtifacts: edited plan.md\nResult: Investigation concluded that `consolidateDay` and `synthesizeInsights` already group by project label, but the root cause of cross-project merging is the weak identity assignment and the hardcoded fallback; no code changes were made, and the assistant ended by asking clarifying questions before proceeding with fixes.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-22T17:47:00.807Z",
+    "digestedAt": "2026-06-22T19:02:48.571Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/.copilot/session-state/beb90f77-a03c-4bd5-aea5-14f67d23cd0b/plan.md"
+    ]
+  },
+  {
+    "id": "61c89775-7444-49ea-895a-530a5c43717b",
+    "summary": "Intent: Load the documentation style guide as skill context to inform ongoing documentation updates in the obs-memory project.\nApproach: The assistant applied the documentation style guidelines (inline Mermaid diagrams with `graph TD`, kebab-case naming, proper markdown section structure) to update the observations README, adding a root-scoping section and Mermaid diagram while updating pipeline notes and project-detection tables.\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/docs/observations/README.md\nResult: The observations README was updated with a new root-scoping section including a Mermaid diagram, revised pipeline notes, and an updated project-detection table; changes were committed as part of 13 completed todos across 10 micro-commits, with a pending question about whether to run a historical data migration script against the live database.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-22T18:31:52.115Z",
+    "digestedAt": "2026-06-22T19:02:48.571Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/docs/observations/README.md"
+    ]
+  },
+  {
+    "id": "5b2ad09e-dd1a-4ffe-939b-c8e9b0a2719d",
+    "summary": "Intent: Update README.md to document project-specific scope filtering criteria for the Digests and Insights features.\nApproach: Directly edit the README.md to add the relevant filtering criteria documentation, likely as a new section or expansion of existing feature descriptions.\nArtifacts: edited README.md\nResult: The exchange is incomplete — the assistant initiated a tool call but no file modifications or substantive output were produced.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "normal",
+    "createdAt": "2026-06-22T19:37:43.728Z",
+    "digestedAt": "2026-06-23T15:44:55.833Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory/README.md"
+    ]
+  },
+  {
+    "id": "6ab17ccb-ad10-4ef8-bdb3-c5a681797e51",
+    "summary": "Intent: The user loaded a documentation style skill context (no explicit request was made in the user message — the exchange is driven entirely by the assistant acting on the skill context).\nApproach: The assistant read the existing README and observations docs to identify gaps, then added a Digests & Insights section with project-root scoping details, a Mermaid pipeline diagram, CLI/API usage examples, and updated quick links, following the markdown style rules from the skill context.\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/README.md\nResult: README.md was expanded with a new \"Digests & Insights — Project-Root Scoped Consolidation\" subsection covering the digest/insight stage table, projectRoot partition key derivation logic, a Mermaid pipeline diagram, CLI and REST API selection interfaces, and truthfulness/confidence fields, plus a new usage examples section and an updated Quick Links entry pointing to the observations README.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-22T19:37:48.525Z",
+    "digestedAt": "2026-06-23T15:44:55.833Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/README.md"
+    ]
+  },
+  {
+    "id": "2b76909f-b2e7-4186-ab71-22a335201433",
+    "summary": "Intent: Add a theme toggle button to both the Health Dashboard UI and Constraint Dashboard UI, supporting dark, light (existing), and grey theme options.\nApproach: The assistant first explored both dashboards' component and CSS structures to understand existing theming patterns, then chose to implement theming via CSS custom properties and a React ThemeProvider context so theme switching requires no component rewrites.\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/integrations/system-health-dashboard/src/index.css, edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/integrations/system-health-dashboard/src/lib/theme.tsx\nResult: Grey theme CSS variable definitions were added to index.css and a ThemeProvider component (theme.tsx) was created for the Health Dashboard to manage dark/light/grey theme state; the exchange was cut off before Constraint Dashboard changes were completed.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-22T19:48:06.992Z",
+    "digestedAt": "2026-06-23T15:44:55.833Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/integrations/system-health-dashboard/src/index.css",
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/integrations/system-health-dashboard/src/lib/theme.tsx"
+    ]
+  },
+  {
+    "id": "1f886b1a-5798-4331-9324-5bc7c3b64bd7",
+    "summary": "Intent: Design a robust mechanism to capture typed CLI <USER_ID_REDACTED> (before submission) across GitHub Copilot CLI, Claude Code, and OpenCode CLI, retrieve Working and Observational memory context for those <USER_ID_REDACTED>, and display the results in a new Health Dashboard tab.\nApproach: The assistant investigated the existing tmux-based pipe-pane input capture infrastructure, per-agent prompt regex configs, retrieval service architecture, and the Health Dashboard's WebSocket broadcast and page/hook conventions to determine how to wire pre-submission query interception into the memory retrieval pipeline and surface results in the UI.\nArtifacts: edited plan.md\nResult: Analysis only — no implementation was produced. The assistant mapped the full architecture (tmux capture → retrieval-service → WebSocket broadcast → dashboard) and identified the pattern needed to intercept pre-submission prompts per CLI agent, call the retrieval service, and render results in a new dashboard tab following existing page/hook conventions.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-22T23:09:20.013Z",
+    "digestedAt": "2026-06-23T15:44:55.833Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/.copilot/session-state/8dfb3b03-98c4-4708-a55d-62b985331796/plan.md"
+    ]
+  },
+  {
+    "id": "3b14f950-f1a1-49d9-bb92-4de1cfcd7764",
+    "summary": "Intent: Apply the documentation-style skill context to update the README.md with a new feature section including a Mermaid diagram.\nApproach: The assistant reviewed the existing README structure, added a documented feature section with an agent-agnostic capture Mermaid diagram, hardened diagram syntax for GitHub rendering compatibility, and committed the changes following the documentation style guide conventions.\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/README.md\nResult: README.md was updated with a new feature section documenting the agent-agnostic tmux capture capability, including a Mermaid diagram using `graph TD` layout per style guidelines, and committed with a scoped docs commit message.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-22T23:27:58.195Z",
+    "digestedAt": "2026-06-23T15:44:55.833Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/README.md"
+    ]
+  },
+  {
+    "id": "890b488a-4cd8-4026-990e-a57743762be0",
+    "summary": "Intent: Debug and fix the Live Context tab showing as disconnected and not responding to typed <USER_ID_REDACTED> in the CLI.\nApproach: Investigated the disconnect by checking tmux session availability, running processes, Docker bind-mount state, and server.js route registration — determining the root cause was a stale Node.js backend process (4h old) serving code predating recent edits, not a code or mount issue.\nArtifacts: edited live-context-attach.sh\nResult: Restarted the backend process inside the `coding-services` container via supervisorctl, which caused it to load the updated server.js with `/api/live-context` routes, returning HTTP 200. WebSocket connectivity and the full POST→broadcast→GET path were then being verified. The CLI's lack of tmux wrapping was identified as a separate limitation preventing `capture-pane`-based query capture.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-22T23:37:45.196Z",
+    "digestedAt": "2026-06-23T15:44:55.833Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory/scripts/live-context-attach.sh"
+    ]
+  },
+  {
+    "id": "2bdaa2cd-2e5c-4cba-a2f1-6580ca8119d5",
+    "summary": "Intent: Make recently-sent <USER_ID_REDACTED> persist in the recent <USER_ID_REDACTED> list while displaying in-progress (being-typed) <USER_ID_REDACTED> live in the main module with minimal latency.\nApproach: The assistant explored the repository structure to understand how live <USER_ID_REDACTED> and recent query history are managed before implementing any changes, examining the live-context page and live-query-monitor script to understand the existing data flow and WebSocket architecture.\nArtifacts: edited plan.md\nResult: No code changes were made; the assistant was still in the investigation phase, reading relevant source files to understand the architecture before proposing a solution.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "normal",
+    "createdAt": "2026-06-22T23:59:15.682Z",
+    "digestedAt": "2026-06-23T15:44:55.833Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/.copilot/session-state/1f302c28-377a-4562-a0c7-5bfee5fb802f/plan.md"
+    ]
+  },
+  {
+    "id": "3eaa92db-89fb-42ba-955d-06d657e41819",
+    "summary": "Intent: Load documentation style skill context (no explicit developer request was made in the message body)\nApproach: The assistant applied the loaded documentation style guidelines to update an existing README, focusing on correcting a Mermaid diagram to reflect draft-vs-sent behavior and validating the syntax via the mermaid CLI.\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/README.md\nResult: The README was updated with revised text and a corrected Mermaid diagram representing draft-vs-sent behavior; syntax was validated using the mermaid-js CLI.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-23T00:10:14.936Z",
+    "digestedAt": "2026-06-23T15:46:30.158Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/README.md"
+    ]
+  },
+  {
+    "id": "b8f18512-01e7-4a53-9fcc-ffd0a2995667",
+    "summary": "Intent: Loaded the documentation-style skill context to apply styling standards while updating the README Mermaid diagram and live-query-monitor script to reflect draft-vs-sent behavior.\nApproach: The skill-context was used as a style guide reference while making content changes; the assistant updated the Mermaid diagram in README following top-down layout conventions and simultaneously refined a monitor edge case in the script so throttled previews do not block sends for sufficiently stable drafts.\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/README.md, edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/scripts/live-query-monitor.js\nResult: README Mermaid diagram updated to accurately represent the draft-vs-sent distinction; live-query-monitor.js refined so that a draft stable long enough is still committed to send even when preview rendering was throttled, preserving real send counts.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-23T00:10:14.936Z",
+    "digestedAt": "2026-06-23T15:46:30.158Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/README.md",
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/scripts/live-query-monitor.js"
+    ]
+  },
+  {
+    "id": "fcd78472-00f9-4f14-b3cf-2af320b98f89",
+    "summary": "Intent: Load and apply the documentation style guide skill context (no explicit task requested beyond injecting the skill context).\nApproach: The assistant interpreted the skill context injection as a trigger to perform documentation and code maintenance work, editing the README and a monitor script based on the style guide rules.\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/README.md, edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/scripts/live-query-monitor.js\nResult: README was updated to reflect draft-vs-sent behavior with a revised Mermaid diagram, and live-query-monitor.js was edited to handle a draft/sent routing edge case; validation of server-side routing logic was attempted but not completed within the exchange.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-23T00:10:14.936Z",
+    "digestedAt": "2026-06-23T15:46:30.158Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/README.md",
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/scripts/live-query-monitor.js"
+    ]
+  },
+  {
+    "id": "0d17cfad-28b1-4c9e-be68-745b5f4efb17",
+    "summary": "Intent: Fix the Live Context tab so the live/in-progress typed query appears in the main modular card, and the Recent <USER_ID_REDACTED> column only shows the history of finalized <USER_ID_REDACTED> sent to the agent.\nApproach: Removed the live-draft row from the Recent <USER_ID_REDACTED> sidebar list, keeping it exclusively in the main modular card display, and added a \"Return to live\" mechanism so the main card snaps back to the live draft when a new query arrives while the user is reviewing history.\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/integrations/system-health-dashboard/src/pages/live-context.tsx\nResult: The Recent <USER_ID_REDACTED> sidebar now only lists finalized/sent <USER_ID_REDACTED>, while the live in-progress query from the tmux wrapper is shown only in the main modular card; a \"Return to live\" banner was added to the main card to restore live view when the user has navigated to a historical query.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-23T00:28:19.369Z",
+    "digestedAt": "2026-06-23T15:46:30.158Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/integrations/system-health-dashboard/src/pages/live-context.tsx"
+    ]
+  },
+  {
+    "id": "0695af48-95fb-403c-b5f5-0e9a26869096",
+    "summary": "Intent: Redesign the Dashboard's Live Context tab so that live CLI typing appears in the main heading card, clears the Recent <USER_ID_REDACTED> log, triggers the Knowledge Context Injection pipeline after 3 seconds of typing inactivity, and displays the resulting Working Memory (300 tokens) and Observational Memory (700 tokens) in the UI.\nApproach: The assistant explored the full stack — frontend page, WebSocket hook, dashboard server, live-query-monitor, retrieval service, working-memory module, and knowledge-injection hook — to understand how data flows from CLI capture through the memory pipeline before proposing changes.\nArtifacts: edited plan.md\nResult: Investigation phase only; no files were modified. The assistant mapped the complete pipeline from tmux pane capture → debounce → POST /api/live-context/query → RetrievalService → 300-token Working Memory + 700-token Observational Memory, and identified the UI components (Recent <USER_ID_REDACTED> sidebar vs. main heading card) that need restructuring before proceeding to implementation.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-23T00:55:36.847Z",
+    "digestedAt": "2026-06-23T15:46:30.158Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/.copilot/session-state/1f302c28-377a-4562-a0c7-5bfee5fb802f/plan.md"
+    ]
+  },
+  {
+    "id": "faa091c1-167e-4e86-8979-8a8e7cb55542",
+    "summary": "Intent: Load and apply the documentation style guide skill context (likely injected automatically as background context, with no explicit user request).\nApproach: The assistant proceeded with in-progress work on the obs-memory project, updating the README with a revised Mermaid diagram and \"How it works\" section per the documentation style guide, then investigated a stale backend bind-mount issue in the running Docker container.\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/README.md\nResult: README.md was updated with a corrected Mermaid diagram (graph TD, subgraphs, quoted labels) and revised documentation; 15 InputDraftExtractor tests pass; investigation revealed the container's backend server.js is stale due to a single-file bind-mount inode replacement, requiring a container restart to activate the new live-context routes.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-23T01:21:31.849Z",
+    "digestedAt": "2026-06-23T15:46:30.158Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/README.md"
+    ]
+  },
+  {
+    "id": "140ef334-f77c-4d8b-b36a-66338463dad2",
+    "summary": "Intent: Verify that shell scripts referenced in the copilot-coding.json hook file actually exist in the codebase.\nApproach: The assistant attempted to read the hook JSON and check for referenced scripts, but was blocked by the very hook being investigated — a fail-closed preToolUse hook that errors when its referenced scripts are missing, creating a deadlock where every tool call is denied.\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/.copilot-hook-probe.tmp\nResult: The investigation was blocked by a circular dependency: the broken hook prevents all tool use, making it impossible to read or fix the hook from within the agent. The assistant escalated to the developer with manual terminal commands to inspect and temporarily disable the hook, enabling follow-up remediation.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-23T12:26:57.385Z",
+    "digestedAt": "2026-06-23T15:46:30.158Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/.copilot-hook-probe.tmp"
+    ]
+  },
+  {
+    "id": "421decf9-c6c0-48d5-b55a-d781077e46e3",
+    "summary": "Intent: Load the documentation style skill context (providing guidelines for PlantUML, Mermaid, and markdown artifacts) as background context for documentation work.\nApproach: Applied the documentation style guidelines — specifically the `graph TD` Mermaid preference and H2/H3 markdown structure rules — to add a token usage section with a Mermaid diagram to the project README.\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/README.md\nResult: README.md was updated to include a Token Usage subsection (with a Mermaid `graph TD` diagram) in the LLM proxy area, following the documentation style guide's conventions for inline Mermaid diagrams and section structure.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-23T12:59:46.471Z",
+    "digestedAt": "2026-06-23T15:46:30.158Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/README.md"
+    ]
+  },
+  {
+    "id": "77643204-64a3-4ad5-8d40-a5d8f2daecd5",
+    "summary": "Intent: Understand how the Knowledge Injection hook passes typed <USER_ID_REDACTED> through the full pipeline to retrieve Observational and Working Memory for UserPromptSubmit.\nApproach: Read-only investigation tracing two query paths — the UserPromptSubmit hook through retrieval-client to the retrieval-service, and the tmux draft path through InputDraftExtractor and the dashboard live-context endpoint — to verify both memory types are retrieved and identify any truncation or crowding issues.\nArtifacts: edited plan.md\nResult: Traced both pipeline paths: the hook calls retrieval-client→retrieval-service (port 3033) which <USER_ID_REDACTED> Working Memory (VKB + STATE.md) and 4 Qdrant collections including `observations`; the tmux path goes through live-query-monitor→InputDraftExtractor→dashboard `/api/live-context/query`→same retrieval service. Identified potential issues: 500-char caps in both the hook and dashboard handler, conversation-context enrichment consuming budget, and observations being lowest-weighted tier and likely crowded out of the final context budget.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-23T13:17:18.319Z",
+    "digestedAt": "2026-06-23T15:46:30.158Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/.copilot/session-state/3b1cd24c-d26f-4209-bb9d-4447892ca2a1/plan.md"
+    ]
+  },
+  {
+    "id": "28417f61-0980-4bee-bd63-3cc0aa6d3dc2",
+    "summary": "Intent: Triggered fleet deployment of background agents to continue multi-step plan execution.\nApproach: The assistant analyzed the serial dependency chain of 5 todos and identified that `feedback-loop-design` could run in parallel with the backend `expose-ranked-results` work, enabling Wave 1 to dispatch two parallel agents rather than proceeding serially.\nArtifacts: edited plan.md\nResult: Two parallel Wave 1 background agents were dispatched — one for the backend ranked-results exposure (using the `fused` array from `retrieval-service.js`) and one for the feedback-loop design doc. Downstream UI tasks (`build-results-sidebar`, `reranking-ui-and-store`) remain blocked pending `expose-ranked-results` completion.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-23T14:38:32.671Z",
+    "digestedAt": "2026-06-23T15:46:30.158Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/.copilot/session-state/3b1cd24c-d26f-4209-bb9d-4447892ca2a1/plan.md"
+    ]
+  },
+  {
+    "id": "5cf0fa8c-0d07-4f40-9be3-0bf48eb2b90c",
+    "summary": "Intent: Clarify that new features should be integrated into the existing \"Live Context\" tab of the Health Dashboard UI running on port 3032, not deployed as a new container or dashboard.\nApproach: Rebuild the frontend bundle on the host and restart dashboard services within the already-running `coding-services` container, since dist/ and server.js are bind-mounted into it, avoiding any new container creation.\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/integrations/system-health-dashboard/../../plan.md, edited /home/<USER_ID_REDACTED>/.copilot/session-state/3b1cd24c-d26f-4209-bb9d-4447892ca2a1/plan.md\nResult: Features were confirmed deployed into the existing `coding-services` container (ports 3032/3033) under the existing `/live-context` route; frontend bundle rebuilt and redeployed, backend rerank endpoint verified active (returning 400 not 404), and end-to-end flow from container to host obs-api confirmed working with `rankedResults` passed through WebSocket.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-06-23T15:38:03.523Z",
+    "digestedAt": "2026-06-23T15:46:30.158Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/integrations/system-health-dashboard/../../plan.md",
+      "/home/<USER_ID_REDACTED>/.copilot/session-state/3b1cd24c-d26f-4209-bb9d-4447892ca2a1/plan.md"
+    ]
+  },
+  {
+    "id": "e60103a9-2c34-4435-b19d-095fe401387a",
+    "summary": "Intent: Inspect whether InputDraftExtractor uses the same knowledge-injection-hook → retrieval-client → retrieval-service pipeline as the sidebar, determine if consolidation is LLM-based or deterministic, and plan colored WM/OM pills on sidebar results to indicate which items fed each memory bar.\nApproach: Parallel sub-agents traced the full call chain from InputDraftExtractor through query-builder and retrieval-service, audited token-budget assembly for any generative model calls, and mapped the tier-to-bar split logic in the dashboard to identify where pill metadata must originate.\nArtifacts: edited plan.md\nResult: Consolidation is fully deterministic — only embeddings are used, with RRF fusion, tier-weighted reranking, and budgeted markdown assembly in token-budget.js. The tmux path shares the same retrieval-service backend but bypasses retrieval-client.js and uses pane context instead of transcript context for query enrichment. The WM bar is fed by a separate buildWorkingMemory() prefix (not from ranked results), while the OM bar maps directly to the ranked tier results (insights/digests/entities/observations from the sidebar). To implement WM/OM pills, token-budget.js must be modified to return includedIds or a per-result usedIn field, propagated unchanged through observations-api-server and dashboard server to the frontend sidebar component.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "normal",
+    "createdAt": "2026-06-23T16:33:21.464Z",
+    "digestedAt": "2026-06-23T19:02:38.150Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/.copilot/session-state/3b1cd24c-d26f-4209-bb9d-4447892ca2a1/plan.md"
+    ]
+  },
+  {
+    "id": "8510148a-0992-4fd5-b9ca-0526f81518f9",
+    "summary": "Intent: Diagnose and fix the LLM-CLI-Proxy being reported as unhealthy and the Enhanced Transcript Monitor reporting a lapsed heartbeat beyond the stale threshold.\nApproach: Root-cause analysis revealed two compounding failures: the proxy wrapper lacked HTTPS_PROXY on watchdog-respawned processes, and the upstream's nested undici 8.1.0 is incompatible with Node 20 (requires Node 22+), causing its ProxyAgent to silently fail and fall back to global fetch. The fix exploits that fallback by installing a global dispatcher via the compatible top-level undici 6.25.0 and then clearing HTTPS_PROXY, routing all egress through proxydetox without touching node_modules. A second independent bug in the health coordinator caused a permanent restart storm where coordinator-detected networkMode (\"corporate\") and proxy-self-reported networkMode (\"public\") never agreed, so the fix tracks the proxy-reported mode in a separate field to compare proxy-over-time rather than against the coordinator's own detection.\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/src/llm-proxy/llm-proxy.mjs, edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/scripts/health-coordinator.js\nResult: The proxy wrapper now self-resolves the proxydetox URL via the controller, installs a global undici dispatcher, and clears HTTPS_PROXY before the upstream loads, making completions succeed (HTTP 200, ~1.8s) regardless of restart path. The coordinator restart storm was eliminated by separating proxy-reported networkMode tracking, resulting in zero flips and zero liveness restarts over an 80-second observation window with semantic_ok=true and liveness_ok=true confirmed stable. Changes were committed as 83d2302.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "high",
+    "createdAt": "2026-06-23T18:16:55.582Z",
+    "digestedAt": "2026-06-23T19:02:38.150Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/src/llm-proxy/llm-proxy.mjs",
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/scripts/health-coordinator.js"
+    ]
+  },
+  {
+    "id": "969e0380-b8ac-42c2-ae85-81de06c85ba3",
+    "summary": "Intent: Fix the LLM Proxy Health failures shown in the Health Dashboard UI (port 3032) and fix the Enhanced Transcript Monitor crash.\nApproach: Diagnosed that `pollNetworkStatus` in the health coordinator hardcoded the local proxy port as 3128, while proxydetox actually listens on 48157, and also gated `proxy_running` on `proxyEnvSet` which is always false under systemd — causing the UI to falsely report the proxy and internet as unreachable. The fix adds a proxy-endpoint resolver targeting the correct port and removes the env-var gate.\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/scripts/health-coordinator.js\nResult: The health coordinator's `pollNetworkStatus` was corrected to probe proxydetox on port 48157 instead of 3128, and the `proxyEnvSet` gate was removed so `proxy_running` reflects actual socket reachability rather than environment variable presence, which should resolve the false LLM Proxy Health failures in the dashboard UI.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "high",
+    "createdAt": "2026-06-23T18:44:51.545Z",
+    "digestedAt": "2026-06-23T19:02:38.150Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/scripts/health-coordinator.js"
+    ]
+  },
+  {
+    "id": "c8bf223d-f904-4acb-9c47-7ba4494f2b6c",
+    "summary": "Intent: Developer requested building communicating sub-agents to: (1) determine if transcript enhancement in the Knowledge Injection hook is LLM-based or deterministic, (2) route InputDraftExtractor to use enhanced transcript context instead of pane context if LLM-based, (3) skip duplicate transcript enhancement during UserPromptSubmit once InputDraftExtractor handles it, and (4) live stream enhanced transcript context beneath the typed query in the UI.\nApproach: The assistant began with reconnaissance before any implementation, locating the relevant files (retrieval-client.js, retrieval-service, token-budget.js) and checking the active project root and git state to understand the codebase layout and scope before decomposing work across sub-agents.\nArtifacts: edited plan.md\nResult: Only initial codebase exploration was completed — the assistant located the main project at `./Ritwik/Memory/agent_agnostic/obs-memory/`, confirmed git repo state, and measured sizes of key files; no sub-agents were built and no implementation changes were made within this exchange.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "normal",
+    "createdAt": "2026-06-23T19:41:32.375Z",
+    "digestedAt": "2026-06-24T00:04:52.290Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/.copilot/session-state/ef56ed17-2a6d-4c2a-8a25-437eec91f370/plan.md"
+    ]
+  },
+  {
+    "id": "db69301f-a2e0-41b6-83b6-da7d5ca65a3a",
+    "summary": "Intent: Understand how transcript enhancement and query enrichment work in the retrieval pipeline, specifically whether any LLM calls are involved in that path.\nApproach: Read-only investigation across the retrieval service, query builder hook, live query monitor script, dashboard server, WebSocket hook, and Live Context page to trace the full data flow and confirm whether enhancement is deterministic or LLM-driven.\nArtifacts: edited plan.md\nResult: The transcript enhancement (`extractConversationTopics`) is confirmed to be fully deterministic — pure JSONL tail parsing with no LLM calls; `gpt-tokenizer` is used only for token counting. The live query pipeline flows from the retrieval service through the query builder hook, is monitored via the live-query-monitor script, and is surfaced in the dashboard via a WebSocket hook and Live Context page that renders `LIVE_DRAFT` state.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "normal",
+    "createdAt": "2026-06-23T19:42:32.159Z",
+    "digestedAt": "2026-06-24T00:04:52.290Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/.copilot/session-state/ef56ed17-2a6d-4c2a-8a25-437eec91f370/plan.md"
+    ]
+  },
+  {
+    "id": "8b9c533c-2653-4dd6-88bc-d38715f88464",
+    "summary": "Intent: Investigate why the \"Live Context\" tab in the Health Dashboard fails to fetch All Results and Memory contents, by checking backend communication with the UI.\nApproach: Traced the full request chain from the dashboard server through the observations API to Qdrant, comparing expected collection names against what actually exists in the live Qdrant instance to identify the root cause of empty results.\nArtifacts: edited live-query-monitor.js\nResult: The dashboard-to-API wiring is correct and working; the root cause is that Qdrant has no collections matching the names the RetrievalService searches (`observations`, `digests`, `insights`, `kg_entities`), instead only containing unrelated collections (`knowledge_patterns`, `session_memory`, etc.), causing retrieval to silently return zero results and leaving the All Results panel empty.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "normal",
+    "createdAt": "2026-06-23T19:55:27.725Z",
+    "digestedAt": "2026-06-24T00:04:52.290Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory/scripts/live-query-monitor.js"
+    ]
+  },
+  {
+    "id": "3aa0a346-cecd-4b7d-8d5c-964675f5c368",
+    "summary": "Intent: Diagnose why the live-query-monitor is not streaming retrieved results, memory content, or enhanced transcript to the tmux CLI while typing.\nApproach: Traced the running monitor process (pid 40583) by inspecting its environment, open file descriptors, and log output, then independently tested the InputDraftExtractor against the live pane capture to isolate whether the failure was in the monitor process, the extractor, or the dashboard connection.\nArtifacts: edited live-query-monitor.js\nResult: The monitor process (pid 40583) is running stale pre-Task-4 code — it launched at 19:26 but the live-query-monitor.js context-streaming changes were made at 21:47 — and its stderr is redirected to /dev/null, suppressing all output. The InputDraftExtractor itself correctly parses the live Copilot CLI pane format (❯ marker between ───── rules), and the monitor is confirmed to be reaching the dashboard. The fix requires restarting the monitor process so it picks up the updated code.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "high",
+    "createdAt": "2026-06-23T20:09:12.032Z",
+    "digestedAt": "2026-06-24T00:04:52.290Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory/scripts/live-query-monitor.js"
+    ]
+  },
+  {
+    "id": "514f25d2-ba14-48fb-b0ff-c588ce7f6573",
+    "summary": "Intent: Make the live-query-monitor automatically touch the current tmux session and have the full stack (Monitoring, Server, WebSocket Broadcast, Frontend, Retrieval) auto-start inside the docker-coding-services container.\nApproach: The assistant investigated the existing supervisor, container, and monitor configurations to understand the current topology before designing changes, focusing on tmux availability, socket mounts, and service port assignments.\nArtifacts: edited live-query-monitor.js\nResult: Investigation revealed that tmux is not installed in the container, the host tmux socket is not mounted, and the Retrieval service runs on the host (reachable via host.docker.internal) — no changes were made yet, as the assistant was still gathering context to design the auto-start solution.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "high",
+    "createdAt": "2026-06-23T20:20:44.581Z",
+    "digestedAt": "2026-06-24T00:04:52.290Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory/scripts/live-query-monitor.js"
+    ]
+  },
+  {
+    "id": "73164eee-e145-4a28-99f6-459669cec662",
+    "summary": "Intent: Diagnose and fix the Health Dashboard on port 3032 showing degraded status due to QDrant DB being unreachable, and clean up any stale processes or leaked ports.\nApproach: Systematic diagnostic approach tracing the full stack — from the dashboard UI through the health coordinator (port 3034), API (port 3033), and down to QDrant — to identify whether the issue was a stale process, missing port binding, or container networking misconfiguration.\nArtifacts: edited plan.md\nResult: Investigation revealed that the `coding-qdrant` Docker container is running and healthy internally but has no published ports mapped to the host, making it unreachable at localhost:6333 from the host-side health coordinator; additionally, a stale standalone `./qdrant` process (PID 5952, running as root) exists on the host but is not listening on any port — the fix requires either publishing QDrant's ports in the Docker Compose config or routing the coordinator's checks through the Docker internal network. The exchange ends before the remediation was applied.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "normal",
+    "createdAt": "2026-06-23T21:05:25.428Z",
+    "digestedAt": "2026-06-24T00:04:52.290Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/.copilot/session-state/79d8b534-6dcf-46f2-883a-92bfaed7dd68/plan.md"
+    ]
+  },
+  {
+    "id": "68a7b369-c705-4942-b41b-6dc5790d7dc1",
+    "summary": "Intent: Diagnose and fix failing health checks in the obs-memory project's health coordinator dashboard.\nApproach: Investigated the root cause of failing health checks by inspecting Docker container port bindings, discovering that both `coding-qdrant` and `coding-memgraph` containers had corrupted port binding specs (host-IP field set to an invalid value), preventing host-to-container connectivity. Fixed by recreating the containers from the correct compose file, preserving data in named volumes.\nArtifacts: edited plan.md\nResult: Both `coding-qdrant` (port 6333) and `coding-memgraph` (port 7687) containers were recreated with valid port bindings; `databases.status` flipped to healthy and `qdrant_availability` passed, with `graph_integrity` also resolved after Memgraph's bolt port became accessible on the host.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "high",
+    "createdAt": "2026-06-23T21:07:45.362Z",
+    "digestedAt": "2026-06-24T00:04:52.290Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/.copilot/session-state/79d8b534-6dcf-46f2-883a-92bfaed7dd68/plan.md"
+    ]
+  },
+  {
+    "id": "0446a49c-7108-4643-964b-7226833ede8f",
+    "summary": "Intent: Make all necessary changes to the Live Context Tab in the Health Dashboard UI so that data fetching from the backend works seamlessly without breaking anything.\nApproach: Before making any changes, the assistant performed a full end-to-end audit of the data pipeline — examining frontend component types, WebSocket hook, and all 7 backend routes in server.js — then live-tested REST endpoints and WebSocket frame delivery to verify the backend-to-UI contract before touching any code.\nArtifacts: edited plan.md\nResult: The audit found the entire Live Context Tab pipeline already working correctly: the live-query-monitor producer was running, all backend route shapes matched frontend TypeScript types exactly, WebSocket frames were delivering, the dist build was fresh, and UI robustness features (connection indicator, error states, auto-reconnect) were already present — no changes were required or made.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "high",
+    "createdAt": "2026-06-23T21:21:48.176Z",
+    "digestedAt": "2026-06-24T00:04:52.290Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/.copilot/session-state/79d8b534-6dcf-46f2-883a-92bfaed7dd68/plan.md"
+    ]
+  },
+  {
+    "id": "4de4e603-b669-4a89-914b-1d505dc402ab",
+    "summary": "Intent: Understand why the live-query-monitor's tmux draft path isn't triggering retrieval automatically while typing (instead of only on UserPromptSubmit), and diagnose the broken path from tmux pane → InputDraftExtractor → dashboard API → retrieval service.\nApproach: Investigated the live-query-monitor script and its environment across both the host process and the in-container supervisord-managed process to identify why the intended tmux-watching path was not firing, comparing actual retrieval entries against expected behavior.\nArtifacts: edited plan.md\nResult: Two monitors are running simultaneously — the supervisord-managed in-container monitor (the intended path, PID 75) cannot reach the host tmux server because its configured socket directory (`/coding/.data/.tmux`) is empty, so the tmux draft path silently fails inside the container. All live retrieval data is actually coming from a stray host-side process (PID 894825), not the intended pipeline. Additionally, the extracted query text is polluted with tmux pane noise including session status bar content.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "high",
+    "createdAt": "2026-06-23T21:28:51.890Z",
+    "digestedAt": "2026-06-24T00:04:52.290Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/.copilot/session-state/79d8b534-6dcf-46f2-883a-92bfaed7dd68/plan.md"
+    ]
+  },
+  {
+    "id": "94a52b03-7192-4a6b-8a8f-d6e91740b5a6",
+    "summary": "Intent: Report a bug where the live-query-monitor only triggers when the query is cleared, not when the user stops typing.\nApproach: The assistant investigated the monitor's draft-detection stability logic and the InputDraftExtractor to determine whether extracted draft values were remaining stable across poll ticks, hypothesizing that changing pane chrome (cursor blink, streaming output) was resetting the stability timer on every tick.\nArtifacts: edited server.js\nResult: Root cause was not yet confirmed — investigation narrowed the issue to whether `extractDraft` returns a stable value across consecutive polls when typing has stopped, but the live pane was empty during testing and no fix was implemented.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "high",
+    "createdAt": "2026-06-23T21:46:00.835Z",
+    "digestedAt": "2026-06-24T00:04:52.290Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory/integrations/system-health-dashboard/server.js"
+    ]
+  },
+  {
+    "id": "5476d495-fe2e-41b1-b4c6-155883d4132b",
+    "summary": "Intent: Ensure that no duplicate instances of the live-query-monitor or tmux-draft-path processes run simultaneously.\nApproach: Investigated running processes to identify any duplicate monitor instances, checked trace logs for extraction behavior, and reviewed the tmux-session-wrapper script to understand how the launcher could spawn duplicates.\nArtifacts: edited server.js\nResult: Confirmed only one legitimate monitor process (PID 894825) was running with no duplicates or leftover probes; the extraction and stability gate logic was verified as correct, and the structural risk of duplicate spawning via the launcher was identified for further enforcement.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "high",
+    "createdAt": "2026-06-23T21:54:47.514Z",
+    "digestedAt": "2026-06-24T00:04:52.290Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory/integrations/system-health-dashboard/server.js"
+    ]
+  },
+  {
+    "id": "384970e2-2aba-4d2a-9685-1551c591be56",
+    "summary": "Intent: Debug why the Dashboard UI on port 3032 stays stuck at \"typing\" and never displays live-streamed memory results or <USER_ID_REDACTED> while typing in the tmux session.\nApproach: Investigated the full pipeline from WebSocket frames to frontend rendering by reading server-side handlers and the frontend WebSocket hook, running standalone WS trace probes, and checking git status of frontend files to isolate where the breakdown occurs.\nArtifacts: edited server.js\nResult: The backend pipeline (monitor → retrieval → `broadcastLiveContext`) was confirmed healthy via WS replay buffer showing real `LIVE_CONTEXT` frames being sent. The bug was narrowed to the frontend rendering layer — the `useLiveContextWebSocket` hook correctly stores `LIVE_CONTEXT` entries, but the page component (`live-context.tsx`) fails to display them while a draft is active, only revealing results after the draft clears on submit.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "high",
+    "createdAt": "2026-06-23T21:56:58.746Z",
+    "digestedAt": "2026-06-24T00:04:52.290Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory/integrations/system-health-dashboard/server.js"
+    ]
+  },
+  {
+    "id": "2a775b52-0f40-4c4e-8360-b897fbb393a9",
+    "summary": "Intent: Remove the enhanced context (pane text embedded in query) from the Tmux draft path and use only the raw draft text when fetching from the retrieval service live.\nApproach: Investigated how `buildRetrievalQuery` constructs the retrieval query by embedding pane context alongside the draft, and examined the live-query-monitor and retrieval-client to understand the data flow before making changes.\nArtifacts: edited live-query-monitor.js\nResult: No files were modified; the assistant read the relevant source files and confirmed the architecture (pane context currently reaches retrieval only via query embedding), then asked the developer for clarification on intent before proceeding with the change.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "high",
+    "createdAt": "2026-06-23T22:18:24.658Z",
+    "digestedAt": "2026-06-24T00:04:52.290Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory/scripts/live-query-monitor.js"
+    ]
+  },
+  {
+    "id": "50b05a14-9085-48a7-bd83-073d033b7f64",
+    "summary": "Intent: Investigate whether the Live Context dashboard's \"Observational Memory\" preview is generated from the same ranked items shown in \"ALL Results\", and verify whether the retrieval pipeline used by KnowledgeInjectionHook on UserPromptSubmit is identical to the Tmux Draft retrieval pipeline.\nApproach: Read the relevant source files across the retrieval service, hook, query builder, dashboard server, and live-context UI to trace both pipelines end-to-end and compare query construction, thresholds, and result assembly logic.\nArtifacts: edited retrieval-settings.js\nResult: The investigation found that the \"Observational Memory\" preview is a token-budgeted subset of the same ranked items shown in \"ALL Results\" (both derived from the same fused set), but a gap exists between the two retrieval paths: KnowledgeInjectionHook sends an enriched query with an explicit threshold of 0.70, while the Tmux Draft path sends the raw draft with no threshold (defaulting to 0.75), meaning query text and threshold differ between the two pipelines.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "normal",
+    "createdAt": "2026-06-23T22:58:24.118Z",
+    "digestedAt": "2026-06-24T00:04:52.290Z",
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory/src/retrieval/retrieval-settings.js"
+    ]
+  },
+  {
+    "id": "c7affc7f-b50c-4406-8ef9-7f10e64114bd",
+    "summary": "Intent: Ask whether the learned-reranking logic in `retrieve()` uses user-adjusted rankings submitted via the dashboard as feedback.\nApproach: Traced the full human-feedback loop by reading the API server and retrieval service source files to verify whether the feedback written by the dashboard endpoint is the same data read by `_applyLearnedRerank` via `feedbackStore.findSimilar`.\nArtifacts: edited retrieval-settings.js\nResult: The investigation was in progress but not yet concluded; the assistant was confirming whether `feedbackStore.findSimilar` reads from the same `human_rerank_feedback` collection that the dashboard writes to, but no definitive answer was captured in the exchange.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "normal",
+    "createdAt": "2026-06-23T23:16:32.138Z",
+    "digestedAt": null,
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory/src/retrieval/retrieval-settings.js"
+    ]
+  },
+  {
+    "id": "7c87f7ad-e318-4a0e-9436-87d524efc632",
+    "summary": "Intent: Understand how ranking feedback can be scoped to similar <USER_ID_REDACTED> only, rather than globally boosting a result's weight regardless of query similarity.\nApproach: The assistant analyzed the existing `rankDelta` logic to identify that the similarity weighting is near-flat across the already-gated [0.85, 1.0] cosine band, meaning loosely-related <USER_ID_REDACTED> receive nearly the same boost as near-duplicate <USER_ID_REDACTED> — a sharper falloff function would solve the bleed-over problem.\nArtifacts: edited retrieval-settings.js\nResult: Identified that the root cause is not a missing similarity gate (one exists at 0.85 threshold) but a flat `similarityWeight = event.score` curve that compresses variation across [0.85, 1.0], allowing upvotes from loosely-related <USER_ID_REDACTED> to influence results for genuinely different <USER_ID_REDACTED>; solution direction is a steeper falloff on query similarity before applying the rank multiplier.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "high",
+    "createdAt": "2026-06-23T23:30:23.054Z",
+    "digestedAt": null,
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory/src/retrieval/retrieval-settings.js"
+    ]
+  },
+  {
+    "id": "06970efd-33cd-43d4-b4f8-77ded6c4e254",
+    "summary": "Intent: Understand how ranking feedback can be scoped to similar <USER_ID_REDACTED> only, so that an upvote on a result doesn't globally boost it for unrelated <USER_ID_REDACTED>.\nApproach: The assistant diagnosed the existing `rankDelta` logic in `feedback-store.js`, finding that while a similarity threshold gate exists, the similarity weighting across the allowed band `[0.85, 1.0]` is near-linear and thus too weak to prevent bleed-over from loosely-related <USER_ID_REDACTED> — the fix would sharpen the falloff curve for query similarity weighting.\nArtifacts: edited retrieval-settings.js\nResult: Root cause identified: the similarity weighting function is insufficiently discriminating within the `[0.85, 1.0]` cosine band, causing upvotes to influence moderately-similar but genuinely different <USER_ID_REDACTED>; the proposed solution is to apply a sharper (non-linear) decay to `similarityWeight` so feedback boost drops steeply as query similarity decreases toward the threshold floor.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "high",
+    "createdAt": "2026-06-23T23:30:23.054Z",
+    "digestedAt": null,
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory/src/retrieval/retrieval-settings.js"
+    ]
+  },
+  {
+    "id": "4dd1a6e1-4637-472e-944c-b1f01244ba6e",
+    "summary": "Intent: Ensure that toggling the exponential setting and adjusting query-query / query-item sliders live-modifies the `KnowledgeInjectionHook` `retrieve()` function, so that the `UserPromptSubmit` event passes the actual submitted query through the user's adjusted thresholds.\nApproach: Traced the `UserPromptSubmit` → hook → `retrieve()` call chain to confirm the submitted query text flows through, then removed the hardcoded `threshold: 0.70` default in `callRetrieval` that could shadow live settings, making `retrieve()` the single authority that reads user-configured thresholds at call time.\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/src/hooks/knowledge-injection-hook.js\nResult: The hook's retrieval call no longer injects a hardcoded threshold; `retrieve()` exclusively applies the user's live-adjusted query-item and query-query thresholds (including the exponential toggle) when processing the submitted query on each `UserPromptSubmit` event, with both paths verified end-to-end against the running hook endpoint.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "high",
+    "createdAt": "2026-06-24T01:07:09.552Z",
+    "digestedAt": null,
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/src/hooks/knowledge-injection-hook.js"
+    ]
+  },
+  {
+    "id": "25da5515-1ee8-4b1f-9f36-e0b28723cb96",
+    "summary": "Intent: Commit the retrieval scoring feature changes to git.\nApproach: Scoped the commit to only the tunable-retrieval-scoring feature files, gitignored the runtime-generated retrieval settings file to avoid committing state, and excluded unrelated WIP and data exports from the staged changes.\nArtifacts: edited README.md\nResult: A focused git commit was created containing the 15 feature files for user-tunable global scoring, with the runtime `.observations/retrieval-settings.json` file excluded via gitignore.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "high",
+    "createdAt": "2026-06-24T01:19:39.051Z",
+    "digestedAt": null,
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory/README.md"
+    ]
+  },
+  {
+    "id": "d383dc28-026e-41d6-9ca4-72cd4dc20898",
+    "summary": "Intent: Write the complete retrieval logic, adjustment threshold parameters, and exponential toggle parameters into README.md\nApproach: Gathered precise constants from source code to ensure accuracy, then inserted a comprehensive retrieval-pipeline section with tunable-scoring subsection into the existing README, verifying markdown fence balance before committing.\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/README.md\nResult: README.md was updated with the full retrieval pipeline documentation including adjustment threshold and exponential toggle parameters, sourced directly from the codebase constants, with verified even fence count (44) and committed to the repository.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "high",
+    "createdAt": "2026-06-24T01:22:32.405Z",
+    "digestedAt": null,
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/README.md"
+    ]
+  },
+  {
+    "id": "6d683414-235b-4006-a78a-2815e6b03487",
+    "summary": "Intent: Build a plan for adding OM and WM indicator pills to result items showing which were used to populate observational and working memory.\nApproach: The assistant investigated the data flow between backend retrieval and the frontend UI to understand how each memory type is sourced, identifying that OM maps cleanly to ranked retrieval items via `assembleBudgetedMarkdown`'s internal `includedIds` tracking, while WM is sourced from a separate pathway (VKB KG + STATE.md) that doesn't intersect the ranked candidate set.\nArtifacts: edited token-budget.js\nResult: A plan was drafted where OM pills are feasible and accurate by surfacing the already-tracked `includedIds` from `assembleBudgetedMarkdown`, but WM pills present a design ambiguity since working memory is not populated from ranked retrieval items — the assistant flagged this and asked the developer how to handle WM indicator behavior before finalizing the full plan.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "high",
+    "createdAt": "2026-06-24T11:50:31.305Z",
+    "digestedAt": null,
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory/src/retrieval/token-budget.js"
+    ]
+  },
+  {
+    "id": "4e787f60-cdae-49bf-a198-36f4ae89db8d",
+    "summary": "Intent: Add indicator pills (OM/WM) to All Results items in the live-context dashboard to show which retrieved items were actually used to populate observational and working memory.\nApproach: Investigation revealed that Observational Memory maps directly to ranked retrieval candidates (via `assembleBudgetedMarkdown`'s existing but unexposed `includedIds` set), while Working Memory originates from the VKB knowledge-graph and STATE.md and has no corresponding ranked items — so only an OM pill is meaningful. The fix threads `usedInObservationalMemory` from the budget function return through the retrieval service and websocket hook to the UI.\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/src/retrieval/token-budget.js, edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/src/retrieval/retrieval-service.js, edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/integrations/system-health-dashboard/src/hooks/useLiveContextWebSocket.ts, edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/integrations/system-health-dashboard/src/pages/live-context.tsx\nResult: `assembleBudgetedMarkdown` now returns `includedIds` alongside the markdown; `retrieval-service.js` maps those ids to a `usedInObservationalMemory` boolean on each `RankedResult`; the websocket hook propagates the flag; and `live-context.tsx` renders a small \"OM\" pill beside the tier badge for any result item that was included in observational memory.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "high",
+    "createdAt": "2026-06-24T11:50:31.305Z",
+    "digestedAt": null,
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/src/retrieval/token-budget.js",
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/src/retrieval/retrieval-service.js",
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/integrations/system-health-dashboard/src/hooks/useLiveContextWebSocket.ts",
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/integrations/system-health-dashboard/src/pages/live-context.tsx"
+    ]
+  },
+  {
+    "id": "f9e0005b-d871-4b3b-9247-68e6e649d577",
+    "summary": "Intent: Fix the Working Memory preview in the System Health Dashboard so it reflects live project context (from the KnowledgeInjectionHook pipeline's `retrieve()`) instead of the hardcoded \"coding\" project root.\nApproach: Investigation focused on tracing how context (project, cwd, agent) flows from the KnowledgeInjectionHook through `retrieve()` and into `buildWorkingMemory`, identifying that `buildWorkingMemory` ignores the per-query context and instead uses a hardcoded `this.codingRoot` and `TEAM='coding'`, causing the preview to always show stale/wrong project data.\nArtifacts: edited working-memory.js\nResult: Root cause identified but not yet fixed — `buildWorkingMemory` in `working-memory.js` does not consume the `context` object passed through `retrieve()`, so the Working Memory preview is always built from the hardcoded \"coding\" team/root rather than the live `project`/`cwd` from the active query context.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "high",
+    "createdAt": "2026-06-24T12:17:36.517Z",
+    "digestedAt": null,
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory/src/retrieval/working-memory.js"
+    ]
+  },
+  {
+    "id": "bcdb1968-5a90-4476-a164-68439a405ff6",
+    "summary": "Intent: Ensure that items populating the Observational Memory are ordered by their final score/rank, with the highest-ranked items appearing first.\nApproach: The assistant reviewed the token-budget and OM assembly logic to understand how items are currently selected and formatted, in order to identify where rank-based ordering needs to be applied or enforced.\nArtifacts: edited token-budget.js\nResult: Investigation only — no changes were made; the assistant examined the OM assembly code to plan the sorting modification but did not implement it yet.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "high",
+    "createdAt": "2026-06-24T12:42:21.395Z",
+    "digestedAt": null,
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory/src/retrieval/token-budget.js"
+    ]
+  },
+  {
+    "id": "b4483df1-a432-4c60-8f26-de499002cd3d",
+    "summary": "Intent: Ensure that items selected for the Observational Memory are ordered by their final score/rank (most favoured first) rather than grouped by tier type.\nApproach: Instead of emitting selected items grouped by tier (Insights → Digests → Entities → Observations), rewrite the assembly to produce a single list sorted by final rank, preserving existing selection logic like G2 reservation while changing only the output ordering.\nArtifacts: edited /home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/src/retrieval/token-budget.js\nResult: The Observational Memory markdown output now emits all chosen items in a single rank-ordered sequence (highest final score first) rather than bucketed by tier type, so the most favoured content always appears at the top regardless of its tier.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "high",
+    "createdAt": "2026-06-24T12:42:21.395Z",
+    "digestedAt": null,
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/src/retrieval/token-budget.js"
+    ]
+  },
+  {
+    "id": "f0c1706a-0810-4f62-8b52-1aca78cbd98a",
+    "summary": "Intent: Modify the Recent <USER_ID_REDACTED> sidebar to only show prompts submitted via the UserPromptSubmit event, excluding commands and unsubmitted typed input.\nApproach: The assistant began by investigating the current implementation of the Recent <USER_ID_REDACTED> sidebar and its WebSocket hook to understand how prompts are currently captured and filtered before making changes.\nArtifacts: none\nResult: Investigation phase only — no changes were made yet. The assistant read the live-context page and WebSocket hook to understand the current data flow before implementing the filter.",
+    "agent": "copilot",
+    "project": "<USER_ID_REDACTED>",
+    "quality": "normal",
+    "createdAt": "2026-06-24T12:59:33.927Z",
     "digestedAt": null,
     "llm": {
       "model": "claude-sonnet-4.6",

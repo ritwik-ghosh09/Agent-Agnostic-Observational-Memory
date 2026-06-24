@@ -12,7 +12,11 @@ Paths shown as `~` refer to the user's home directory.
 
 ## Mandatory Rules
 
+- **Cross-platform compatibility**: ALWAYS inspect whether every change made to the repo is OS-dependent. If it is, make the change comply with **Linux, macOS, AND Windows** (e.g. path separators, shell commands, line endings, env vars, executables). Never introduce platform-specific behavior without providing equivalents for all three.
+- **Commit every micro-task**: For every micro-task-related change in the repo, commit it to git with a suitable, descriptive auto-generated commit message. Keep commits small and scoped to one logical change.
 - **Documentation skill**: ALWAYS invoke `documentation-style` skill before creating/modifying PlantUML, Mermaid, or documentation artifacts
+- **New-feature documentation**: For every newly added feature, update `README.md` with a proper Mermaid workflow diagram or screenshots from the Dashboard that illustrate the feature.
+- **High-resolution diagrams**: ALL diagrams must be high-resolution so that when clicked in the Git repo (from `README.md`) they expand into a full, legible image.
 - **PlantUML**: Use `plantuml` CLI command. NEVER `java -jar plantuml.jar`
 - **TypeScript**: Mandatory with strict type checking
 - **API design**: Never modify working APIs for TypeScript compliance; fix types instead

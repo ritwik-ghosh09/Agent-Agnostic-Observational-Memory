@@ -143,6 +143,13 @@ services:
       - ${CODING_REPO:-.}/src/knowledge-management:/coding/src/knowledge-management:ro
       # VKB server source (live-mounted to avoid Docker rebuild for JS changes)
       - ${CODING_REPO:-.}/lib/vkb-server:/coding/lib/vkb-server:ro
+      # Monitor + hook sources (live-mounted so edits apply without an image
+      # rebuild — same pattern as server.js / static-server.js above).
+      - ${CODING_REPO:-.}/scripts:/coding/scripts:ro
+      - ${CODING_REPO:-.}/src/hooks:/coding/src/hooks:ro
+      # supervisord config (live-mounted so changes take effect without an image
+      # rebuild — also works around stale baked-in images during Docker Hub outages).
+      - ${CODING_REPO:-.}/docker/supervisord.conf:/etc/supervisor/conf.d/supervisord.conf:ro
     networks:
       - coding-network
     # Allow container to reach host services (DMR/llama.cpp)

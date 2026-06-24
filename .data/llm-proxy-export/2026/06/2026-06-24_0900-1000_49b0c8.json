@@ -1,0 +1,18 @@
+[
+  {
+    "id": 1470,
+    "user_hash": "49b0c8",
+    "timestamp": "2026-06-24T07:39:16.659Z",
+    "provider": "copilot",
+    "model": "claude-sonnet-4.6",
+    "model_raw": "claude-sonnet-4.6",
+    "process": "health-coordinator",
+    "subscription": "copilot-subscription",
+    "input_tokens": 9,
+    "output_tokens": 28,
+    "total_tokens": 37,
+    "latency_ms": 1984,
+    "prompt_preview": "say OK",
+    "tokens_estimated": 0
+  }
+]

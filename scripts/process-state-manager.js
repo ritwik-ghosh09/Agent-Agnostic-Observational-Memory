@@ -684,14 +684,17 @@ class ProcessStateManager {
           const match = lines[1].match(/\s+(\d+)\s+/);
           if (match) {
             const holderPid = parseInt(match[1]);
-            // Locks held by macOS Docker Desktop's VirtualMachine helper
-            // surface as held by that single host PID via virtiofs — even
-            // though the real owner is a process inside a container. Treat
-            // these as healthy: the in-container service has the lock.
+            // Locks held by the Docker VM/filesystem helper surface as held by
+            // a single host PID via virtiofs — even though the real owner is a
+            // process inside a container. Treat these as healthy: the
+            // in-container service has the lock.
+            //   - macOS Docker Desktop: com.apple* / *virtualization* / qemu-system
+            //   - Linux Docker (virtiofs): virtiofsd
             const holderCmd = (lines[1].split(/\s+/)[0] || '').toLowerCase();
             const isDockerVm = holderCmd.startsWith('com.apple') ||
               holderCmd.includes('virtualization') ||
-              holderCmd === 'qemu-system';
+              holderCmd === 'qemu-system' ||
+              holderCmd.startsWith('virtiofs');
             if (!isDockerVm) {
               health.levelDB.locked = true;
               health.levelDB.lockedBy = holderPid;

@@ -13081,6 +13081,32 @@
         "last_updated": "2026-05-16T08:47:50.994Z"
       },
       "id": "mc4flkg4wadq4y"
+    },
+    {
+      "name": "Text Chunking and Parsing Pipeline",
+      "entityType": "Process",
+      "observations": [
+        "## Purpose\nSplits raw text (transcripts or documents) into semantically coherent chunks suitable for downstream processing such as categorization or embedding. The pipeline balances semantic continuity against minimum chunk size to prevent both over-fragmentation and semantically incoherent segments.\n\n## Architecture\nThe pipeline is governed by a chunking script that evaluates sentence-level cosine similarity to determine split boundaries. Two parameters control chunk boundaries:\n\n- **Cosine similarity threshold (`0.4`)** — sentences whose similarity to the running chunk falls below this value trigger a new chunk boundary.\n- **Minimum characters per chunk (`500`)** — prevents splits that would produce segments too small for meaningful downstream use.\n\nRelated pipeline components present in the codebase:\n- A **categorize script** — consumes or feeds chunks\n- A **FAU API** — integration point within the pipeline\n- **Checkpoint patterns** — support resumable/incremental processing over large inputs\n- `enhanced-transcript-monitor.js` — handles transcript ingestion or pipeline monitoring/orchestration\n\nThe full implementation plan is documented in `Markdown_parsing.md`.\n\n## Key Files\n- `Markdown_parsing.md` — step-by-step implementation plan for the parsing pipeline; primary design reference\n- `enhanced-transcript-monitor.js` — related pipeline component for transcript ingestion or monitoring\n- *(chunking script path not recorded)* — contains the cosine similarity threshold (`0.4`) and minimum chunk size (`500`) configuration\n\n## Usage\nThe chunking script is invoked as part of a text processing pipeline, consuming raw or pre-processed text and emitting bounded, semantically coherent chunks. Downstream consumers include the categorize script and the FAU API. Checkpoint patterns allow the pipeline to run incrementally over large inputs without reprocessing completed segments.\n\n## Troubleshooting\n- **Chunks too small or fragmented:** Raise the minimum character threshold above `500`, or lower the cosine similarity threshold below `0.4` to make splits less aggressive.\n- **Chunks semantically incoherent:** Raise the cosine similarity threshold above `0.4` so only more-similar sentences remain grouped.\n- **Pipeline stalls on large inputs:** Check checkpoint state — the checkpoint pattern should allow resuming without reprocessing completed segments.\n- **Chunking script path unknown:** Locate via the implementation steps in `Markdown_parsing.md` or search the repo for references to the `0.4` similarity threshold or `500` character minimum."
+      ],
+      "source": "online",
+      "metadata": {
+        "created_at": "2026-06-22T11:16:06.697Z",
+        "last_updated": "2026-06-22T14:47:15.165Z"
+      },
+      "id": "mc4flkg3sczo7h"
+    },
+    {
+      "name": "Text Splitting Chunking Script",
+      "entityType": "Process",
+      "observations": [
+        "## Purpose\nSplits input text into semantic chunks for downstream processing (e.g., embedding, retrieval). Controls chunk granularity via a similarity-based boundary detection mechanism and a minimum size guard.\n\n## Architecture\nThe script uses two primary configuration constants to govern splitting behavior:\n\n- **Cosine similarity threshold (`0.4`)** — Sentence pairs scoring below this value are treated as semantically dissimilar and split into separate chunks. A lower value means splitting happens less aggressively (more dissimilarity required to trigger a cut).\n- **Minimum characters per chunk (`500`)** — Prevents the creation of very small chunks by enforcing a lower bound on chunk size. Chunks below this size are either merged or not emitted as standalone units.\n\nData flow: raw text → sentence segmentation → pairwise cosine similarity scoring → boundary detection → minimum-size filtering → output chunks.\n\n## Key Files\n- *(File path not recorded)* — Main chunking script containing the `cosine similarity threshold` and `minimum characters` constants as top-level configuration values or defaults.\n\n## Usage\nRun directly as a script against text input. Output is a sequence of text chunks intended for ingestion into a vector store or similar pipeline. Tuning the two constants changes the average chunk count and size: raising the threshold produces more, smaller chunks; raising the minimum character floor suppresses small chunks.\n\n## Troubleshooting\n- **Chunks are too small / too numerous:** Raise the cosine similarity threshold above `0.4` so only more dissimilar boundaries trigger splits; also raise the minimum character floor above `500`.\n- **Chunks are too large / context is lost across chunks:** Lower the cosine similarity threshold toward `0.3` or reduce the minimum character floor.\n- **File path unknown:** Search the repository for the string literals `0.4` or `500` near terms like `threshold`, `min_chars`, or `chunk` to locate the constants file. Running `grep -r \"0\\.4\" --include=\"*.py\" .` (or the relevant extension) alongside `grep -r \"500\"` and diffing results should narrow the location."
+      ],
+      "source": "online",
+      "metadata": {
+        "created_at": "2026-06-22T18:40:58.921Z",
+        "last_updated": "2026-06-22T18:40:58.921Z"
+      },
+      "id": "mc4flkg40p02az"
     }
   ],
   "relations": [
@@ -19809,14 +19835,26 @@
       "to": "rapid-llm-proxy Standalone Package",
       "relationType": "has_insight",
       "metadata": {}
+    },
+    {
+      "from": "Coding",
+      "to": "Text Chunking and Parsing Pipeline",
+      "relationType": "has_insight",
+      "metadata": {}
+    },
+    {
+      "from": "Coding",
+      "to": "Text Splitting Chunking Script",
+      "relationType": "has_insight",
+      "metadata": {}
     }
   ],
   "metadata": {
     "version": "1.0.0",
     "team": "coding",
-    "exported_at": "2026-05-17T15:18:33.712Z",
-    "total_entities": 725,
-    "total_relations": 1121,
+    "exported_at": "2026-06-22T18:41:04.166Z",
+    "total_entities": 727,
+    "total_relations": 1123,
     "description": "Coding project infrastructure and patterns"
   }
 }

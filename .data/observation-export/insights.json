@@ -5863,5 +5863,376 @@
       }
     },
     "project": "ai-transformation-day-hackathon"
+  },
+  {
+    "id": "c7483a90-2904-42bb-bd4f-9a22af55531c",
+    "topic": "Text Chunking and Parsing Pipeline",
+    "summary": "## Purpose\nSplits raw text (transcripts or documents) into semantically coherent chunks suitable for downstream processing such as categorization or embedding. The pipeline balances semantic continuity against minimum chunk size to prevent both over-fragmentation and semantically incoherent segments.\n\n## Architecture\nThe pipeline is governed by a chunking script that evaluates sentence-level cosine similarity to determine split boundaries. Two parameters control chunk boundaries:\n\n- **Cosine similarity threshold (`0.4`)** — sentences whose similarity to the running chunk falls below this value trigger a new chunk boundary.\n- **Minimum characters per chunk (`500`)** — prevents splits that would produce segments too small for meaningful downstream use.\n\nRelated pipeline components present in the codebase:\n- A **categorize script** — consumes or feeds chunks\n- A **FAU API** — integration point within the pipeline\n- **Checkpoint patterns** — support resumable/incremental processing over large inputs\n- `enhanced-transcript-monitor.js` — handles transcript ingestion or pipeline monitoring/orchestration\n\nThe full implementation plan is documented in `Markdown_parsing.md`.\n\n## Key Files\n- `Markdown_parsing.md` — step-by-step implementation plan for the parsing pipeline; primary design reference\n- `enhanced-transcript-monitor.js` — related pipeline component for transcript ingestion or monitoring\n- *(chunking script path not recorded)* — contains the cosine similarity threshold (`0.4`) and minimum chunk size (`500`) configuration\n\n## Usage\nThe chunking script is invoked as part of a text processing pipeline, consuming raw or pre-processed text and emitting bounded, semantically coherent chunks. Downstream consumers include the categorize script and the FAU API. Checkpoint patterns allow the pipeline to run incrementally over large inputs without reprocessing completed segments.\n\n## Troubleshooting\n- **Chunks too small or fragmented:** Raise the minimum character threshold above `500`, or lower the cosine similarity threshold below `0.4` to make splits less aggressive.\n- **Chunks semantically incoherent:** Raise the cosine similarity threshold above `0.4` so only more-similar sentences remain grouped.\n- **Pipeline stalls on large inputs:** Check checkpoint state — the checkpoint pattern should allow resuming without reprocessing completed segments.\n- **Chunking script path unknown:** Locate via the implementation steps in `Markdown_parsing.md` or search the repo for references to the `0.4` similarity threshold or `500` character minimum.",
+    "confidence": 0.72,
+    "digestIds": [
+      "f11ba308-b744-474a-96f5-95e8319a934a"
+    ],
+    "lastUpdated": "2026-06-22T14:49:03.921Z",
+    "createdAt": "2026-06-22T11:16:05.501Z",
+    "metadata": {
+      "scope": "One concrete subsystem, tool, or workflow.",
+      "lastResynthesisAt": "2026-06-22T14:49:03.921Z",
+      "codeVerification": {
+        "verifiedAt": "2026-06-22T14:49:04.111Z",
+        "totalClaims": 0,
+        "verifiedClaims": 0,
+        "staleClaims": [],
+        "referencedFiles": [],
+        "searchRoots": [
+          "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory"
+        ]
+      }
+    },
+    "project": "coding"
+  },
+  {
+    "id": "624d3aa8-0f31-4d49-a94e-7ac0ee7fb3ac",
+    "topic": "obs-memory Project Git Policy",
+    "summary": "## Purpose\nAll git commits in the obs-memory repository are kept strictly local. No history is pushed to any remote until the developer explicitly migrates the repository to a chosen destination.\n\n## Architecture\nSingle-developer, local-only workflow:\n- Standard `git commit` is used normally; `git push` is never invoked\n- No remote tracking branches should be assumed up-to-date\n- Remote migration is a future, deliberate, one-time manual step — not part of routine development\n\n## Key Files\n- Local `.git/` — sole authoritative copy of all history\n- No upstream remote should be treated as canonical\n\n## Usage\nAll contributors on this repository must not push commits. Local commits accumulate on the working machine. When a migration event is planned, the developer must choose a target remote, verify the full local history, and push explicitly at that time.\n\n## Troubleshooting\n- **Unsure whether anything has been pushed:** Run `git remote -v` to list remotes and `git log --oneline origin/main..HEAD` (or equivalent branch) to check for unpushed commits. If no remote is configured, all commits are local by definition.\n- **Accidental push:** Audit the remote history immediately and coordinate with the developer to determine whether a force-push revert or branch deletion is appropriate before other parties pull the leaked state.",
+    "confidence": 0.92,
+    "digestIds": [
+      "e23e6efe-0331-40cf-a5f3-771696c2af8f",
+      "d53b8625-7f56-4786-8454-d6d44cb5885a",
+      "8cdf7f04-d92e-48c8-b543-1409265ed010",
+      "a4c8f285-b4ba-4199-a6f0-c257136aa7e8",
+      "788a735e-3f35-4115-a665-e7c3b0d038c4",
+      "ec3a76dd-255f-4a42-bbb3-8b556a6e76b9"
+    ],
+    "lastUpdated": "2026-06-22T18:59:12.979Z",
+    "createdAt": "2026-06-22T18:59:12.979Z",
+    "metadata": {
+      "scope": "Repository commit and push workflow for the obs-memory project",
+      "codeVerification": {
+        "verifiedAt": "2026-06-22T19:14:59.651Z",
+        "totalClaims": 1,
+        "verifiedClaims": 1,
+        "verificationRatio": 1,
+        "staleClaims": [],
+        "referencedFiles": [
+          ".git/"
+        ],
+        "searchRoots": [
+          "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory"
+        ]
+      }
+    },
+    "project": "obs-memory"
+  },
+  {
+    "id": "f5f60242-8823-4017-8a44-758d3e888bb8",
+    "topic": "Health Coordinator",
+    "summary": "## Purpose\nOrchestrates all health-check probes for the obs-memory stack, manages automatic respawning of the Enhanced Transcript Monitor, and exposes aggregated health status to the dashboard server. Runs as the `coding-health-coordinator.service` systemd unit.\n\n## Architecture\n- **Process**: `scripts/health-coordinator.js`\n- **Config**: `config/health-verification-rules.json` — rule definitions including service paths, probe intervals, and endpoints\n- **ETM respawn**: `ensureEtmForActiveProjects()` — checks freshness of both `~/.claude/projects/` jsonl files AND `~/.copilot/session-state/events.jsonl` mtime to detect active sessions from either AI backend; the Claude-only early-return gate has been removed so Copilot sessions trigger respawn correctly\n- **Semantic Readiness probe**: invokes `claude-sonnet-4.6` with `maxTokens: 64`; values below ~64 cause the thinking model to emit only internal reasoning with no visible output, producing a false failure\n- **LevelDB probing**: delegated to `scripts/process-state-manager.js`\n- **Health signal ingestion**: receives ETM heartbeats via the `/signals` endpoint (LSL protocol)\n- **Ports**: coordinator exposes `:3034`; dashboard server on `:3033` consumes it; frontend runs on `:3030`\n\n## Key Files\n- `scripts/health-coordinator.js` — main coordinator; contains `ensureEtmForActiveProjects` and semantic probe configuration\n- `config/health-verification-rules.json` — rule definitions; `enhanced_transcript_monitor` entry must use the Linux project path\n\n## Usage\nManaged via systemd. Apply configuration changes and force a re-probe by restarting: `systemctl restart coding-health-coordinator.service`. Probes all registered services approximately every 30 seconds and maps results to sub-check keys consumed by the dashboard.\n\n## Troubleshooting\n- **ETM not respawning for Copilot sessions**: Confirm `ensureEtmForActiveProjects` checks Copilot `events.jsonl` mtime and the Claude-only early-return gate is absent.\n- **Semantic Readiness check failing**: Ensure `maxTokens` is at least 64 for `claude-sonnet-4.6`; lower values produce empty visible output.\n- **Sub-checks show `unknown` after config changes**: Restart `coding-health-coordinator.service` to force a fresh probe cycle.\n- **Stale path for ETM rule**: `config/health-verification-rules.json` must reference the Linux project directory; a macOS path causes ETM health to lapse immediately.",
+    "confidence": 0.83,
+    "digestIds": [
+      "103b9b68-326c-4944-8eda-ab0eed9f566b",
+      "1d9e1cd8-8cc8-46e0-ab0d-777e9be3c414",
+      "ef1db44e-eac0-4374-bcf0-3e505d6a0179",
+      "d65f29f0-2911-4bc8-a69a-b7be676fd2ad",
+      "93b5ff6c-d04c-4604-8e78-39eef204871d",
+      "d1f83293-9ac3-4604-984c-ae723fc92e9f",
+      "3ad989b6-35e5-4ee9-aa32-ec292573918f"
+    ],
+    "lastUpdated": "2026-06-22T19:14:58.213Z",
+    "createdAt": "2026-06-22T19:14:58.213Z",
+    "metadata": {
+      "scope": "The `scripts/health-coordinator.js` orchestration process and its `config/health-verification-rules.json` configuration.",
+      "parentTopic": "Health Coordinator",
+      "relatedInsightIds": [
+        "50e45eae-b66a-4eeb-85f1-9f2d9dacb9da",
+        "668027e4-d6bf-45ae-8b40-f0c519d95ecb"
+      ],
+      "facetGroupedAt": "2026-06-22T19:14:58.213Z",
+      "codeVerification": {
+        "verifiedAt": "2026-06-22T19:15:00.355Z",
+        "totalClaims": 6,
+        "verifiedClaims": 6,
+        "verificationRatio": 1,
+        "staleClaims": [],
+        "referencedFiles": [
+          "coding-health-coordinator.service",
+          "scripts/health-coordinator.js",
+          "config/health-verification-rules.json",
+          "scripts/process-state-manager.js",
+          "events.jsonl"
+        ],
+        "searchRoots": [
+          "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory"
+        ]
+      }
+    },
+    "project": "obs-memory"
+  },
+  {
+    "id": "668027e4-d6bf-45ae-8b40-f0c519d95ecb",
+    "topic": "Enhanced Transcript Monitor (ETM)",
+    "summary": "## Purpose\nMonitors AI agent transcript files (Claude and Copilot) in real time, extracts structured observation cards from completed conversation turns, and emits LSL heartbeat signals to the health coordinator. It is the primary producer of observation data in the obs-memory pipeline.\n\n## Architecture\nSingle Node.js process reading from two transcript sources:\n- **Claude transcripts**: `~/.claude/projects/` (jsonl format)\n- **Copilot session state**: `~/.copilot/session-state/events.jsonl`\n\nKey internal functions:\n- `getCopilotCompletionState()` — inspects `events.jsonl` to confirm the last assistant message has no pending tool calls before flushing a prompt set; prevents capture of mid-turn/intermediate LLM responses\n- `_classifyToolFileArtifact()` — agent-agnostic artifact extractor; handles Claude naming (`Edit`/`Write`/`Read` + `file_path`) and Copilot naming (`edit`/`create`/`view` + `path`/`filePath`); populates `modifiedFiles`/`readFiles` in the Artifacts field of each observation card\n\nProcess behavior:\n- Emits heartbeat signals to the coordinator via the `/signals` endpoint (LSL protocol)\n- Auto-exits after 30 minutes of idle (no new transcript activity)\n- Spawned detached by `health-coordinator.js` via `ensureEtmForActiveProjects`\n\n## Key Files\n- `scripts/enhanced-transcript-monitor.js` — main ETM process; contains `getCopilotCompletionState` and `_classifyToolFileArtifact`\n- `config/health-verification-rules.json` — contains the `enhanced_transcript_monitor` rule; the path must point to the Linux project directory (not a macOS path)\n\n## Usage\nStarted automatically by the health coordinator when transcript activity is detected. Can be launched manually for debugging. Heartbeat absence causes the dashboard to show ETM status as `unknown`. Documentation of observation card format and root-cause analysis for both flush and artifact bugs lives in `Observations_modified.md`.\n\n## Troubleshooting\n- **Service shows `unknown` in health dashboard**: ETM is not running or not emitting heartbeats. Check `config/health-verification-rules.json` for a stale path (e.g., a macOS path on a Linux host). Restart the coordinator to trigger `ensureEtmForActiveProjects`.\n- **Mid-turn/incomplete observations captured**: The `getCopilotCompletionState()` guard is absent or not reading `events.jsonl` correctly. Verify the current ETM version is deployed.\n- **`modifiedFiles`/`readFiles` empty in Artifacts**: `_classifyToolFileArtifact()` does not recognise the tool naming of the active AI backend. Confirm the method handles both Claude and Copilot naming conventions.\n- **ETM not respawning after 30-min idle**: The coordinator may only be checking Claude session freshness. Verify `health-coordinator.js` includes Copilot `events.jsonl` mtime in its freshness detection and that the Claude-only early-return gate has been removed.",
+    "confidence": 0.82,
+    "digestIds": [
+      "103b9b68-326c-4944-8eda-ab0eed9f566b",
+      "1d9e1cd8-8cc8-46e0-ab0d-777e9be3c414",
+      "ef1db44e-eac0-4374-bcf0-3e505d6a0179",
+      "d65f29f0-2911-4bc8-a69a-b7be676fd2ad",
+      "93b5ff6c-d04c-4604-8e78-39eef204871d",
+      "d1f83293-9ac3-4604-984c-ae723fc92e9f",
+      "3ad989b6-35e5-4ee9-aa32-ec292573918f"
+    ],
+    "lastUpdated": "2026-06-22T19:14:58.213Z",
+    "createdAt": "2026-06-22T19:14:58.213Z",
+    "metadata": {
+      "scope": "The `scripts/enhanced-transcript-monitor.js` process that captures observation cards from AI agent transcripts and emits health heartbeats.",
+      "parentTopic": "Enhanced Transcript Monitor (ETM)",
+      "relatedInsightIds": [
+        "50e45eae-b66a-4eeb-85f1-9f2d9dacb9da"
+      ],
+      "facetGroupedAt": "2026-06-22T19:14:58.213Z",
+      "codeVerification": {
+        "verifiedAt": "2026-06-22T19:15:00.069Z",
+        "totalClaims": 7,
+        "verifiedClaims": 7,
+        "verificationRatio": 1,
+        "staleClaims": [],
+        "referencedFiles": [
+          "events.jsonl",
+          "health-coordinator.js",
+          "scripts/enhanced-transcript-monitor.js",
+          "config/health-verification-rules.json",
+          "Observations_modified.md"
+        ],
+        "searchRoots": [
+          "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory"
+        ]
+      }
+    },
+    "project": "obs-memory"
+  },
+  {
+    "id": "f22ed4ee-710b-4009-b899-42521c3b6c77",
+    "topic": "obs-memory Enterprise Database Architecture",
+    "summary": "## Purpose\nDefines the selected multi-tier database architecture for obs-memory, supporting concurrent multi-agent writes, semantic vector search, time-series event storage, and long-term analytics at enterprise scale.\n\n## Architecture\n**Tier layout (recommended full-enterprise configuration):**\n- **PostgreSQL + TimescaleDB** — primary OLTP store; handles transactional relational data and time-series observation events\n- **Redis** — session state, ephemeral agent working memory, caching\n- **Milvus** — vector/embedding store for semantic retrieval (integrates with the Hybrid RAG layer)\n- **Kafka** — durable event log / message bus for observational event streams; decouples producers from consumers\n- **Snowflake / S3 + Apache Iceberg** — cold analytics and long-term archival\n\n**Minimal viable configuration:** PostgreSQL+TimescaleDB + Redis only; add Milvus, Kafka, and Snowflake/Iceberg as concurrency and data volume grow.\n\n**SQLite is explicitly ruled out for multi-agent use** due to: single-writer lock bottleneck, no native vector/embedding or JSON indexing, no replication or HA, and VACUUM lock contention under append-heavy workloads. Acceptable only for single-agent prototypes under ~10 GB.\n\n**Concurrent access patterns:**\n- Connection pooling at the application layer\n- CQRS with read replicas for query/write separation\n- Optimistic, pessimistic, and advisory locking selected per access pattern\n- Distributed transactions via the **saga pattern** (no two-phase commit across services)\n- Append-only writes for observational records to minimize contention\n- Rate limiting, retry logic with backoff, and observability/alerting as standard requirements\n\n## Key Files\n- No implementation files exist yet; the architecture is at the design/decision stage.\n- Future schema and migration files will likely live under a `db/` or `migrations/` directory (not yet created).\n\n## Usage\nThis architecture governs the storage layer design for obs-memory. The tier to instantiate first is PostgreSQL+TimescaleDB (handles both relational and time-series needs). Redis is added before any session/cache requirements go live. Milvus is provisioned when the RAG retrieval layer is implemented. Kafka and Snowflake/Iceberg are introduced when event volume or analytics workloads justify the operational overhead.\n\n## Troubleshooting\n- **Write-lock errors or slow VACUUM (SQLite):** The system has outgrown SQLite; migrate to PostgreSQL. This is expected above ~10 GB or with more than one concurrent writer.\n- **High write contention in multi-agent mode:** Confirm observational writes are append-only and that connection pooling is active. If query latency degrades under write load, add a read replica and route SELECT traffic through CQRS separation.\n- **Vector search latency (Milvus):** Index type and parameters (IVF_FLAT, HNSW, etc.) must be tuned to embedding dimensionality and query throughput. Default indexes are not optimised for production loads.\n- **Distributed transaction failures across tiers:** Ensure the saga pattern is implemented with explicit compensating transactions; do not attempt synchronous two-phase commit across PostgreSQL and Kafka.",
+    "confidence": 0.8,
+    "digestIds": [
+      "e23e6efe-0331-40cf-a5f3-771696c2af8f",
+      "d53b8625-7f56-4786-8454-d6d44cb5885a",
+      "8cdf7f04-d92e-48c8-b543-1409265ed010",
+      "a4c8f285-b4ba-4199-a6f0-c257136aa7e8",
+      "788a735e-3f35-4115-a665-e7c3b0d038c4",
+      "ec3a76dd-255f-4a42-bbb3-8b556a6e76b9"
+    ],
+    "lastUpdated": "2026-06-22T18:59:12.979Z",
+    "createdAt": "2026-06-22T18:59:12.979Z",
+    "metadata": {
+      "scope": "Target multi-tier storage stack design for the obs-memory agentic observational memory system",
+      "codeVerification": {
+        "verifiedAt": "2026-06-22T19:14:59.824Z",
+        "totalClaims": 2,
+        "verifiedClaims": 1,
+        "verificationRatio": 0.5,
+        "staleClaims": [
+          {
+            "raw": "migrations/",
+            "type": "PATH"
+          }
+        ],
+        "referencedFiles": [
+          "db/"
+        ],
+        "searchRoots": [
+          "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory"
+        ]
+      }
+    },
+    "project": "obs-memory"
+  },
+  {
+    "id": "59b2d35d-d6e9-4f27-ab84-c4d6a10118bf",
+    "topic": "Process State Manager (PSM) — LevelDB Lock Probe",
+    "summary": "## Purpose\nProbes LevelDB lock state and maps results to health sub-check keys consumed by the health coordinator. Maintains an allowlist of benign lock-holding processes to prevent false-positive lock failures on Linux hosts.\n\n## Architecture\n- Module: `scripts/process-state-manager.js`\n- Inspects the LevelDB `LOCK` file and identifies the process holding the lock\n- **Benign allowlist**: includes `virtiofsd` (the Linux Docker virtiofs daemon); this prevents spurious lock failures when Docker uses the virtiofs filesystem driver on Linux hosts\n- Results surface as the \"Graph LevelDB\" sub-check in the health dashboard\n- Invoked by `health-coordinator.js` during each probe cycle; not called directly\n\n## Key Files\n- `scripts/process-state-manager.js` — LevelDB lock detection logic and benign lock-holder allowlist\n\n## Usage\nCalled exclusively by the health coordinator. Results appear as the `Graph LevelDB` sub-check. After modifying the allowlist, restart `coding-health-coordinator.service` for the change to take effect.\n\n## Troubleshooting\n- **Graph LevelDB reports lock failure on Linux with Docker**: `virtiofsd` may be absent from the allowlist. Confirm `process-state-manager.js` lists `virtiofsd` as a benign holder.\n- **False-positive lock on other systems**: Identify the holding process; if it is a known benign system daemon, add it to the allowlist and restart the coordinator service.\n- **Lock probe consistently failing after allowlist update**: The coordinator must be restarted to reload PSM; changes to the module do not apply to a running coordinator process.",
+    "confidence": 0.72,
+    "digestIds": [
+      "103b9b68-326c-4944-8eda-ab0eed9f566b",
+      "1d9e1cd8-8cc8-46e0-ab0d-777e9be3c414",
+      "ef1db44e-eac0-4374-bcf0-3e505d6a0179",
+      "d65f29f0-2911-4bc8-a69a-b7be676fd2ad",
+      "93b5ff6c-d04c-4604-8e78-39eef204871d",
+      "d1f83293-9ac3-4604-984c-ae723fc92e9f",
+      "3ad989b6-35e5-4ee9-aa32-ec292573918f"
+    ],
+    "lastUpdated": "2026-06-22T19:14:58.213Z",
+    "createdAt": "2026-06-22T19:14:58.213Z",
+    "metadata": {
+      "scope": "The `scripts/process-state-manager.js` module responsible for LevelDB lock detection and allowlist-based false-positive prevention.",
+      "codeVerification": {
+        "verifiedAt": "2026-06-22T19:15:00.604Z",
+        "totalClaims": 5,
+        "verifiedClaims": 5,
+        "verificationRatio": 1,
+        "staleClaims": [],
+        "referencedFiles": [
+          "scripts/process-state-manager.js",
+          "health-coordinator.js",
+          "coding-health-coordinator.service",
+          "process-state-manager.js"
+        ],
+        "searchRoots": [
+          "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory"
+        ]
+      }
+    },
+    "project": "obs-memory"
+  },
+  {
+    "id": "5d5abba1-afb0-4582-8868-7600791ab3c0",
+    "topic": "obs-memory Docker Stack Launch Infrastructure",
+    "summary": "## Purpose\nThe obs-memory project launches a multi-container AI agent stack through a chain of shell scripts. The infrastructure was originally macOS-specific and has been adapted for Linux with optional corporate-network proxy routing.\n\n## Architecture\nStartup chain (sequential delegation):\n- `bin/coding` → `scripts/launch-claude.sh` → `scripts/launch-agent-common.sh`\n- `obs-memory/.activate` — environment activation; must be portable (no hardcoded macOS paths)\n- `scripts/launch-agent-common.sh` — core launch logic; hosts `_configure_docker_build_proxy()`, which routes `apt-get` traffic inside Docker build containers based on the `INSIDE_CN` environment variable (direct when off corporate VPN, proxied when on)\n- `docker/docker-compose.yml` — passes `DOCKER_BUILD_*` proxy values as build-args to containers\n- `integrations/` — 5 vendored submodule directories (including `dashboard/`) registered in `.gitmodules` and committed locally; all must be present for image builds to succeed\n\n## Key Files\n- `bin/coding` — top-level entry point\n- `scripts/launch-claude.sh` — intermediate launcher\n- `scripts/launch-agent-common.sh` — core agent launch logic; proxy function lives here\n- `obs-memory/.activate` — portable environment activation script\n- `docker/docker-compose.yml` — Compose config; declares proxy build-args\n- `.gitmodules` — submodule registry for all `integrations/*` paths\n- `integrations/` — vendored submodule content (5 directories)\n- `README.md` — documents proxy configuration behaviour\n\n## Usage\nInvoke `bin/coding` after sourcing the environment. `~/.bashrc` must export `CODING_REPO` pointing at the obs-memory checkout. Set `INSIDE_CN` to match the current network environment before launching so `_configure_docker_build_proxy()` selects the correct route. A dry-run mode in `scripts/launch-agent-common.sh` can verify the script resolution path without starting containers.\n\n## Troubleshooting\n- **403 invalid API key at startup (exit code 1):** The agent credential used by the stack is invalid or expired. This is independent of infrastructure; replace or validate the API key before retrying a full stack start.\n- **Fatal missing-directory build error:** Caused by unpopulated submodules. Confirm all five `integrations/*` directories exist and are committed (not empty stubs).\n- **`apt-get` fails inside Docker build:** `INSIDE_CN` may be set incorrectly for the current network. Verify its value matches the actual network context before building; the `_configure_docker_build_proxy()` function selects routing based solely on this variable.\n- **Dry-run the chain:** Run `scripts/launch-agent-common.sh` in dry-run mode to confirm script resolution without launching containers.",
+    "confidence": 0.72,
+    "digestIds": [
+      "e23e6efe-0331-40cf-a5f3-771696c2af8f",
+      "d53b8625-7f56-4786-8454-d6d44cb5885a",
+      "8cdf7f04-d92e-48c8-b543-1409265ed010",
+      "a4c8f285-b4ba-4199-a6f0-c257136aa7e8",
+      "788a735e-3f35-4115-a665-e7c3b0d038c4",
+      "ec3a76dd-255f-4a42-bbb3-8b556a6e76b9"
+    ],
+    "lastUpdated": "2026-06-22T18:59:12.979Z",
+    "createdAt": "2026-06-22T18:59:12.979Z",
+    "metadata": {
+      "scope": "Shell-script startup chain, proxy configuration, and submodule layout for the obs-memory Docker stack",
+      "codeVerification": {
+        "verifiedAt": "2026-06-22T19:14:59.641Z",
+        "totalClaims": 11,
+        "verifiedClaims": 11,
+        "verificationRatio": 1,
+        "staleClaims": [],
+        "referencedFiles": [
+          "bin/coding",
+          "scripts/launch-claude.sh",
+          "scripts/launch-agent-common.sh",
+          "obs-memory/.activate",
+          "docker/docker-compose.yml",
+          "integrations/",
+          "dashboard/",
+          "README.md"
+        ],
+        "searchRoots": [
+          "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory"
+        ]
+      }
+    },
+    "project": "obs-memory"
+  },
+  {
+    "id": "50e45eae-b66a-4eeb-85f1-9f2d9dacb9da",
+    "topic": "Hybrid RAG Architecture Patterns",
+    "summary": "## Purpose\nDocuments the architectural patterns evaluated for implementing Hybrid RAG over obs-memory's observational store, enabling high-precision semantic retrieval with source provenance across agent memory records.\n\n## Architecture\n**14 patterns evaluated; key ones for obs-memory:**\n\nCore pipelines:\n- **Retrieval-then-Generate** — standard baseline: retrieve relevant chunks, pass to generator\n- **Fusion-in-Decoder (FiD)** — encode multiple retrieved passages independently; fuse at decoder; higher <USER_ID_REDACTED> at higher compute cost\n- **Multi-hop retrieval** — iterative retrieval across multiple steps; suited to complex cross-observation <USER_ID_REDACTED>\n- **RAG fine-tuning** — jointly train retriever and generator on domain-specific data; highest performance ceiling, highest cost\n- **Tool-augmented RAG** — retrieval combined with dynamic tool calls; relevant when obs-memory <USER_ID_REDACTED> need live data alongside stored observations\n\n**Critical practical decisions (apply to obs-memory):**\n- **Sparse + dense hybrid indexing** — combine BM25/TF-IDF (sparse) with embedding-based (dense) retrieval; complementary recall, recommended default\n- **Reranking** — post-retrieval cross-encoder reranking before generation; materially improves precision at low added latency\n- **Provenance tracking** — mandatory for enterprise observability; source metadata must be preserved through retrieval and surfaced in generation output\n- **Multimodal RAG** — flagged as a future-relevant variant if obs-memory ingests non-text modalities\n\n**Vector store:** Milvus (per database architecture decision).\n\n## Key Files\n- No implementation files exist yet; architecture is at the evaluation/design stage.\n- The Milvus instance (planned) will serve as the dense index backend.\n\n## Usage\nThese patterns inform the retrieval layer design for obs-memory's semantic memory <USER_ID_REDACTED>. The recommended starting point is sparse+dense hybrid indexing with a reranking step and provenance metadata attached to every retrieved chunk. Multi-hop and FiD patterns are reserved for complex, multi-record reasoning <USER_ID_REDACTED> where baseline retrieval <USER_ID_REDACTED> is insufficient.\n\n## Troubleshooting\n- **Low retrieval precision:** Add a cross-encoder reranking step. Verify that sparse+dense fusion is active — pure dense retrieval commonly misses exact-match or keyword-critical records.\n- **Missing source attribution in generated output:** Provenance metadata is not being propagated through the retrieval context; ensure chunk metadata is included in the prompt context passed to the generator.\n- **High latency on complex <USER_ID_REDACTED>:** Multi-hop retrieval compounds per-hop retrieval costs. Cap hop depth and consider caching intermediate retrieval results within a single query session.\n- **Cost overruns:** FiD and multi-hop patterns carry significantly higher inference costs than Retrieval-then-Generate. Profile retrieval + generation latency and token cost before selecting these patterns for high-throughput paths.",
+    "confidence": 0.6,
+    "digestIds": [
+      "e23e6efe-0331-40cf-a5f3-771696c2af8f",
+      "d53b8625-7f56-4786-8454-d6d44cb5885a",
+      "8cdf7f04-d92e-48c8-b543-1409265ed010",
+      "a4c8f285-b4ba-4199-a6f0-c257136aa7e8",
+      "788a735e-3f35-4115-a665-e7c3b0d038c4",
+      "ec3a76dd-255f-4a42-bbb3-8b556a6e76b9"
+    ],
+    "lastUpdated": "2026-06-22T19:14:58.213Z",
+    "createdAt": "2026-06-22T18:59:12.979Z",
+    "metadata": {
+      "scope": "Evaluated retrieval-augmented generation patterns for the obs-memory semantic memory layer",
+      "codeVerification": {
+        "verifiedAt": "2026-06-22T19:14:59.824Z",
+        "totalClaims": 0,
+        "verifiedClaims": 0,
+        "staleClaims": [],
+        "referencedFiles": [],
+        "searchRoots": [
+          "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory"
+        ]
+      },
+      "parentTopic": "Health Coordinator",
+      "relatedInsightIds": [
+        "668027e4-d6bf-45ae-8b40-f0c519d95ecb",
+        "f5f60242-8823-4017-8a44-758d3e888bb8"
+      ],
+      "facetGroupedAt": "2026-06-22T19:14:58.213Z"
+    },
+    "project": "obs-memory"
+  },
+  {
+    "id": "fe35dc74-6bc7-48a2-afdc-fdbfc6aa92e7",
+    "topic": "LLM CLI Proxy (llm-proxy.mjs)",
+    "summary": "## Purpose\nActs as a local relay that forwards LLM completion requests through a corporate HTTPS proxy. It exists because upstream LLM CLI tooling cannot reliably configure its own proxy egress when the process is spawned or respawned by a watchdog under systemd.\n\n## Architecture\n- Written as a single ESM script (`llm-proxy.mjs`).\n- Uses `undici` for HTTP dispatch. The upstream package bundles `undici 8.1.0`, which requires Node 22+; the runtime is Node 20. To avoid the incompatibility, a **global dispatcher** is installed via the project's top-level `undici 6.25.0` dependency before the upstream code loads.\n- `HTTPS_PROXY` is explicitly cleared before the upstream module initialises, forcing it to fall through to the global dispatcher rather than attempting its own `ProxyAgent` construction (which would silently fail on Node 20).\n- Under systemd/watchdog respawn, environment variables like `HTTPS_PROXY` are not inherited; the global-dispatcher approach sidesteps this by making proxy config code-level rather than env-level.\n\n## Key Files\n- `src/llm-proxy/llm-proxy.mjs` — entire proxy relay implementation; global dispatcher setup and `HTTPS_PROXY` clearing happen here at module load time.\n\n## Usage\n- Invoked by the project watchdog/systemd service; completion requests arrive on a local port and are forwarded to the upstream LLM API through the corporate proxy.\n- Health is polled by `health-coordinator.js`, which checks socket reachability and reports status to the Health Dashboard (port 3032).\n- Successful completions return HTTP 200 in ~1.8 s under both initial start and watchdog-respawn paths.\n\n## Troubleshooting\n- **Silent proxy failures after respawn:** Likely cause is `HTTPS_PROXY` absent from the respawned env. Verify the global-dispatcher initialisation block runs before any upstream import. Do not rely on env vars for proxy config in watchdog contexts.\n- **`undici` version errors:** If Node is upgraded to 22+, the top-level `undici 6.25.0` pin may be relaxed, but the `HTTPS_PROXY` pre-clear should remain to prevent the upstream from overriding the dispatcher.\n- **Liveness check:** Hit the proxy's local endpoint directly; `semantic_ok=true` and `liveness_ok=true` in the coordinator log confirm end-to-end health.",
+    "confidence": 0.5,
+    "digestIds": [
+      "43766bbe-8ab0-46d3-9242-83b06b198ced"
+    ],
+    "lastUpdated": "2026-06-23T19:05:41.556Z",
+    "createdAt": "2026-06-23T19:05:41.556Z",
+    "metadata": {
+      "scope": "Local HTTPS-proxy relay for LLM completions — `src/llm-proxy/llm-proxy.mjs`",
+      "codeVerification": {
+        "verifiedAt": "2026-06-23T19:05:42.078Z",
+        "totalClaims": 4,
+        "verifiedClaims": 4,
+        "verificationRatio": 1,
+        "staleClaims": [],
+        "referencedFiles": [
+          "llm-proxy.mjs",
+          "src/llm-proxy/llm-proxy.mjs",
+          "health-coordinator.js"
+        ],
+        "searchRoots": [
+          "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory"
+        ]
+      }
+    },
+    "project": "<USER_ID_REDACTED>"
+  },
+  {
+    "id": "8ab00d60-9a97-4c15-bbbc-54630fefdf48",
+    "topic": "Health Coordinator (health-coordinator.js)",
+    "summary": "## Purpose\nPeriodically probes system sub-components (LLM proxy, proxydetox, internet reachability, network mode) and aggregates results into a unified health status consumed by the Health Dashboard UI on port 3032.\n\n## Architecture\n- Single Node.js script (`health-coordinator.js`) running as a long-lived daemon.\n- `pollNetworkStatus` probes proxydetox on **port 48157** (not 3128) for proxy reachability and internet status.\n- `proxy_running` is derived from **socket reachability** alone — not from `proxyEnvSet`, which is always `false` under systemd and must not gate this field.\n- Network mode (`networkMode`) is detected independently by the coordinator. The LLM proxy also reports its own perceived mode; these are stored in **separate fields** and compared over time per-component to detect genuine mode changes, preventing flip-flop restarts when the two detection paths disagree.\n- Stability signals `semantic_ok` and `liveness_ok` are emitted to logs and consumed by the dashboard.\n\n## Key Files\n- `scripts/health-coordinator.js` — all polling logic, status aggregation, network-mode tracking, and HTTP server feeding the dashboard.\n\n## Usage\n- Runs continuously as a systemd service or watchdog-managed process.\n- Dashboard UI (port 3032) reads aggregated status from the coordinator; proxy/internet indicator correctness depends entirely on the coordinator's polling accuracy.\n- Coordinator restart storms surface as rapid mode-flip log entries; zero flips over an 80-second window is the expected steady state.\n\n## Troubleshooting\n- **Restart storm / mode flip-flops:** The coordinator's `networkMode` and the proxy-reported `networkMode` must be compared using the proxy's own historical field, not the coordinator's local detection. If storms recur, check that the two fields are tracked independently.\n- **Proxy/internet always shown unreachable in UI:** Verify `pollNetworkStatus` is targeting port **48157**. Port 3128 will always fail.\n- **`proxy_running` always false:** Confirm the `proxyEnvSet` gate has been removed from the `proxy_running` logic. Under systemd, `HTTPS_PROXY` is not injected into the environment, so env-var checks are unreliable.\n- **Sub-checks stuck on `unknown`:** Restart the coordinator to force an immediate re-probe cycle.\n- **Log location:** Coordinator stdout/stderr via `journalctl` for the managing systemd unit, or direct terminal output if run manually.",
+    "confidence": 0.5,
+    "digestIds": [
+      "43766bbe-8ab0-46d3-9242-83b06b198ced"
+    ],
+    "lastUpdated": "2026-06-23T19:05:41.556Z",
+    "createdAt": "2026-06-23T19:05:41.556Z",
+    "metadata": {
+      "scope": "Central health-polling daemon and status aggregator — `scripts/health-coordinator.js`",
+      "codeVerification": {
+        "verifiedAt": "2026-06-23T19:05:42.203Z",
+        "totalClaims": 3,
+        "verifiedClaims": 3,
+        "verificationRatio": 1,
+        "staleClaims": [],
+        "referencedFiles": [
+          "health-coordinator.js",
+          "scripts/health-coordinator.js"
+        ],
+        "searchRoots": [
+          "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory"
+        ]
+      }
+    },
+    "project": "<USER_ID_REDACTED>"
+  },
+  {
+    "id": "1b484b6a-fdd1-4fe3-a858-929457d4175a",
+    "topic": "Text Splitting Chunking Script",
+    "summary": "## Purpose\nSplits input text into semantic chunks for downstream processing (e.g., embedding, retrieval). Controls chunk granularity via a similarity-based boundary detection mechanism and a minimum size guard.\n\n## Architecture\nThe script uses two primary configuration constants to govern splitting behavior:\n\n- **Cosine similarity threshold (`0.4`)** — Sentence pairs scoring below this value are treated as semantically dissimilar and split into separate chunks. A lower value means splitting happens less aggressively (more dissimilarity required to trigger a cut).\n- **Minimum characters per chunk (`500`)** — Prevents the creation of very small chunks by enforcing a lower bound on chunk size. Chunks below this size are either merged or not emitted as standalone units.\n\nData flow: raw text → sentence segmentation → pairwise cosine similarity scoring → boundary detection → minimum-size filtering → output chunks.\n\n## Key Files\n- *(File path not recorded)* — Main chunking script containing the `cosine similarity threshold` and `minimum characters` constants as top-level configuration values or defaults.\n\n## Usage\nRun directly as a script against text input. Output is a sequence of text chunks intended for ingestion into a vector store or similar pipeline. Tuning the two constants changes the average chunk count and size: raising the threshold produces more, smaller chunks; raising the minimum character floor suppresses small chunks.\n\n## Troubleshooting\n- **Chunks are too small / too numerous:** Raise the cosine similarity threshold above `0.4` so only more dissimilar boundaries trigger splits; also raise the minimum character floor above `500`.\n- **Chunks are too large / context is lost across chunks:** Lower the cosine similarity threshold toward `0.3` or reduce the minimum character floor.\n- **File path unknown:** Search the repository for the string literals `0.4` or `500` near terms like `threshold`, `min_chars`, or `chunk` to locate the constants file. Running `grep -r \"0\\.4\" --include=\"*.py\" .` (or the relevant extension) alongside `grep -r \"500\"` and diffing results should narrow the location.",
+    "confidence": 0.5,
+    "digestIds": [
+      "03a9e8f0-13e9-47a6-b490-f2a7fd3657d1"
+    ],
+    "lastUpdated": "2026-06-22T18:40:58.815Z",
+    "createdAt": "2026-06-22T18:40:58.815Z",
+    "metadata": {
+      "scope": "Standalone script that splits text into semantic chunks using cosine similarity and minimum character thresholds."
+    },
+    "project": "coding"
   }
 ]
