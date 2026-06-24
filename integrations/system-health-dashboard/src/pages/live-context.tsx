@@ -28,7 +28,7 @@ import {
 } from 'lucide-react'
 
 const WORKING_HEADERS = ['Working Memory', 'Previous Session']
-const OBSERVATIONAL_HEADERS = ['Insights', 'Digests', 'Entities', 'Observations']
+const OBSERVATIONAL_HEADERS = ['Observational Memory', 'Insights', 'Digests', 'Entities', 'Observations']
 
 interface MdSection {
   title: string
@@ -176,7 +176,9 @@ function MemoryColumn({
           <div className="space-y-4">
             {sections.map((s) => (
               <div key={s.title}>
-                <div className="mb-1 text-sm font-semibold">{s.title}</div>
+                {s.title !== title && (
+                  <div className="mb-1 text-sm font-semibold">{s.title}</div>
+                )}
                 <MarkdownBody body={s.body} />
               </div>
             ))}

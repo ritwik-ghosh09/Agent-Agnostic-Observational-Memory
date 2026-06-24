@@ -32,7 +32,7 @@ function mkResult(id, tier, score, previewSeed) {
   };
 }
 
-describe('assembleBudgetedMarkdown — per-tier minimum slots (G2)', () => {
+describe('assembleBudgetedMarkdown — per-tier minimum slots (G2) + rank order', () => {
   test('surfaces higher tiers even when observations dominate RRF ordering', () => {
     // Observations sorted to the very top (highest RRF), insights/digests below.
     const sorted = [
@@ -45,12 +45,18 @@ describe('assembleBudgetedMarkdown — per-tier minimum slots (G2)', () => {
 
     const { markdown } = assembleBudgetedMarkdown(sorted, 1000);
 
-    expect(markdown).toContain('## Insights');
-    expect(markdown).toContain('## Digests');
-    expect(markdown).toContain('## Observations');
+    // Single OM header; selection (G2) still includes the higher tiers' content.
+    expect(markdown).toContain('## Observational Memory');
+    expect(markdown).toContain('insight delta');
+    expect(markdown).toContain('digest epsilon');
+    expect(markdown).toContain('observation alpha');
+    // Tier attribution survives as inline tags.
+    expect(markdown).toContain('**[Insight]**');
+    expect(markdown).toContain('**[Digest]**');
+    expect(markdown).toContain('**[Observation]**');
   });
 
-  test('orders tier sections by decreasing weight (TIER_ORDER)', () => {
+  test('emits items in descending final score/rank order (most favoured first)', () => {
     const sorted = [
       mkResult('o1', 'observations', 0.99, 'obs one'),
       mkResult('i1', 'insights', 0.80, 'ins one'),
@@ -58,22 +64,24 @@ describe('assembleBudgetedMarkdown — per-tier minimum slots (G2)', () => {
     ];
 
     const { markdown } = assembleBudgetedMarkdown(sorted, 1000);
-    const idxInsights = markdown.indexOf('## Insights');
-    const idxDigests = markdown.indexOf('## Digests');
-    const idxObs = markdown.indexOf('## Observations');
+    const idxObs = markdown.indexOf('obs one');
+    const idxIns = markdown.indexOf('ins one');
+    const idxDig = markdown.indexOf('dig one');
 
-    expect(idxInsights).toBeGreaterThanOrEqual(0);
-    expect(idxInsights).toBeLessThan(idxDigests);
-    expect(idxDigests).toBeLessThan(idxObs);
+    // Order follows rrfScore (0.99 > 0.80 > 0.70), NOT tier grouping.
+    expect(idxObs).toBeGreaterThanOrEqual(0);
+    expect(idxObs).toBeLessThan(idxIns);
+    expect(idxIns).toBeLessThan(idxDig);
   });
 
-  test('only emits headers for tiers that have results', () => {
+  test('emits a single Observational Memory header (no per-tier sections)', () => {
     const sorted = [
       mkResult('i1', 'insights', 0.80, 'only insights here'),
       mkResult('i2', 'insights', 0.70, 'another insight'),
     ];
     const { markdown } = assembleBudgetedMarkdown(sorted, 1000);
-    expect(markdown).toContain('## Insights');
+    expect((markdown.match(/## Observational Memory/g) || []).length).toBe(1);
+    expect(markdown).not.toContain('## Insights');
     expect(markdown).not.toContain('## Digests');
     expect(markdown).not.toContain('## Observations');
     expect(markdown).not.toContain('## Entities');

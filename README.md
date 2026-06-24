@@ -640,7 +640,7 @@ KnowledgeInjectionHook (UserPromptSubmit)        Dashboard Live Preview (typing)
 | 4.75 | **Query↔Item exponential** | `_applyQueryItemExponential` | When enabled: `rrfScore ×= clamp(cosine,0,1)^k` on semantic-origin items |
 | 4.8 | **Learned rerank** | `_applyLearnedRerank` | Query↔Query feedback boost (see above) |
 | 5 | Sort + rank | `fused.sort(rrfScore desc)` → `toRankedResult` | Produces `rankedResults` |
-| 6 | Token budget | `assembleBudgetedMarkdown` | Working ≤300 + Observational ≤700 tok markdown |
+| 6 | Token budget | `assembleBudgetedMarkdown` | Working ≤300 + Observational ≤700 tok markdown; OM items emitted in **final rank order** (most-favoured first), each tagged `**[Insight/Digest/Entity/Observation]**` |
 
 **Two-stage tunable similarity model**
 
@@ -676,6 +676,16 @@ This makes human feedback **query-specific**: with the Query↔Query exponential
 a re-ranking saved for one query barely moves results for a *very different* query
 (its low cosine, raised to `k`, collapses toward zero) while still strongly
 shaping *similar* queries.
+
+**Observational Memory emission order.** `assembleBudgetedMarkdown` still uses the
+per-tier reservation + caps (G2) to decide **which** candidates fit the ≤700-token
+budget, but it emits the selected items as a single `## Observational Memory`
+list ordered by **final score/rank** — most-favoured first — rather than grouping
+them into per-tier sections. Each line is prefixed with a compact tier tag
+(`**[Insight]**`, `**[Digest]**`, `**[Entity]**`, `**[Observation]**`) so tier
+attribution survives. The dashboard renders this same ranked list in the
+Observational Memory column, and the per-item `usedInObservational` flag (surfaced
+as the **OM** pill on All Results) marks exactly the candidates that made it in.
 
 **Global, persisted, single source of truth.** Settings are stored server-side in
 [`src/retrieval/retrieval-settings.js`](src/retrieval/retrieval-settings.js)

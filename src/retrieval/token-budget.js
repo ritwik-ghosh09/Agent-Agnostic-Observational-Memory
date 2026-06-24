@@ -2,8 +2,9 @@
  * Token-budgeted markdown assembly for retrieval results.
  *
  * Uses gpt-tokenizer for accurate token counting (D-07).
- * Fills budget by walking RRF-sorted results, bucketing by tier,
- * and assembling markdown with tier headers (D-05, D-08).
+ * Selects items by walking RRF-sorted results with per-tier reservation/caps
+ * (G2), then emits the selected items as a single list ordered by final
+ * score/rank — most favoured first (D-05, D-08).
  *
  * @module token-budget
  */
@@ -40,12 +41,12 @@ const TIER_MAX_RESULTS = {
   observations: 3,
 };
 
-/** Tier section headers for markdown output (D-05). */
-const TIER_HEADERS = {
-  insights: '## Insights',
-  digests: '## Digests',
-  kg_entities: '## Entities',
-  observations: '## Observations',
+/** Compact per-item tier tag, preserved when items are emitted in rank order. */
+const TIER_TAG = {
+  insights: 'Insight',
+  digests: 'Digest',
+  kg_entities: 'Entity',
+  observations: 'Observation',
 };
 
 /**
@@ -116,9 +117,10 @@ export function truncateResult(item, tokenBudget) {
  *
  * Walk sorted results (already sorted by RRF score). For each result:
  * format it, count tokens. If adding would exceed budget: truncate to
- * fit remaining (if remaining > 50 tokens), then break. Bucket results
- * by tier. Build final markdown with tier headers. Only include headers
- * for tiers that have results (D-05, D-08).
+ * fit remaining (if remaining > 50 tokens), then break. Per-tier reservation
+ * (G2) + caps decide WHICH results are included; the selected results are then
+ * emitted as a single list ordered by final score/rank — most favoured first,
+ * each prefixed with a compact tier tag (D-05, D-08).
  *
  * @param {Array<object>} sortedResults - RRF-fused results sorted by score descending
  * @param {number} budget - Token budget (default 1000 per D-08)
@@ -150,7 +152,6 @@ function contentSignature(item) {
 }
 
 export function assembleBudgetedMarkdown(sortedResults, budget = 1000) {
-  const buckets = Object.fromEntries(TIER_ORDER.map((t) => [t, []]));
   let tokensUsed = 0;
 
   const tierCounts = Object.fromEntries(TIER_ORDER.map((t) => [t, 0]));
@@ -160,18 +161,39 @@ export function assembleBudgetedMarkdown(sortedResults, budget = 1000) {
   // inside tryAdd so the final truncated-on-break item is captured too. Used to
   // mark rankedResults.usedInObservational for the dashboard "OM" pill.
   const includedKeys = new Set();
+  // Selected items, each tagged with its final rank so the OM markdown can be
+  // emitted in descending score order (most favoured first) regardless of tier.
+  const included = [];
+
+  // Final rank lookup: position in the rrfScore-desc `sortedResults` (lower is
+  // more favoured). Keyed by `${tier}:${id}` to match the dashboard item key.
+  const rankByKey = new Map();
+  sortedResults.forEach((r, i) => {
+    if (r && r.tier != null && r.id != null) {
+      const k = `${r.tier}:${r.id}`;
+      if (!rankByKey.has(k)) rankByKey.set(k, i);
+    }
+  });
+  const rankOf = (result) => {
+    if (result && result.tier != null && result.id != null) {
+      const k = `${result.tier}:${result.id}`;
+      if (rankByKey.has(k)) return rankByKey.get(k);
+    }
+    return Number.MAX_SAFE_INTEGER;
+  };
 
   const recordKey = (result) => {
     if (result == null || result.tier == null || result.id == null) return;
     includedKeys.add(`${result.tier}:${result.id}`);
   };
 
-  // Helper: attempt to add a single result to its bucket. Returns true if the
-  // result was added (in full or truncated), false if skipped/over budget.
+  // Helper: attempt to add a single result. Returns true if the result was added
+  // (in full or truncated), false if skipped/over budget. Selection only — the
+  // emission order is decided later by final rank.
   const tryAdd = (result, { allowTruncate }) => {
+    if (!(result.tier in tierCounts)) return false;
     const cap = TIER_MAX_RESULTS[result.tier] ?? 5;
     if ((tierCounts[result.tier] ?? 0) >= cap) return false;
-    if (!buckets[result.tier]) return false;
 
     const sig = contentSignature(result);
     if (sig && seenSignatures.has(sig)) return false;
@@ -186,7 +208,7 @@ export function assembleBudgetedMarkdown(sortedResults, budget = 1000) {
       const truncated = truncateResult(result, remaining);
       if (!truncated) return false;
       const tf = formatResult(truncated);
-      buckets[result.tier].push(tf);
+      included.push({ rank: rankOf(result), tier: result.tier, formatted: tf });
       tierCounts[result.tier] += 1;
       if (sig) seenSignatures.add(sig);
       tokensUsed += countTokens(tf);
@@ -194,7 +216,7 @@ export function assembleBudgetedMarkdown(sortedResults, budget = 1000) {
       return true;
     }
 
-    buckets[result.tier].push(formatted);
+    included.push({ rank: rankOf(result), tier: result.tier, formatted });
     tierCounts[result.tier] += 1;
     if (sig) seenSignatures.add(sig);
     tokensUsed += tokens;
@@ -205,7 +227,8 @@ export function assembleBudgetedMarkdown(sortedResults, budget = 1000) {
   // Pass 1 (G2 fix): reserve MIN_TIER_SLOTS for each non-empty tier, walked in
   // decreasing-weight TIER_ORDER. This guarantees higher-weight tiers
   // (insights/digests) that cleared the similarity threshold are represented
-  // even when lower-weight observations dominate the global RRF ranking.
+  // even when lower-weight observations dominate the global RRF ranking. (This
+  // controls SELECTION only; the reserved item is still emitted at its true rank.)
   for (const tier of TIER_ORDER) {
     const tierResults = sortedResults.filter((r) => r.tier === tier);
     let reserved = 0;
@@ -233,13 +256,13 @@ export function assembleBudgetedMarkdown(sortedResults, budget = 1000) {
     }
   }
 
-  // Build final markdown with tier headers (D-05)
-  const sections = [];
-  for (const tier of TIER_ORDER) {
-    if (buckets[tier].length > 0) {
-      sections.push(`${TIER_HEADERS[tier]}\n\n${buckets[tier].join('\n')}`);
-    }
-  }
+  // Emit the selected items in final score/rank order — most favoured first —
+  // each prefixed with a compact tier tag so tier attribution survives.
+  included.sort((a, b) => a.rank - b.rank);
+  const body = included
+    .map((e) => `**[${TIER_TAG[e.tier] || 'Item'}]** ${e.formatted}`)
+    .join('\n');
+  const markdown = body ? `## Observational Memory\n\n${body}` : '';
 
-  return { markdown: sections.join('\n\n'), tokensUsed, includedKeys: [...includedKeys] };
+  return { markdown, tokensUsed, includedKeys: [...includedKeys] };
 }
