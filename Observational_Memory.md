@@ -24,9 +24,11 @@ similar queries accordingly.
 5. [Storage Mechanism — Where Everything Lives](#5-storage-mechanism--where-everything-lives)
 6. [Retrieval Pipeline — The Read Path](#6-retrieval-pipeline--the-read-path)
 7. [★ Live Human-Feedback Reranking](#7--live-human-feedback-reranking-the-standout-feature)
-8. [Configuration & Tuning](#8-configuration--tuning)
-9. [API Quick Reference](#9-api-quick-reference)
-10. [Glossary](#10-glossary)
+8. [Retrieval Tuning Controls — Slider & Exponential Toggle](#8-retrieval-tuning-controls--slider--exponential-toggle)
+9. [Configuration & Tuning](#9-configuration--tuning)
+10. [Future Optimization — Supervised Embedder Fine-Tuning](#10-future-optimization--supervised-embedder-fine-tuning)
+11. [API Quick Reference](#11-api-quick-reference)
+12. [Glossary](#12-glossary)
 
 ---
 
@@ -82,6 +84,13 @@ graph TD
     O1 -->|"consolidate (group by theme)"| D1
     D1 -->|"synthesize (>= 5 digests)"| I1
     I1 -.->|"confidence decay + freshness verify"| I1
+
+    classDef tier1 fill:#bfdbfe,stroke:#2563eb,stroke-width:1px,color:#0b2447;
+    classDef tier2 fill:#bbf7d0,stroke:#16a34a,stroke-width:1px,color:#06371d;
+    classDef tier3 fill:#e9d5ff,stroke:#7c3aed,stroke-width:1px,color:#2e1065;
+    class O1 tier1;
+    class D1 tier2;
+    class I1 tier3;
 ```
 
 Each tier is queryable independently and all four contribute to retrieval, but
@@ -108,6 +117,15 @@ graph TD
     G -->|"duplicate"| X["Drop"]
     G -->|"unique"| H["Insert into SQLite<br/>(observations table)"]
     H --> I["Debounced JSON export<br/>(.data/observation-export/)"]
+
+    classDef human fill:#fde68a,stroke:#d97706,stroke-width:1px,color:#5a3408;
+    classDef compute fill:#bfdbfe,stroke:#2563eb,stroke-width:1px,color:#0b2447;
+    classDef store fill:#bbf7d0,stroke:#16a34a,stroke-width:1px,color:#06371d;
+    classDef drop fill:#fecaca,stroke:#dc2626,stroke-width:1px,color:#7f1d1d;
+    class A,B human;
+    class C,D,E,F,G compute;
+    class H,I store;
+    class X drop;
 ```
 
 ### Step-by-step
@@ -164,6 +182,11 @@ graph TD
         ID --> IE["Confidence decay -0.05/week, floor 0.3"]
     end
     DD --> IA
+
+    classDef compute fill:#bfdbfe,stroke:#2563eb,stroke-width:1px,color:#0b2447;
+    classDef store fill:#bbf7d0,stroke:#16a34a,stroke-width:1px,color:#06371d;
+    class DA,DB,DC,IA,IB,IC,ID,IE compute;
+    class DD store;
 ```
 
 ### Digests (Tier 2)
@@ -222,6 +245,13 @@ graph TD
     C -.->|"exportAll"| JSON
 
     Dash["Dashboard / container :3033"] -.->|"HTTP forward only"| Host
+
+    classDef compute fill:#bfdbfe,stroke:#2563eb,stroke-width:1px,color:#0b2447;
+    classDef store fill:#bbf7d0,stroke:#16a34a,stroke-width:1px,color:#06371d;
+    classDef output fill:#e9d5ff,stroke:#7c3aed,stroke-width:1px,color:#2e1065;
+    class W,C,R compute;
+    class SQL,QD,JSON store;
+    class Dash output;
 ```
 
 ### 5.1 SQLite — the single-owner runtime store
@@ -355,6 +385,15 @@ graph TD
     SORT --> TB["Step 5: Token-budgeted markdown"]
     WM --> TB
     TB --> OUT["Working memory + ranked memory → agent"]
+
+    classDef compute fill:#bfdbfe,stroke:#2563eb,stroke-width:1px,color:#0b2447;
+    classDef store fill:#bbf7d0,stroke:#16a34a,stroke-width:1px,color:#06371d;
+    classDef rerank fill:#fbcfe8,stroke:#db2777,stroke-width:1px,color:#6d1238;
+    classDef output fill:#e9d5ff,stroke:#7c3aed,stroke-width:1px,color:#2e1065;
+    class Q,EMB,WM,RRF compute;
+    class SEM,KW,REC store;
+    class CB,TR,FR,QI,LR,SORT rerank;
+    class TB,OUT output;
 ```
 
 Each pass mutates an `rrfScore` on the fused candidates:
@@ -407,6 +446,15 @@ graph TD
         M --> BOOST["rrfScore *= multiplier<br/>(only items already in fused list)"]
     end
     U -.->|"persisted event"| FS
+
+    classDef human fill:#fde68a,stroke:#d97706,stroke-width:1px,color:#5a3408;
+    classDef compute fill:#bfdbfe,stroke:#2563eb,stroke-width:1px,color:#0b2447;
+    classDef store fill:#bbf7d0,stroke:#16a34a,stroke-width:1px,color:#06371d;
+    classDef rerank fill:#fbcfe8,stroke:#db2777,stroke-width:1px,color:#6d1238;
+    class H human;
+    class P,E,S,NQ compute;
+    class U store;
+    class FS,AG,M,BOOST rerank;
 ```
 
 ### 7.1 Capture — turning a reorder into a learning signal
@@ -454,7 +502,100 @@ deliberately out of scope). Each boosted item carries a `learnedRerank`
 `{ multiplier, signal, matchedEvents }` object for explainability, surfaced as a
 dashboard pill.
 
-### 7.3 Why this is safe — design guarantees
+### 7.3 The two gates that decide how much a reorder counts
+
+Not every past reorder should influence the current query equally. A reorder you
+made for *"why does the docker build time out"* should strongly shape a near-identical
+future query, but should barely touch *"how does RRF fusion work"*. Two gates,
+applied in sequence inside `aggregateLearnedSignals()`, enforce exactly that.
+
+**Gate 1 — the similarity admission gate (hard cutoff).**
+`FeedbackStore.findSimilar` only returns feedback events whose stored query
+embedding has cosine similarity **≥ the `queryQuery` threshold** (default `0.85`)
+to the current query, via Qdrant's `score_threshold`. Anything below the floor is
+never even considered — a binary in/out decision. This keeps unrelated past
+opinions out of the picture entirely.
+
+**Gate 2 — the exponential emphasis gate (soft reshape).**
+Admission is not enough, because the admitted band (`0.85 → 1.00`) still mixes
+"basically the same question" with "loosely related". MiniLM cosine scores are
+compressed: a *near-duplicate* query might score `0.97` while a *merely related*
+one scores `0.86`, only `0.11` apart. A linear weight (`weight = similarity`)
+would treat those almost identically. The exponential reshape
+
+```text
+similarityWeight = clamp(similarity, 0, 1) ^ k        // k = queryQuery exponent, default 3
+```
+
+**stretches** that compressed band so small similarity differences become large
+weight differences — letting the system make a *fine-grained* selection among
+very-similar queries.
+
+![Exponential gate: similarity weight vs. query↔query cosine similarity for several exponents](docs/images/learned-rerank-exponential-curve.png)
+
+Reading the plot (x = query↔query cosine similarity, y = the weight that feedback
+event receives):
+
+- **`k = 1` (linear, exponential OFF)** — weight equals raw cosine. At the `0.85`
+  floor an admitted event still carries `0.85` weight, so a barely-related past
+  query counts almost as much as a perfect match. Coarse.
+- **`k = 3` (default)** — the curve bows downward: `0.86` collapses to
+  `0.86³ ≈ 0.64`, while `0.97` stays high at `0.97³ ≈ 0.91`. The gap between
+  "related" and "near-duplicate" widens from `0.11` to `~0.27`.
+- **`k = 5` / `k = 8`** — progressively sharper. At `k = 8`, `0.86⁸ ≈ 0.30` is
+  heavily suppressed while `0.99⁸ ≈ 0.92` survives — only near-identical queries
+  retain meaningful weight.
+
+**Why this matters for fine-grained selection.** Within the narrow, high-similarity
+band that survives Gate 1, the *ordering* of influence is what determines whether
+the boost reflects the *right* prior judgment. The exponential turns a flat,
+indiscriminate band into a steep ramp, so the event from the query that truly
+matches dominates the events from queries that merely overlap. Raising `k`
+(via the dashboard, see [§8](#8-retrieval-tuning-controls--slider--exponential-toggle))
+tightens this to near-duplicate-only; lowering it broadens generalization.
+
+The same two-gate idea is reused on the read path as **Query↔Item** emphasis
+(Step 4.75): Gate 1 is the `queryItem` admission threshold (which *items* are
+retrieved), Gate 2 is `cosine^k` applied to each item's score (how steeply
+near-duplicate *items* are emphasized).
+
+### 7.4 Worked example — from a drag to a boost
+
+Suppose last week you searched **"docker build times out on coding-services"** and
+dragged the insight *"ETM Docker Build Timeout Hardening"* from rank 5 up to rank 1,
+out of 8 shown results. That created one feedback event. Today a teammate asks
+**"docker-compose build hangs for coding-services"** — cosine similarity to your
+stored query is `0.95`. With defaults (`k = 3`, half-life `45 d`, coefficient
+`0.30`, confidence divisor `1.5`), and the event captured `10` days ago:
+
+```text
+similarityWeight = 0.95 ^ 3                     = 0.857     (Gate 2 reshape)
+ageWeight        = 0.5 ^ (10 / 45)              = 0.857     (45-day decay)
+eventWeight      = 0.857 × 0.857 × 1.0 × 1.0    = 0.735     (scope/user weight = 1.0)
+deltaNorm        = (5 − 1) / (8 − 1)            = 0.571     (promoted 4 ranks of 7)
+weightedDelta    = (0.571 × 0.735) / 0.735      = 0.571     (single event)
+confidence       = min(1, 0.735 / 1.5)          = 0.490     (one event ⇒ modest)
+learnedSignal    = clamp(0.571 × 0.490, −1, 1)  = 0.280
+multiplier       = clamp(1 + 0.30 × 0.280, 0.90, 1.25) = 1.084
+```
+
+The insight's `rrfScore` is boosted **≈ 8.4 %** — enough to lift it a rank or two,
+not enough to override a strongly off-topic result. Now contrast the gates and the
+loop's self-reinforcement:
+
+| Scenario | Effect on multiplier |
+|----------|----------------------|
+| Similarity only `0.86` (just above floor), `k = 3` | `0.86³ = 0.64` weight → `confidence ≈ 0.36` → multiplier `≈ 1.062` (smaller) |
+| Same `0.86` but exponential **OFF** (linear) | weight `0.86` → larger, indiscriminate boost — the coarse behavior the exponential prevents |
+| **Five** teammates agree (5 similar events) | `Σ|eventWeight|` grows → `confidence → 1.0` → multiplier approaches the `1.25` cap |
+| Event is now `90` days old | `ageWeight = 0.5^(90/45) = 0.25` → boost shrinks ~4× as the opinion ages out |
+
+This is the crux of the feature: **a single human drag becomes a small, principled,
+decaying nudge; repeated human agreement on similar queries compounds into a strong,
+bounded boost** — and the exponential gate guarantees that compounding only happens
+for the queries that genuinely match.
+
+### 7.5 Why this is safe — design guarantees
 
 | Guarantee | How |
 |-----------|-----|
@@ -466,7 +607,7 @@ dashboard pill.
 | **Scoped** | Project-scoped by default; global fallback is off unless explicitly enabled and runs at higher threshold + reduced weight. |
 | **Explainable** | `learnedRerank` metadata records exactly why an item was boosted. |
 
-### 7.4 The self-improving loop
+### 7.6 The self-improving loop
 
 ```mermaid
 graph TD
@@ -475,6 +616,15 @@ graph TD
     F1 --> S1["Event stored in human_rerank_feedback"]
     S1 --> R2["Next similar query reranked by learned signal"]
     R2 --> U1
+
+    classDef human fill:#fde68a,stroke:#d97706,stroke-width:1px,color:#5a3408;
+    classDef store fill:#bbf7d0,stroke:#16a34a,stroke-width:1px,color:#06371d;
+    classDef rerank fill:#fbcfe8,stroke:#db2777,stroke-width:1px,color:#6d1238;
+    classDef output fill:#e9d5ff,stroke:#7c3aed,stroke-width:1px,color:#2e1065;
+    class U1,F1 human;
+    class S1 store;
+    class R2 rerank;
+    class R1 output;
 ```
 
 Over time, the system's ranking converges toward **human-validated usefulness**
@@ -482,14 +632,88 @@ for the queries that matter most — something pure embedding similarity cannot 
 
 ---
 
-## 8. Configuration & Tuning
+## 8. Retrieval Tuning Controls — Slider & Exponential Toggle
 
-### 8.1 Retrieval settings (`.observations/retrieval-settings.json`)
+The dashboard exposes the two similarity stages as live, draggable controls in the
+**Retrieval Tuning** panel (`RetrievalTuningPanel.tsx`). These are not per-session
+toys — they write to the same `.observations/retrieval-settings.json` that the
+production retrieval path reads, so **whatever you set here is the single source of
+truth** for both the UserPromptSubmit knowledge-injection hook and the dashboard's
+live preview.
+
+```mermaid
+graph TD
+    subgraph Panel["Retrieval Tuning panel (dashboard)"]
+        QQ["Query ↔ Query group<br/>Threshold · Exponential · k"]
+        QI["Query ↔ Item group<br/>Threshold · Exponential · k"]
+    end
+    QQ -->|"setField (optimistic)"| DEB["Debounced 400 ms PUT"]
+    QI -->|"setField (optimistic)"| DEB
+    DEB --> API["PUT /api/retrieval-settings"]
+    API --> FILE[(".observations/retrieval-settings.json<br/>single source of truth")]
+    FILE --> HOOK["UserPromptSubmit hook<br/>(real retrieval)"]
+    FILE --> PREVIEW["Dashboard live preview<br/>(re-runs on save)"]
+
+    classDef human fill:#fde68a,stroke:#d97706,stroke-width:1px,color:#5a3408;
+    classDef compute fill:#bfdbfe,stroke:#2563eb,stroke-width:1px,color:#0b2447;
+    classDef store fill:#bbf7d0,stroke:#16a34a,stroke-width:1px,color:#06371d;
+    classDef output fill:#e9d5ff,stroke:#7c3aed,stroke-width:1px,color:#2e1065;
+    class QQ,QI human;
+    class DEB,API compute;
+    class FILE store;
+    class HOOK,PREVIEW output;
+```
+
+### 8.1 The two control groups
+
+| Group | Governs | Stage in pipeline | Default |
+|-------|---------|-------------------|---------|
+| **Query ↔ Query** | How strongly a *past human-ranked query* influences the current ranking (the learned-rerank feedback gate) | Step 4.8 ([§7](#7--live-human-feedback-reranking-the-standout-feature)) | threshold `0.85`, exponential **on**, `k = 3.0` |
+| **Query ↔ Item** | Which *memory items* are admitted for the current query, and how steeply their similarity is emphasized | Steps 2 + 4.75 ([§6](#6-retrieval-pipeline--the-read-path)) | threshold `0.70`, exponential **off**, `k = 3.0` |
+
+### 8.2 The three knobs in each group
+
+Each group has the same three controls:
+
+| Control | UI | Range / step | Effect on retrieval |
+|---------|-----|--------------|---------------------|
+| **Threshold** | Slider | `0.50 – 0.99`, step `0.01` | The cosine **admission floor** (Gate 1). Raise it → fewer, stricter matches (precision ↑, recall ↓). Lower it → more, looser matches (recall ↑, noise ↑). For Query↔Item this is Qdrant's `score_threshold`; for Query↔Query it is the feedback-event admission floor. |
+| **Exponential** | Switch | on / off | Turns Gate 2 on/off. **On** → `weight = similarity^k` (near-matches emphasized, far-matches suppressed). **Off** → linear/raw cosine (rank-based only for Query↔Item; flat weighting for Query↔Query). |
+| **Exponent (k)** | Slider | `1.0 – 8.0`, step `0.5` | Sharpness of the falloff (disabled, shown `—`, when the switch is off). Higher `k` → only near-duplicate queries/items keep weight (see the curve in [§7.3](#73-the-two-gates-that-decide-how-much-a-reorder-counts)); lower `k` → broader generalization. |
+
+### 8.3 How a change propagates
+
+1. You drag a slider or flip a switch → local state updates **optimistically**
+   (instant UI feedback).
+2. The change is **debounced 400 ms** so dragging doesn't spam the server, then
+   `PUT /api/retrieval-settings` persists it.
+3. The server **validates and clamps** to bounds (threshold `[0.5, 0.99]`,
+   exponent `[1.0, 8.0]`), writes atomically (tmp file + rename), and returns the
+   stored value.
+4. The dashboard's `onSaved` callback **re-runs the live preview**, so you
+   immediately see how the new settings reorder a real query's results.
+5. The very next agent prompt picks up the same file (mtime-cached, fail-open to
+   defaults on any read error) — no restart required.
+
+### 8.4 Practical tuning recipes
+
+| Goal | Adjustment |
+|------|-----------|
+| Feedback is over-generalizing to loosely-related queries | **Query↔Query:** raise threshold toward `0.90` and/or raise `k` to `5–8` |
+| Feedback barely affects anything | **Query↔Query:** lower threshold toward `0.80`, keep exponential on at `k ≈ 3` |
+| Too few memories retrieved | **Query↔Item:** lower threshold toward `0.60` |
+| Retrieved items feel off-topic | **Query↔Item:** turn exponential **on**, `k ≈ 3` to emphasize true near-duplicates |
+
+---
+
+## 9. Configuration & Tuning
+
+### 9.1 Retrieval settings (`.observations/retrieval-settings.json`)
 
 A single JSON file is the **single source of truth** read by `retrieve()`, so the
 UserPromptSubmit hook and the dashboard live preview honor identical values. It
 exposes two similarity stages, each with `threshold`, `exponentialEnabled`, and
-`exponent`:
+`exponent` — surfaced as the controls in [§8](#8-retrieval-tuning-controls--slider--exponential-toggle):
 
 | Stage | Controls | Default threshold | Default exponential |
 |-------|----------|-------------------|---------------------|
@@ -499,7 +723,7 @@ exposes two similarity stages, each with `threshold`, `exponentialEnabled`, and
 Bounds: threshold `[0.5, 0.99]`, exponent `[1.0, 8.0]`. Reads/writes are
 fail-open (defaults on error) and atomic (tmp file + rename).
 
-### 8.2 Learned-rerank env overrides
+### 9.2 Learned-rerank env overrides
 
 All tuning constants are env-overridable, so the loop can be tuned without code
 changes:
@@ -514,7 +738,7 @@ changes:
 | `LEARNED_RERANK_CONFIDENCE_DIVISOR` | 1.5 | Confidence normalizer |
 | `LEARNED_RERANK_GLOBAL` | off | Enable reduced-weight cross-project fallback |
 
-### 8.3 Observation creation (`.observations/config.json`)
+### 9.3 Observation creation (`.observations/config.json`)
 
 Per-agent LLM model selection and token limits, e.g. default
 `anthropic/claude-haiku-4-5`. Summarization routes through the LLM CLI proxy
@@ -523,7 +747,90 @@ groq → paid APIs), priority configured in `config/llm-providers.yaml`.
 
 ---
 
-## 9. API Quick Reference
+## 10. Future Optimization — Supervised Embedder Fine-Tuning
+
+Everything in [§6](#6-retrieval-pipeline--the-read-path) and
+[§7](#7--live-human-feedback-reranking-the-standout-feature) improves ranking
+*after* the embedder has spoken — RRF, tier weights, context, freshness, and the
+learned rerank all operate on top of a **frozen** `all-MiniLM-L6-v2`. That model
+was trained on generic web text, which is exactly why its cosine scores cluster in
+a narrow `0.75–0.82` band for any two documents in the same project: it has no
+notion of *this* codebase's relevance. The reranking layers compensate, but they
+cannot recover signal the embedding never encoded.
+
+The next leap is to **move relevance into the embedding space itself** by
+fine-tuning the embedder on *our own* supervised "good" examples — and we already
+collect them. Every saved rerank event in `human_rerank_feedback` is a labeled
+judgment: for query `q`, item `A` (promoted) is *more* relevant than item `B`
+(demoted). That is precisely the supervision signal contrastive sentence-embedding
+training consumes.
+
+```mermaid
+graph TD
+    FB[("human_rerank_feedback<br/>(query, promoted, demoted)")] --> MINE["Mine triplets<br/>(anchor=query, positive=promoted item,<br/>negative=demoted item)"]
+    OBS[("observations / digests / insights<br/>(query ↔ used-item pairs)")] --> MINE
+    MINE --> CLEAN["Filter + dedup + hard-negative selection"]
+    CLEAN --> TRAIN["Fine-tune MiniLM<br/>(MultipleNegativesRanking / TripletLoss)"]
+    TRAIN --> EVAL{"Offline eval<br/>(nDCG / MRR vs. held-out feedback)"}
+    EVAL -->|"regression"| TRAIN
+    EVAL -->|"improved"| EMB["Promote new embedder<br/>(versioned)"]
+    EMB --> REEMBED["Re-embed all collections<br/>(observations/digests/insights/kg_entities)"]
+    REEMBED --> SERVE["Serve: sharper query↔item cosines"]
+
+    classDef store fill:#bbf7d0,stroke:#16a34a,stroke-width:1px,color:#06371d;
+    classDef compute fill:#bfdbfe,stroke:#2563eb,stroke-width:1px,color:#0b2447;
+    classDef rerank fill:#fbcfe8,stroke:#db2777,stroke-width:1px,color:#6d1238;
+    classDef output fill:#e9d5ff,stroke:#7c3aed,stroke-width:1px,color:#2e1065;
+    class FB,OBS store;
+    class MINE,CLEAN,TRAIN,REEMBED compute;
+    class EVAL rerank;
+    class EMB,SERVE output;
+```
+
+### 10.1 Where the supervised pairs come from
+
+| Source | Positive (relevant) | Negative (less relevant) |
+|--------|---------------------|--------------------------|
+| **Rerank feedback** (strongest) | Item a human dragged **up** (`humanRank < originalRank`) | Item a human dragged **down**, or one ranked below it |
+| **Used-in-Observational provenance** | Items flagged `usedInObservational` for a query | Retrieved-but-dropped items for the same query |
+| **Consolidation links** | Observations cited by a digest / digests cited by an insight | Same-window items not cited |
+
+These yield `(anchor query, positive item, negative item)` **triplets** — the
+canonical input for `MultipleNegativesRankingLoss` or `TripletLoss` in
+`sentence-transformers`.
+
+### 10.2 Why this complements (not replaces) the rerank loop
+
+| Aspect | Learned rerank (today) | Fine-tuned embedder (proposed) |
+|--------|------------------------|--------------------------------|
+| **Where it acts** | Post-hoc, on the fused candidate list | At the source — the cosine scores themselves |
+| **Recall of new items** | None (only re-orders already-retrieved items) | **Yes** — a better embedder *surfaces* items the old one missed |
+| **Latency** | A single extra Qdrant lookup per query | Zero at query time (cost is offline training + one re-embed) |
+| **Failure mode** | Fail-open no-op | Needs versioning + offline eval gate before promotion |
+| **Data reuse** | Consumes feedback events | Consumes the *same* feedback events as training labels |
+
+The learned rerank is the fast, safe, online loop; embedder fine-tuning is the
+slower, offline loop that **bakes the accumulated human judgment into the model**
+so future queries start from a sharper similarity space — after which the rerank
+layer has less work to do and operates on cleaner candidates.
+
+### 10.3 Practical guardrails
+
+- **Cold-start threshold** — only fine-tune once enough distinct feedback triplets
+  exist (e.g. a few hundred), otherwise the model overfits a handful of queries.
+- **Hard-negative mining** — negatives should be *plausible* (retrieved but
+  demoted), not random; random negatives teach the model nothing new.
+- **Versioned, gated rollout** — train → evaluate nDCG/MRR against a held-out slice
+  of feedback → promote only on improvement; keep the previous embedder for rollback.
+- **Re-embed on promotion** — dimensions stay 384 (drop-in for the existing Qdrant
+  collections), but all vectors must be regenerated with the new model so query and
+  stored embeddings live in the same space.
+- **Keep it fail-open** — the retrieval pipeline must run unchanged on the frozen
+  baseline if a fine-tuned model is unavailable.
+
+---
+
+## 11. API Quick Reference
 
 All endpoints are served by the host obs-api (`localhost:12436`) and mirrored by
 the dashboard (`localhost:3033`) as thin HTTP forwarders.
@@ -543,7 +850,7 @@ the dashboard (`localhost:3033`) as thin HTTP forwarders.
 
 ---
 
-## 10. Glossary
+## 12. Glossary
 
 | Term | Definition |
 |------|-----------|
@@ -557,9 +864,15 @@ the dashboard (`localhost:3033`) as thin HTTP forwarders.
 | **Working memory** | Always-on context prefix (team/project state) prepended to retrieval output. |
 | **Freshness band** | FRESH/PARTIAL/STALE classification of an insight by code-claim verification ratio. |
 | **Learned rerank** | The bounded, decaying boost derived from human re-ranking feedback. |
+| **Admission gate (Gate 1)** | The cosine threshold below which a query/item is excluded entirely (hard cutoff). |
+| **Exponential gate (Gate 2)** | The `similarity^k` reshape that emphasizes near-duplicates over loosely-similar matches (soft). |
+| **Exponent (k)** | Sharpness of the exponential gate (1.0–8.0); higher = steeper falloff, near-duplicate-only. |
+| **Query↔Query** | Similarity between the current query and a past human-ranked query (drives learned rerank). |
+| **Query↔Item** | Similarity between the query and a memory item (drives semantic admission + emphasis). |
 | **`human_rerank_feedback`** | Qdrant collection storing one query-keyed event per human reorder. |
 | **itemSignals** | Per-item `originalRank`/`humanRank`/`rankDelta` records inside a feedback event. |
 | **learnedSignal** | Confidence-weighted, clamped rank-delta that drives the rerank multiplier. |
+| **Triplet** | `(anchor query, positive item, negative item)` training example mined from feedback for embedder fine-tuning. |
 | **Fail-open** | Design principle: any failure degrades to current behavior, never worse. |
 
 ---
