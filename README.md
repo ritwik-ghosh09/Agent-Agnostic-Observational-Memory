@@ -559,14 +559,21 @@ strict no-op whenever the feedback store is empty or unavailable, so cold-start
 behavior is identical to today.
 
 The multiplier is `clamp(1 + 0.30 × learnedSignal, 0.90, 1.25)` where
-`learnedSignal` blends each event's cosine similarity, exponential age decay
-(45-day half-life), project scope, and the normalized rank delta. Boosted items
-carry an optional `learnedRerank` `{ multiplier, signal, matchedEvents }` field
-for explainability. Tunables live as env-overridable constants at the top of
+`learnedSignal` blends each event's **query↔query similarity weight**, exponential
+age decay (45-day half-life), project scope, and the normalized rank delta. The
+similarity weight is the reshaped query↔query cosine: `cosine^exponent` when the
+Query↔Query exponential is enabled (sharper — only near-duplicate queries carry
+weight), or the raw `cosine` when disabled (linear). Boosted items carry an
+optional `learnedRerank` `{ multiplier, signal, matchedEvents }` field for
+explainability. Tunables live as env-overridable constants at the top of
 [`src/retrieval/feedback-store.js`](src/retrieval/feedback-store.js)
 (`LEARNED_RERANK_THRESHOLD`, `LEARNED_RERANK_TOPK`,
 `LEARNED_RERANK_HALF_LIFE_DAYS`, `LEARNED_RERANK_COEFFICIENT`,
-`LEARNED_RERANK_MIN/MAX_MULTIPLIER`, `LEARNED_RERANK_GLOBAL`).
+`LEARNED_RERANK_MIN/MAX_MULTIPLIER`, `LEARNED_RERANK_SIMILARITY_EXPONENT`,
+`LEARNED_RERANK_EXPONENTIAL_ENABLED`, `LEARNED_RERANK_GLOBAL`) — and the
+`threshold`/`exponential`/`exponent` values are **overridden at runtime** by the
+user-tunable global retrieval settings described in *Retrieval pipeline & tunable
+scoring* below.
 
 ```mermaid
 graph TD
@@ -595,6 +602,120 @@ graph TD
     end
 ```
 
+
+#### Retrieval pipeline & tunable scoring
+
+Every retrieval — whether triggered by the **`UserPromptSubmit` Knowledge
+Injection Hook** (the actual submitted prompt) or by the **dashboard live preview**
+(the draft you are typing) — converges on a single function,
+[`RetrievalService.retrieve()`](src/retrieval/retrieval-service.js). Both paths
+therefore score **identically** and honor the same user-tunable settings, so what
+you preview in the **Live Context** tab is exactly what gets injected on submit.
+
+**Path convergence**
+
+```
+KnowledgeInjectionHook (UserPromptSubmit)        Dashboard Live Preview (typing)
+  knowledge-injection-hook.js                       live-query-monitor.js
+        │ buildRetrievalQuery(prompt, ctx)                 │ pane draft + context
+        ▼                                                  ▼
+  retrieval-client.js ──► POST /api/retrieve ──► Dashboard :3033 ──► Host :12436
+                                                                        │
+                                                          RetrievalService.retrieve()
+                                                          (reads global settings)
+```
+
+**The `retrieve()` pipeline (in order)**
+
+| # | Step | Function / constant | Notes |
+|---|------|---------------------|-------|
+| 0 | Working memory | `buildWorkingMemory(codingRoot)` | Fail-open; ≤300 tok prefix |
+| 1 | Embed query | `embeddingService.embedOne` | MiniLM-L6-v2, 384-dim |
+| 2 | Parallel recall | `_semanticSearch(vector, 20, threshold)` + `_keywordSearch` | Semantic uses the **Query↔Item threshold** as Qdrant `score_threshold` |
+| 3 | Recency list | `buildRecencyList` | Time-ordered unique union |
+| 4 | **RRF fusion** | `rrfFuse([semantic, keyword, recency], 60, agentProfile)` | Rank-based reciprocal-rank fusion (k=60) + tier weights |
+| 4.5 | Context boost | `_applyContextBoost` | project ×1.15, cwd ×1.10, recent-file ×1.20 |
+| 4.6 | Topic relevance | `_applyTopicRelevance` | Keyword-overlap demotion (cosines cluster 0.75–0.82) |
+| 4.7 | Freshness | `_applyFreshnessRerank` | Demotes insights with stale code claims |
+| 4.75 | **Query↔Item exponential** | `_applyQueryItemExponential` | When enabled: `rrfScore ×= clamp(cosine,0,1)^k` on semantic-origin items |
+| 4.8 | **Learned rerank** | `_applyLearnedRerank` | Query↔Query feedback boost (see above) |
+| 5 | Sort + rank | `fused.sort(rrfScore desc)` → `toRankedResult` | Produces `rankedResults` |
+| 6 | Token budget | `assembleBudgetedMarkdown` | Working ≤300 + Observational ≤700 tok markdown |
+
+**Two-stage tunable similarity model**
+
+Scoring is governed by two independent similarity stages, each exposing the same
+three knobs in the **Live Context → Retrieval Tuning** panel:
+
+| Stage | What the cosine compares | Where it acts | Threshold default | Exponential default |
+|-------|--------------------------|---------------|-------------------|---------------------|
+| **Query ↔ Item** | current query ↔ candidate memory item | semantic admission (step 2) + emphasis (step 4.75) | `0.70` | **off**, k=3 |
+| **Query ↔ Query** | current query ↔ past human-ranked query | learned-rerank feedback gate (step 4.8) | `0.85` | **on**, k=3 |
+
+Each stage has:
+
+- **Threshold slider** (cosine admission floor, range **0.50–0.99**). Query↔Item:
+  the Qdrant `score_threshold` deciding which items are retrieved. Query↔Query:
+  the floor a past feedback event's query must clear to influence ranking.
+- **Exponential toggle** (on/off). When **on**, the similarity is reshaped as
+  `weight = similarity^k`, so near matches dominate and loosely-similar ones are
+  suppressed. When **off**, the raw cosine is used (linear).
+- **Exponent slider** `k` (range **1.0–8.0**, disabled when the toggle is off).
+  Higher `k` = steeper falloff = only near-duplicate queries/items keep weight.
+
+The math, per stage:
+
+```
+Query↔Item  (step 4.75):  rrfScore     ×= clamp(cosine, 0, 1) ^ k     # enabled only
+Query↔Query (step 4.8):   weight        = enabled ? cosine ^ k : cosine
+                          eventWeight   = weight × ageDecay × scope × userTrust
+                          rrfScore     ×= clamp(1 + 0.30 × signal, 0.90, 1.25)
+```
+
+This makes human feedback **query-specific**: with the Query↔Query exponential on,
+a re-ranking saved for one query barely moves results for a *very different* query
+(its low cosine, raised to `k`, collapses toward zero) while still strongly
+shaping *similar* queries.
+
+**Global, persisted, single source of truth.** Settings are stored server-side in
+[`src/retrieval/retrieval-settings.js`](src/retrieval/retrieval-settings.js)
+(`<repo>/.observations/retrieval-settings.json`, override with
+`RETRIEVAL_SETTINGS_PATH`). The store is mtime-cached, fail-open to defaults, and
+written atomically. Because `retrieve()` reads it as the authoritative source,
+changing a slider **immediately** re-tunes both the live preview **and** the next
+`UserPromptSubmit` injection — no hook redeploy, no restart.
+
+Settings model and bounds:
+
+```jsonc
+{
+  "queryQuery": { "threshold": 0.85, "exponentialEnabled": true,  "exponent": 3.0 },
+  "queryItem":  { "threshold": 0.70, "exponentialEnabled": false, "exponent": 3.0 }
+}
+// threshold ∈ [0.50, 0.99], exponent ∈ [1.0, 8.0]; out-of-range values are clamped.
+```
+
+**API + UI**
+
+- `GET /api/retrieval-settings` — read current settings (host `:12436` and dashboard `:3033` proxy).
+- `PUT /api/retrieval-settings` — partial update; validates, clamps, persists, returns the saved value.
+- `POST /api/live-context/rerun` — re-run retrieval for the most recent draft so the preview re-tunes instantly after a change.
+- **Retrieval Tuning panel** ([`RetrievalTuningPanel.tsx`](integrations/system-health-dashboard/src/components/RetrievalTuningPanel.tsx)) — two groups (Query↔Query, Query↔Item), each with the threshold slider, exponential switch, exponent slider, and an info-icon tooltip; debounced `PUT` via [`useRetrievalSettings.ts`](integrations/system-health-dashboard/src/hooks/useRetrievalSettings.ts).
+
+```mermaid
+graph LR
+    subgraph UI["Live Context → Retrieval Tuning"]
+        S1["Query↔Query<br/>threshold · exp · k"]
+        S2["Query↔Item<br/>threshold · exp · k"]
+    end
+    S1 & S2 -->|"debounced PUT"| P["Dashboard :3033<br/>/api/retrieval-settings"]
+    P -->|proxy| H["Host :12436<br/>updateSettings()"]
+    H --> F["retrieval-settings.json<br/>(atomic, mtime-cached)"]
+    F --> R["retrieve() — getSettings()"]
+    HOOK["UserPromptSubmit hook"] --> R
+    PREV["Live preview (draft)"] --> R
+    R --> O["Query↔Item: rrfScore ×= cosine^k<br/>Query↔Item: score_threshold<br/>Query↔Query: learned-rerank weight"]
+```
 
 Configuration: enabled per agent via `AGENT_ENABLE_LIVE_CONTEXT=true` (default) in
 `config/agents/*.sh`. Tunables (env): `LQM_POLL_MS`, `LQM_STABLE_MS`,
