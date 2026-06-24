@@ -1,0 +1,29 @@
+@startuml observation-creation-pipeline
+!include _standard-style.puml
+
+title Observation Creation Pipeline — Fire-and-Forget
+
+top to bottom direction
+
+component "Agent exchange completes\n(user + assistant)" as A <<human>>
+component "ETM detects prompt-set" as B <<human>>
+component "POST /api/observations/messages\n--> obs-api :12436" as C <<compute>>
+component "ObservationWriter\nLLM summarize via proxy" as D <<compute>>
+component "Sanitize summary\n(strip template placeholders)" as E <<compute>>
+component "Serialized write\n(promise-chain lock, TOCTOU-safe)" as F <<compute>>
+component "Dedup check" as G <<compute>>
+component "Drop" as X <<drop>>
+component "Insert into SQLite\n(observations table)" as H <<store>>
+component "Debounced JSON export\n(.data/observation-export/)" as I <<store>>
+
+A --> B
+B ASYNC_LINE C : fire-and-forget HTTP\n(never awaited)
+C --> D
+D --> E
+E --> F
+F --> G
+G SYNC_LINE X : duplicate
+G DATA_LINE H : unique
+H --> I
+
+@enduml

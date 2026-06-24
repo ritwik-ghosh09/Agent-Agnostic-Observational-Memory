@@ -7,6 +7,11 @@ skinparam defaultFontSize 12
 ' This prevents users from needing to zoom and scroll horizontally
 ' Vertical scrolling is acceptable and preferred over horizontal scrolling
 
+' Enable drop-shadows for a crisp, 3D component look
+skinparam shadowing true
+skinparam componentStyle uml2
+skinparam roundCorner 10
+
 ' Component styling with professional colors
 skinparam component {
   BackgroundColor<<api>> #E8F4FD
@@ -17,6 +22,19 @@ skinparam component {
   BackgroundColor<<agent>> #E6F3FF
   BackgroundColor<<infra>> #FFF2E6
   BackgroundColor<<external>> #F5F5F5
+  ' Semantic workflow stereotypes (vivid, saturated fills with deep borders)
+  BackgroundColor<<human>> #FDE68A
+  BorderColor<<human>> #D97706
+  BackgroundColor<<compute>> #BFDBFE
+  BorderColor<<compute>> #1D4ED8
+  BackgroundColor<<store>> #BBF7D0
+  BorderColor<<store>> #15803D
+  BackgroundColor<<rerank>> #FBCFE8
+  BorderColor<<rerank>> #BE185D
+  BackgroundColor<<output>> #E9D5FF
+  BorderColor<<output>> #7C3AED
+  BackgroundColor<<drop>> #FECACA
+  BorderColor<<drop>> #DC2626
   FontSize 12
   FontColor #000000
 }

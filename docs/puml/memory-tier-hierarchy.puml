@@ -1,0 +1,24 @@
+@startuml memory-tier-hierarchy
+!include _standard-style.puml
+
+title Three-Tier Memory Hierarchy
+
+top to bottom direction
+
+package "Tier 1 — Observations (volatile, high volume)" as P1 {
+  component "**Observation**\nIntent / Approach /\nArtifacts / Result" as O1 <<human>>
+}
+
+package "Tier 2 — Digests (daily, thematic)" as P2 {
+  component "**Digest**\ntheme + narrative +\nsource observation IDs" as D1 <<store>>
+}
+
+package "Tier 3 — Insights (persistent knowledge)" as P3 {
+  component "**Insight**\nPurpose / Architecture /\nKey Files / Usage / Troubleshooting" as I1 <<output>>
+}
+
+O1 DATA_LINE D1 : consolidate (group by theme)
+D1 DATA_LINE I1 : synthesize (>= 5 digests)
+I1 OPTIONAL_LINE I1 : confidence decay +\nfreshness verify
+
+@enduml

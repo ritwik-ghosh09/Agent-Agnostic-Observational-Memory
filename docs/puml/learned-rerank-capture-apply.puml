@@ -1,0 +1,34 @@
+@startuml learned-rerank-capture-apply
+!include _standard-style.puml
+
+title Live Human-Feedback Reranking — Capture & Apply
+
+top to bottom direction
+
+package "Capture (human in the loop)" as CAP {
+  component "Human drags to reorder\nretrieval results in dashboard" as H <<human>>
+  component "POST /api/rerank-feedback" as P <<compute>>
+  component "Embed query text (384-dim)" as E <<compute>>
+  component "Build itemSignals:\noriginalRank, humanRank,\nrankDelta per item" as S <<compute>>
+  component "Upsert ONE point into Qdrant\nhuman_rerank_feedback\n(vector=query, payload=signals+context)" as U <<store>>
+  H --> P
+  P --> E
+  E --> S
+  S DATA_LINE U
+}
+
+package "Apply (next similar query)" as APP {
+  component "New query embedded" as NQ <<compute>>
+  component "FeedbackStore.findSimilar\n(cosine >= threshold,\nproject-scoped)" as FS <<rerank>>
+  component "aggregateLearnedSignals\n(decay + confidence + bounds)" as AG <<rerank>>
+  component "Per-item multiplier\nin [0.90, 1.25]" as M <<rerank>>
+  component "rrfScore *= multiplier\n(only items already in fused list)" as BOOST <<rerank>>
+  NQ --> FS
+  FS --> AG
+  AG --> M
+  M --> BOOST
+}
+
+U OPTIONAL_LINE FS : persisted event
+
+@enduml

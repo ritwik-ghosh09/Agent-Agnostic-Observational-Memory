@@ -1,0 +1,41 @@
+@startuml retrieval-pipeline
+!include _standard-style.puml
+
+title Retrieval Pipeline — The Read Path
+
+top to bottom direction
+
+component "Query text + context" as Q <<compute>>
+component "Step 0: Build working memory" as WM <<compute>>
+component "Step 1: Embed query (384-dim)" as EMB <<compute>>
+component "Step 2a: Semantic search\n(Qdrant x4)" as SEM <<store>>
+component "Step 2b: Keyword search\n(FTS5 / LIKE)" as KW <<store>>
+component "Step 3: Build recency list" as REC <<store>>
+component "Step 4: RRF fusion + tier weights\n(+ agent profile)" as RRF <<compute>>
+component "Step 4.5: Context boost\n(project / cwd / recent files)" as CB <<rerank>>
+component "Step 4.6: Topic-relevance demotion\n(keyword overlap proxy)" as TR <<rerank>>
+component "Step 4.7: Freshness rerank\n(demote stale insights)" as FR <<rerank>>
+component "Step 4.75: Query->Item emphasis\n(cosine^exponent, optional)" as QI <<rerank>>
+component "* Step 4.8: Learned rerank\n(human feedback boost)" as LR <<rerank>>
+component "Final sort by rrfScore" as SORT <<rerank>>
+component "Step 5: Token-budgeted markdown" as TB <<output>>
+component "Working memory +\nranked memory --> agent" as OUT <<output>>
+
+Q --> WM
+Q --> EMB
+EMB DATA_LINE SEM
+Q DATA_LINE KW
+SEM --> REC
+KW --> REC
+REC --> RRF
+RRF --> CB
+CB --> TR
+TR --> FR
+FR --> QI
+QI --> LR
+LR --> SORT
+SORT --> TB
+WM --> TB
+TB DATA_LINE OUT
+
+@enduml

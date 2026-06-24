@@ -1,0 +1,32 @@
+@startuml consolidation-pipeline
+!include _standard-style.puml
+
+title Consolidation — Observations to Knowledge
+
+top to bottom direction
+
+package "Digests (Tier 2)" as T2 {
+  component "Query undigested\nobservations for a date" as DA <<compute>>
+  component "Chunk into batches of 35" as DB <<compute>>
+  component "LLM: group by theme,\nmerge narratives, extract files" as DC <<compute>>
+  component "Write digests; mark\nsource obs as digested_at" as DD <<store>>
+  DA --> DB
+  DB --> DC
+  DC DATA_LINE DD
+}
+
+package "Insights (Tier 3)" as T3 {
+  component "When >= 5\nunsynthesized digests" as IA <<compute>>
+  component "Chunk into batches\nof 30 digests" as IB <<compute>>
+  component "LLM: structured reference articles\n(Purpose/Architecture/Key Files/\nUsage/Troubleshooting)" as IC <<compute>>
+  component "Merge matching topics;\ncreate new ones" as ID <<compute>>
+  component "Confidence decay\n-0.05/week, floor 0.3" as IE <<output>>
+  IA --> IB
+  IB --> IC
+  IC --> ID
+  ID --> IE
+}
+
+DD DATA_LINE IA
+
+@enduml

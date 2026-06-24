@@ -1,0 +1,28 @@
+@startuml embedder-finetuning-pipeline
+!include _standard-style.puml
+
+title Future Optimization — Supervised Embedder Fine-Tuning
+
+top to bottom direction
+
+database "human_rerank_feedback\n(query, promoted, demoted)" as FB
+database "observations / digests / insights\n(query <-> used-item pairs)" as OBS
+component "Mine triplets\n(anchor=query, positive=promoted item,\nnegative=demoted item)" as MINE <<compute>>
+component "Filter + dedup +\nhard-negative selection" as CLEAN <<compute>>
+component "Fine-tune MiniLM\n(MultipleNegativesRanking / TripletLoss)" as TRAIN <<compute>>
+component "Offline eval\n(nDCG / MRR vs. held-out feedback)" as EVAL <<rerank>>
+component "Promote new embedder\n(versioned)" as EMB <<output>>
+component "Re-embed all collections\n(observations/digests/insights/kg_entities)" as REEMBED <<compute>>
+component "Serve: sharper\nquery<->item cosines" as SERVE <<output>>
+
+FB DATA_LINE MINE
+OBS DATA_LINE MINE
+MINE --> CLEAN
+CLEAN --> TRAIN
+TRAIN --> EVAL
+EVAL SYNC_LINE TRAIN : regression
+EVAL DATA_LINE EMB : improved
+EMB --> REEMBED
+REEMBED --> SERVE
+
+@enduml

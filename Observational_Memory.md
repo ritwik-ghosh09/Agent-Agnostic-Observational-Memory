@@ -69,29 +69,7 @@ persistence.
 | **Digests** | Daily thematic work-session summaries | End of day (cron or manual) | ~7 / day |
 | **Insights** | Persistent, structured project knowledge articles | Weekly, or ≥ 5 new digests | ~10 total |
 
-```mermaid
-graph TD
-    subgraph Capture["Tier 1 — Observations (volatile, high volume)"]
-        O1["Observation: Intent / Approach / Artifacts / Result"]
-    end
-    subgraph Daily["Tier 2 — Digests (daily, thematic)"]
-        D1["Digest: theme + narrative + source observation IDs"]
-    end
-    subgraph Durable["Tier 3 — Insights (persistent knowledge)"]
-        I1["Insight: Purpose / Architecture / Key Files / Usage / Troubleshooting"]
-    end
-
-    O1 -->|"consolidate (group by theme)"| D1
-    D1 -->|"synthesize (>= 5 digests)"| I1
-    I1 -.->|"confidence decay + freshness verify"| I1
-
-    classDef tier1 fill:#bfdbfe,stroke:#2563eb,stroke-width:1px,color:#0b2447;
-    classDef tier2 fill:#bbf7d0,stroke:#16a34a,stroke-width:1px,color:#06371d;
-    classDef tier3 fill:#e9d5ff,stroke:#7c3aed,stroke-width:1px,color:#2e1065;
-    class O1 tier1;
-    class D1 tier2;
-    class I1 tier3;
-```
+[![Three-Tier Memory Hierarchy](docs/images/memory-tier-hierarchy.png)](docs/images/memory-tier-hierarchy.png)
 
 Each tier is queryable independently and all four contribute to retrieval, but
 with different **tier weights** (insights count most; raw observations least) —
@@ -106,27 +84,7 @@ Monitor (ETM)** watches each agent's transcript; when a prompt-set (a completed
 user + assistant exchange) finishes, it fires an observation — **fire-and-forget**,
 so it never blocks your session.
 
-```mermaid
-graph TD
-    A["Agent exchange completes<br/>(user + assistant)"] --> B["ETM detects prompt-set"]
-    B -->|"fire-and-forget HTTP<br/>(never awaited)"| C["POST /api/observations/messages<br/>→ obs-api :12436"]
-    C --> D["ObservationWriter:<br/>LLM summarize via proxy"]
-    D --> E["Sanitize summary<br/>(strip template placeholders)"]
-    E --> F["Serialized write<br/>(promise-chain lock, TOCTOU-safe)"]
-    F --> G{"Dedup check"}
-    G -->|"duplicate"| X["Drop"]
-    G -->|"unique"| H["Insert into SQLite<br/>(observations table)"]
-    H --> I["Debounced JSON export<br/>(.data/observation-export/)"]
-
-    classDef human fill:#fde68a,stroke:#d97706,stroke-width:1px,color:#5a3408;
-    classDef compute fill:#bfdbfe,stroke:#2563eb,stroke-width:1px,color:#0b2447;
-    classDef store fill:#bbf7d0,stroke:#16a34a,stroke-width:1px,color:#06371d;
-    classDef drop fill:#fecaca,stroke:#dc2626,stroke-width:1px,color:#7f1d1d;
-    class A,B human;
-    class C,D,E,F,G compute;
-    class H,I store;
-    class X drop;
-```
+[![Observation Creation Pipeline](docs/images/observation-creation-pipeline.png)](docs/images/observation-creation-pipeline.png)
 
 ### Step-by-step
 
@@ -168,26 +126,7 @@ Consolidation runs **in-process inside the obs-api server** (it already owns the
 SQLite handle, so there is no second writer and no WAL race). It produces the two
 higher tiers.
 
-```mermaid
-graph TD
-    subgraph Tier2["Digests (Tier 2)"]
-        DA["Query undigested observations for a date"] --> DB["Chunk into batches of 35"]
-        DB --> DC["LLM: group by theme, merge narratives, extract files"]
-        DC --> DD["Write digests; mark source obs as digested_at"]
-    end
-    subgraph Tier3["Insights (Tier 3)"]
-        IA["When >= 5 unsynthesized digests"] --> IB["Chunk into batches of 30 digests"]
-        IB --> IC["LLM: structured reference articles<br/>(Purpose/Architecture/Key Files/Usage/Troubleshooting)"]
-        IC --> ID["Merge matching topics; create new ones"]
-        ID --> IE["Confidence decay -0.05/week, floor 0.3"]
-    end
-    DD --> IA
-
-    classDef compute fill:#bfdbfe,stroke:#2563eb,stroke-width:1px,color:#0b2447;
-    classDef store fill:#bbf7d0,stroke:#16a34a,stroke-width:1px,color:#06371d;
-    class DA,DB,DC,IA,IB,IC,ID,IE compute;
-    class DD store;
-```
+[![Consolidation Pipeline](docs/images/consolidation-pipeline.png)](docs/images/consolidation-pipeline.png)
 
 ### Digests (Tier 2)
 - **Trigger:** end of day (daemon at 02:00), manual run, or dashboard
@@ -225,34 +164,7 @@ directly affect retrieval:
 Observational Memory uses **three coordinated stores**: SQLite for structured
 records, Qdrant for vector search, and git-tracked JSON for portability.
 
-```mermaid
-graph TD
-    subgraph Host["Host process — obs-api :12436 (single owner)"]
-        W["ObservationWriter"]
-        C["ObservationConsolidator"]
-        R["RetrievalService"]
-    end
-    subgraph Stores["Storage"]
-        SQL[("SQLite<br/>.observations/observations.db<br/>WAL, busy_timeout=5000ms")]
-        QD[("Qdrant vector DB<br/>5 collections, 384-dim Cosine")]
-        JSON[(".data/observation-export/*.json<br/>git-tracked")]
-    end
-    W --> SQL
-    C --> SQL
-    R --> SQL
-    R --> QD
-    W -.->|"debounced"| JSON
-    C -.->|"exportAll"| JSON
-
-    Dash["Dashboard / container :3033"] -.->|"HTTP forward only"| Host
-
-    classDef compute fill:#bfdbfe,stroke:#2563eb,stroke-width:1px,color:#0b2447;
-    classDef store fill:#bbf7d0,stroke:#16a34a,stroke-width:1px,color:#06371d;
-    classDef output fill:#e9d5ff,stroke:#7c3aed,stroke-width:1px,color:#2e1065;
-    class W,C,R compute;
-    class SQL,QD,JSON store;
-    class Dash output;
-```
+[![Storage Architecture](docs/images/storage-architecture.png)](docs/images/storage-architecture.png)
 
 ### 5.1 SQLite — the single-owner runtime store
 
@@ -367,34 +279,7 @@ of reranking passes before the final token-budgeted markdown is built.
 
 ### 6.2 The pipeline, stage by stage
 
-```mermaid
-graph TD
-    Q["Query text + context"] --> WM["Step 0: Build working memory"]
-    Q --> EMB["Step 1: Embed query (384-dim)"]
-    EMB --> SEM["Step 2a: Semantic search (Qdrant ×4)"]
-    Q --> KW["Step 2b: Keyword search (FTS5/LIKE)"]
-    SEM --> REC["Step 3: Build recency list"]
-    KW --> REC
-    REC --> RRF["Step 4: RRF fusion + tier weights<br/>(+ agent profile)"]
-    RRF --> CB["Step 4.5: Context boost<br/>(project/cwd/recent files)"]
-    CB --> TR["Step 4.6: Topic-relevance demotion<br/>(keyword overlap proxy)"]
-    TR --> FR["Step 4.7: Freshness rerank<br/>(demote stale insights)"]
-    FR --> QI["Step 4.75: Query to item emphasis<br/>(cosine^exponent, optional)"]
-    QI --> LR["★ Step 4.8: Learned rerank<br/>(human feedback boost)"]
-    LR --> SORT["Final sort by rrfScore"]
-    SORT --> TB["Step 5: Token-budgeted markdown"]
-    WM --> TB
-    TB --> OUT["Working memory + ranked memory → agent"]
-
-    classDef compute fill:#bfdbfe,stroke:#2563eb,stroke-width:1px,color:#0b2447;
-    classDef store fill:#bbf7d0,stroke:#16a34a,stroke-width:1px,color:#06371d;
-    classDef rerank fill:#fbcfe8,stroke:#db2777,stroke-width:1px,color:#6d1238;
-    classDef output fill:#e9d5ff,stroke:#7c3aed,stroke-width:1px,color:#2e1065;
-    class Q,EMB,WM,RRF compute;
-    class SEM,KW,REC store;
-    class CB,TR,FR,QI,LR,SORT rerank;
-    class TB,OUT output;
-```
+[![Retrieval Pipeline](docs/images/retrieval-pipeline.png)](docs/images/retrieval-pipeline.png)
 
 Each pass mutates an `rrfScore` on the fused candidates:
 
@@ -431,31 +316,7 @@ decaying, confidence-weighted boost to similar future queries.
 It implements the approved design *"Feedback Loop Design: Human Re-Ranking as a
 Learned Path-A Boost"*. Two phases: **capture** and **apply**.
 
-```mermaid
-graph TD
-    subgraph Capture["Capture (human in the loop)"]
-        H["Human drags to reorder<br/>retrieval results in dashboard"] --> P["POST /api/rerank-feedback"]
-        P --> E["Embed query text (384-dim)"]
-        E --> S["Build itemSignals:<br/>originalRank, humanRank, rankDelta per item"]
-        S --> U["Upsert ONE point into Qdrant<br/>human_rerank_feedback<br/>(vector=query, payload=signals+context)"]
-    end
-    subgraph Apply["Apply (next similar query)"]
-        NQ["New query embedded"] --> FS["FeedbackStore.findSimilar<br/>(cosine >= threshold, project-scoped)"]
-        FS --> AG["aggregateLearnedSignals<br/>(decay + confidence + bounds)"]
-        AG --> M["Per-item multiplier in [0.90, 1.25]"]
-        M --> BOOST["rrfScore *= multiplier<br/>(only items already in fused list)"]
-    end
-    U -.->|"persisted event"| FS
-
-    classDef human fill:#fde68a,stroke:#d97706,stroke-width:1px,color:#5a3408;
-    classDef compute fill:#bfdbfe,stroke:#2563eb,stroke-width:1px,color:#0b2447;
-    classDef store fill:#bbf7d0,stroke:#16a34a,stroke-width:1px,color:#06371d;
-    classDef rerank fill:#fbcfe8,stroke:#db2777,stroke-width:1px,color:#6d1238;
-    class H human;
-    class P,E,S,NQ compute;
-    class U store;
-    class FS,AG,M,BOOST rerank;
-```
+[![Live Human-Feedback Reranking — Capture & Apply](docs/images/learned-rerank-capture-apply.png)](docs/images/learned-rerank-capture-apply.png)
 
 ### 7.1 Capture — turning a reorder into a learning signal
 
@@ -609,23 +470,7 @@ for the queries that genuinely match.
 
 ### 7.6 The self-improving loop
 
-```mermaid
-graph TD
-    R1["Retrieval returns ranked memory"] --> U1["Agent + human use it"]
-    U1 --> F1["Human reorders what was useful"]
-    F1 --> S1["Event stored in human_rerank_feedback"]
-    S1 --> R2["Next similar query reranked by learned signal"]
-    R2 --> U1
-
-    classDef human fill:#fde68a,stroke:#d97706,stroke-width:1px,color:#5a3408;
-    classDef store fill:#bbf7d0,stroke:#16a34a,stroke-width:1px,color:#06371d;
-    classDef rerank fill:#fbcfe8,stroke:#db2777,stroke-width:1px,color:#6d1238;
-    classDef output fill:#e9d5ff,stroke:#7c3aed,stroke-width:1px,color:#2e1065;
-    class U1,F1 human;
-    class S1 store;
-    class R2 rerank;
-    class R1 output;
-```
+[![The Self-Improving Loop](docs/images/self-improving-loop.png)](docs/images/self-improving-loop.png)
 
 Over time, the system's ranking converges toward **human-validated usefulness**
 for the queries that matter most — something pure embedding similarity cannot do.
@@ -641,28 +486,7 @@ production retrieval path reads, so **whatever you set here is the single source
 truth** for both the UserPromptSubmit knowledge-injection hook and the dashboard's
 live preview.
 
-```mermaid
-graph TD
-    subgraph Panel["Retrieval Tuning panel (dashboard)"]
-        QQ["Query ↔ Query group<br/>Threshold · Exponential · k"]
-        QI["Query ↔ Item group<br/>Threshold · Exponential · k"]
-    end
-    QQ -->|"setField (optimistic)"| DEB["Debounced 400 ms PUT"]
-    QI -->|"setField (optimistic)"| DEB
-    DEB --> API["PUT /api/retrieval-settings"]
-    API --> FILE[(".observations/retrieval-settings.json<br/>single source of truth")]
-    FILE --> HOOK["UserPromptSubmit hook<br/>(real retrieval)"]
-    FILE --> PREVIEW["Dashboard live preview<br/>(re-runs on save)"]
-
-    classDef human fill:#fde68a,stroke:#d97706,stroke-width:1px,color:#5a3408;
-    classDef compute fill:#bfdbfe,stroke:#2563eb,stroke-width:1px,color:#0b2447;
-    classDef store fill:#bbf7d0,stroke:#16a34a,stroke-width:1px,color:#06371d;
-    classDef output fill:#e9d5ff,stroke:#7c3aed,stroke-width:1px,color:#2e1065;
-    class QQ,QI human;
-    class DEB,API compute;
-    class FILE store;
-    class HOOK,PREVIEW output;
-```
+[![Retrieval Tuning Controls](docs/images/retrieval-tuning-controls.png)](docs/images/retrieval-tuning-controls.png)
 
 ### 8.1 The two control groups
 
@@ -765,27 +589,7 @@ judgment: for query `q`, item `A` (promoted) is *more* relevant than item `B`
 (demoted). That is precisely the supervision signal contrastive sentence-embedding
 training consumes.
 
-```mermaid
-graph TD
-    FB[("human_rerank_feedback<br/>(query, promoted, demoted)")] --> MINE["Mine triplets<br/>(anchor=query, positive=promoted item,<br/>negative=demoted item)"]
-    OBS[("observations / digests / insights<br/>(query ↔ used-item pairs)")] --> MINE
-    MINE --> CLEAN["Filter + dedup + hard-negative selection"]
-    CLEAN --> TRAIN["Fine-tune MiniLM<br/>(MultipleNegativesRanking / TripletLoss)"]
-    TRAIN --> EVAL{"Offline eval<br/>(nDCG / MRR vs. held-out feedback)"}
-    EVAL -->|"regression"| TRAIN
-    EVAL -->|"improved"| EMB["Promote new embedder<br/>(versioned)"]
-    EMB --> REEMBED["Re-embed all collections<br/>(observations/digests/insights/kg_entities)"]
-    REEMBED --> SERVE["Serve: sharper query↔item cosines"]
-
-    classDef store fill:#bbf7d0,stroke:#16a34a,stroke-width:1px,color:#06371d;
-    classDef compute fill:#bfdbfe,stroke:#2563eb,stroke-width:1px,color:#0b2447;
-    classDef rerank fill:#fbcfe8,stroke:#db2777,stroke-width:1px,color:#6d1238;
-    classDef output fill:#e9d5ff,stroke:#7c3aed,stroke-width:1px,color:#2e1065;
-    class FB,OBS store;
-    class MINE,CLEAN,TRAIN,REEMBED compute;
-    class EVAL rerank;
-    class EMB,SERVE output;
-```
+[![Supervised Embedder Fine-Tuning](docs/images/embedder-finetuning-pipeline.png)](docs/images/embedder-finetuning-pipeline.png)
 
 ### 10.1 Where the supervised pairs come from
 

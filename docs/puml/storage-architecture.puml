@@ -1,0 +1,30 @@
+@startuml storage-architecture
+!include _standard-style.puml
+
+title Storage Mechanism — Three Coordinated Stores
+
+top to bottom direction
+
+package "Host process — obs-api :12436 (single owner)" as HOST {
+  component "ObservationWriter" as W <<compute>>
+  component "ObservationConsolidator" as C <<compute>>
+  component "RetrievalService" as R <<compute>>
+}
+
+package "Storage" as STORES {
+  database "SQLite\n.observations/observations.db\nWAL, busy_timeout=5000ms" as SQL
+  database "Qdrant vector DB\n5 collections, 384-dim Cosine" as QD
+  artifact ".data/observation-export/*.json\ngit-tracked" as JSON
+}
+
+component "Dashboard / container :3033" as Dash <<output>>
+
+W DATA_LINE SQL
+C DATA_LINE SQL
+R DATA_LINE SQL
+R DATA_LINE QD
+W ASYNC_LINE JSON : debounced
+C ASYNC_LINE JSON : exportAll
+Dash OPTIONAL_LINE HOST : HTTP forward only
+
+@enduml

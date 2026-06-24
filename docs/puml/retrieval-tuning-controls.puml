@@ -1,0 +1,26 @@
+@startuml retrieval-tuning-controls
+!include _standard-style.puml
+
+title Retrieval Tuning Controls — Single Source of Truth
+
+top to bottom direction
+
+package "Retrieval Tuning panel (dashboard)" as PANEL {
+  component "Query <-> Query group\nThreshold . Exponential . k" as QQ <<human>>
+  component "Query <-> Item group\nThreshold . Exponential . k" as QI <<human>>
+}
+
+component "Debounced 400 ms PUT" as DEB <<compute>>
+component "PUT /api/retrieval-settings" as API <<compute>>
+database ".observations/retrieval-settings.json\nsingle source of truth" as FILE
+component "UserPromptSubmit hook\n(real retrieval)" as HOOK <<output>>
+component "Dashboard live preview\n(re-runs on save)" as PREVIEW <<output>>
+
+QQ DATA_LINE DEB : setField (optimistic)
+QI DATA_LINE DEB : setField (optimistic)
+DEB --> API
+API DATA_LINE FILE
+FILE --> HOOK
+FILE --> PREVIEW
+
+@enduml
