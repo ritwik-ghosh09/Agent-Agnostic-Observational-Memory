@@ -29,8 +29,68 @@ const VKB_TIMEOUT = 2000;
 /** VKB API base URL. */
 const VKB_BASE = 'http://localhost:8080';
 
-/** Team identifier used for both VKB queries and canonical project name match. */
-const TEAM = 'coding';
+/** Default team identifier when none is supplied by the live retrieval context. */
+const DEFAULT_TEAM = 'coding';
+
+/**
+ * Normalize an optional string value: trim and return null when empty.
+ *
+ * @param {*} v
+ * @returns {string|null}
+ */
+function normalizeStr(v) {
+  if (typeof v !== 'string') return null;
+  const t = v.trim();
+  return t.length ? t : null;
+}
+
+/**
+ * Ordered, de-duplicated list of candidate VKB teams to try.
+ *
+ * Priority: the live retrieval context (`context.team`, then `context.project`),
+ * then the CODING_TEAM env override, then the framework default (`coding`). The
+ * first candidate that returns KG data wins; this keeps Working Memory driven by
+ * the same pipeline context that retrieve() uses while failing back safely.
+ *
+ * @param {object|null} context
+ * @returns {string[]}
+ */
+function candidateTeams(context) {
+  const out = [];
+  const push = (v) => {
+    const n = normalizeStr(v);
+    if (n && !out.includes(n)) out.push(n);
+  };
+  push(context?.team);
+  push(context?.project);
+  push(process.env.CODING_TEAM);
+  push(DEFAULT_TEAM);
+  return out;
+}
+
+/**
+ * Ordered, de-duplicated list of candidate repo roots to read STATE.md from.
+ *
+ * Priority: the live context working dir (`context.cwd`, then `context.codingRoot`),
+ * then the configured codingRoot, then the CODING_REPO env. The first root that
+ * yields a parseable STATE.md wins.
+ *
+ * @param {string} codingRoot
+ * @param {object|null} context
+ * @returns {string[]}
+ */
+function candidateRoots(codingRoot, context) {
+  const out = [];
+  const push = (v) => {
+    const n = normalizeStr(v);
+    if (n && !out.includes(n)) out.push(n);
+  };
+  push(context?.cwd);
+  push(context?.codingRoot);
+  push(codingRoot);
+  push(process.env.CODING_REPO);
+  return out;
+}
 
 /**
  * Pick the canonical Project entity from a list.
@@ -52,16 +112,17 @@ function pickCanonicalProject(entities, team) {
 }
 
 /**
- * Fetch Project and Component entities from the VKB API.
+ * Fetch Project and Component entities from the VKB API for a given team.
  *
  * Uses Promise.all for parallel fetches with AbortSignal.timeout
  * to prevent hung requests (T-31-01 mitigation).
  *
+ * @param {string} team - VKB team identifier
  * @returns {Promise<{ project: object|null, components: Array<object> }>}
  */
-async function fetchKGStructure() {
+async function fetchKGStructure(team) {
   try {
-    const base = `${VKB_BASE}/api/entities?team=${TEAM}`;
+    const base = `${VKB_BASE}/api/entities?team=${encodeURIComponent(team)}`;
     const [projectRes, componentRes] = await Promise.all([
       fetch(`${base}&type=Project`, { signal: AbortSignal.timeout(VKB_TIMEOUT) }),
       fetch(`${base}&type=Component`, { signal: AbortSignal.timeout(VKB_TIMEOUT) }),
@@ -85,13 +146,47 @@ async function fetchKGStructure() {
     );
 
     return {
-      project: pickCanonicalProject(projectData.entities, TEAM),
+      project: pickCanonicalProject(projectData.entities, team),
       components,
     };
   } catch (err) {
     process.stderr.write(`[WorkingMemory] VKB fetch failed: ${err.message}\n`);
     return { project: null, components: [] };
   }
+}
+
+/**
+ * Resolve KG structure from the live context, trying candidate teams in order.
+ *
+ * Returns the first candidate that yields a Project entity or any Components.
+ * When no candidate has data, returns an empty structure (fail-open).
+ *
+ * @param {object|null} context
+ * @returns {Promise<{ project: object|null, components: Array<object> }>}
+ */
+async function resolveKGStructure(context) {
+  let lastEmpty = { project: null, components: [] };
+  for (const team of candidateTeams(context)) {
+    const kg = await fetchKGStructure(team);
+    if (kg.project || kg.components.length > 0) return kg;
+    lastEmpty = kg;
+  }
+  return lastEmpty;
+}
+
+/**
+ * Resolve STATE.md data from the live context, trying candidate roots in order.
+ *
+ * @param {string} codingRoot
+ * @param {object|null} context
+ * @returns {object|null}
+ */
+function resolveStateData(codingRoot, context) {
+  for (const root of candidateRoots(codingRoot, context)) {
+    const sd = parseStateFrontmatter(root);
+    if (sd) return sd;
+  }
+  return null;
 }
 
 /**
@@ -404,14 +499,22 @@ function buildPreviousSessionSection(sessionState) {
  * Fail-open: returns { markdown: '', tokens: 0 } on any error (D-03).
  * No caching -- every call queries live data (D-03, D-04).
  *
- * @param {string} codingRoot - Path to the coding repo root
+ * The optional `context` is the same per-query retrieval context that flows
+ * through RetrievalService.retrieve() (and therefore through both the
+ * KnowledgeInjectionHook UserPromptSubmit path and the dashboard live preview).
+ * It drives the VKB team (context.team/context.project) and the STATE.md root
+ * (context.cwd/context.codingRoot) with safe fallbacks, so the previewed Working
+ * Memory is identical to the one injected at UserPromptSubmit.
+ *
+ * @param {string} codingRoot - Path to the coding repo root (fallback root)
+ * @param {object|null} [context] - Live retrieval context (project, cwd, team, codingRoot)
  * @returns {Promise<{ markdown: string, tokens: number }>}
  */
-export async function buildWorkingMemory(codingRoot) {
+export async function buildWorkingMemory(codingRoot, context = null) {
   try {
     const [kgData, stateData] = await Promise.all([
-      fetchKGStructure(),
-      Promise.resolve(parseStateFrontmatter(codingRoot)),
+      resolveKGStructure(context),
+      Promise.resolve(resolveStateData(codingRoot, context)),
     ]);
 
     let markdown = assembleMarkdown(kgData, stateData);
@@ -427,8 +530,14 @@ export async function buildWorkingMemory(codingRoot) {
       tokens = countTokens(markdown);
     }
 
-    // Cross-agent continuity (D-10): inject Previous Session if applicable
-    const projectDir = process.env.CODING_PROJECT_DIR || process.env.TARGET_PROJECT_DIR || codingRoot;
+    // Cross-agent continuity (D-10): inject Previous Session if applicable.
+    // Prefer the live context working dir so the dashboard preview and the hook
+    // read the same project's session-state.json.
+    const projectDir =
+      normalizeStr(context?.cwd) ||
+      process.env.CODING_PROJECT_DIR ||
+      process.env.TARGET_PROJECT_DIR ||
+      codingRoot;
     const sessionState = readSessionState(projectDir);
     if (sessionState) {
       const relativeTime = formatRelativeTime(sessionState.timestamp);

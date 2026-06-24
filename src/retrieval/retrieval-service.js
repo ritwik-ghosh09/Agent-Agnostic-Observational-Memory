@@ -162,8 +162,11 @@ export class RetrievalService {
       await this.initialize();
     }
 
-    // Step 0: Build working memory (fail-open, per D-03)
-    const wm = await buildWorkingMemory(this.codingRoot);
+    // Step 0: Build working memory (fail-open, per D-03). Pass the per-query
+    // context so the VKB team and STATE.md root are driven by the same pipeline
+    // context the hook uses — guaranteeing the dashboard preview equals the WM
+    // injected at UserPromptSubmit (falls back to defaults when context lacks data).
+    const wm = await buildWorkingMemory(this.codingRoot, context);
     const semanticBudget = Math.min(budget - wm.tokens, 700);
     // Ensure at least 100 tokens for semantic results even if WM overshoots
     const effectiveSemanticBudget = Math.max(semanticBudget, 100);
