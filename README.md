@@ -1,19 +1,34 @@
-# Coding - AI Development Toolkit
+# 👁️ Observational Memory
 
-A comprehensive AI-powered development toolkit featuring live session logging, real-time constraint monitoring, semantic knowledge management, and multi-agent analysis — supporting Claude Code, GitHub Copilot CLI, OpenCode, and Mastracode. **Zero-cost LLM routing** via existing Claude Code and GitHub Copilot subscriptions.
+> A cross-agent, self-improving memory system that **watches** your coding
+> sessions, **summarizes** them into structured knowledge, and **retrieves** the
+> right slice of that knowledge back into your next prompt — continuously sharpened
+> by **live human feedback**.
+
+Observational Memory captures what happens across *all* your coding agents (Claude
+Code, GitHub Copilot, OpenCode, Mastracode), distills it into a three-tier memory
+hierarchy, and serves it back through a hybrid retrieval pipeline. What sets it
+apart from a vanilla "embed-and-search" memory is its **Live Human-Feedback
+Reranking** loop: when a human reorders retrieval results to reflect what was
+actually useful, the system *learns* from that judgment and reranks future,
+similar queries accordingly.
 
 ---
 
 ## 🚀 Quick Start
 
+Observational Memory ships as part of the **Coding** AI development toolkit. Install
+the toolkit, launch any supported agent, and observations begin streaming
+automatically — no per-agent configuration required.
+
 ```bash
 # Install the system (safe - prompts before any system changes)
 ./install.sh
 
-# Start Claude Code with all features
+# Start Claude Code with all features (observations capture automatically)
 coding
 
-# Or use specific agent
+# Or use a specific agent — every agent generates observations
 coding --claude
 coding --copilot
 coding --opencode
@@ -22,14 +37,21 @@ coding --mastra
 # Clean start (kills all orphaned processes, frees ports)
 coding --force
 
-# Query local LLM from command line (Docker Model Runner)
+# Query the local LLM from the command line (Docker Model Runner)
 llm "Explain this error message"
 cat file.js | llm "Review this code"
 ```
 
+Once a session is running, browse the captured memory in the dashboard:
+
+- **Observation Viewer** — `http://localhost:3032/observations` (filter by agent/project, search, compact view)
+- **Insights** — `http://localhost:3032/insights` (project-root multi-select to scope consolidation)
+- **Live Context** — `http://localhost:3032` → **Live Context** tab (live memory preview as you type)
+
 ### 🐳 Docker Deployment
 
-The coding stack runs in Docker — there is no native fallback.
+The coding stack runs in Docker — there is no native fallback. Docker services start
+automatically when you launch an agent.
 
 ```bash
 # Start Claude or CoPilot — Docker services start automatically
@@ -37,904 +59,716 @@ coding --claude
 coding --copilot
 ```
 
-**Benefits**: Persistent MCP servers, shared browser automation across sessions, isolated database containers, no duplicate containers when switching agents.
+**Benefits**: Persistent MCP servers, shared browser automation across sessions,
+isolated database containers, no duplicate containers when switching agents.
 
-**MCP Configuration**: `claude-mcp-launcher.sh` wires the stdio-proxy → SSE bridge so the agent talks to the containerized MCP servers.
+The Docker stack runs 4 containers (`coding-services`, **Qdrant**, **Memgraph**,
+**Redis**) with 10 internal services managed by supervisord, using ~1.75 GB memory
+total. The only host-side service is the **LLM CLI Proxy** (port `12435`), which
+bridges to host-local CLI tools like Claude Code and GitHub Copilot for zero-cost
+observation summarization.
 
-**Unified Agent Launching**: All agents are wrapped in tmux sessions via the shared `scripts/tmux-session-wrapper.sh`, providing a consistent status bar across Claude, CoPilot, OpenCode, and Mastracode. The shared orchestrator (`scripts/launch-agent-common.sh`) handles service startup, monitoring, session management, and **auto-installation of missing agent CLIs** — adding a new agent requires only a single config file in `config/agents/`. The service orchestrator (`start-services-robust.js`) treats Redis, Qdrant, and Memgraph as built-ins of the coding-services container, so it never spawns duplicates.
+> **Why this matters for Observational Memory:** the **Qdrant** container hosts the
+> five 384-dimensional vector collections (`insights`, `digests`, `kg_entities`,
+> `observations`, `human_rerank_feedback`) described in [§5.2](#52--qdrant--the-vector-store),
+> while the host **Observations API** (`localhost:12436`) exclusively owns the SQLite
+> runtime store ([§5.1](#51--sqlite--the-single-owner-runtime-store)). The
+> `.observations` directory is intentionally **not** bind-mounted into the container
+> to avoid SQLite-on-Docker WAL corruption.
 
-![Coding Environment — Tmux Status Bar](docs/images/status-line.png)
+**MCP Configuration**: `claude-mcp-launcher.sh` wires the stdio-proxy → SSE bridge so
+the agent talks to the containerized MCP servers. All agents are wrapped in tmux
+sessions via the shared `scripts/tmux-session-wrapper.sh`, which is also the
+**requirement** for the Live Context preview ([§8](#8-retrieval-tuning-controls--slider--exponential-toggle))
+to read the input draft from the pane.
 
-**Multi-Agent Support**: While Claude Code is the primary and default agent (`coding` or `coding --claude`), the system is fully agent-agnostic. Any coding agent can be integrated with a single config file in `config/agents/`. Currently supported:
+### 🛡️ Installation Safety
 
-| Agent | Launch Command | Detection |
-|-------|---------------|-----------|
-| **Claude Code** (default) | `coding` or `coding --claude` | Native transcript support |
-| **GitHub Copilot CLI** | `coding --copilot` | Pipe-pane I/O capture |
-| **OpenCode** | `coding --opencode` | Pipe-pane I/O capture |
-| **Mastracode** | `coding --mastra` | Lifecycle hook transcripts |
-
-All agents get the same infrastructure: tmux session wrapping, status line, health monitoring, LSL session logging, knowledge management, constraint enforcement, and **shared skills** (see [Skills System](docs/skills-system.md)). Missing agent CLIs are auto-installed on first launch (with user confirmation).
-
-![GitHub Copilot CLI running in coding](docs/images/coding-copilot-cli.png)
-
-![OpenCode running in coding](docs/images/coding-opencode.png)
-
-![Mastracode running in coding](docs/images/coding-mastra.png)
-
-See [Agent Integration Guide](docs/agent-integration-guide.md) for adding new agents.
-
-**Health System**: The health verifier reads cached commit info from `cache-metadata.json` (no `.git` inside the container) and uses supervisorctl for service restarts.
-
-The Docker stack runs 4 containers (coding-services, Qdrant, Memgraph, Redis) with 10 internal services managed by supervisord, using ~1.75 GB memory total. The only host-side service is the LLM CLI Proxy (port 12435), which bridges to host-local CLI tools like Claude Code and GitHub Copilot.
-
-![Docker Container Architecture](docs/images/dockerized-system-architecture.png)
-
-See [Architecture Report](docs/architecture-report.md) for full system overview, and the [Docker Deployment Guide](docker/README.md) for container configuration.
-
-### Environment Resilience
-
-The launcher automatically adapts to your network environment:
-- **Corporate network detection** — 3-layer detection (environment variable, SSH probe, HTTPS fallback) with 5-second timeouts
-- **Proxy auto-configuration** — Detects local proxy services (proxydetox) and configures environment variables automatically
-- **Docker build proxy** — Build-time proxy is driven by the same VPN detection (see below)
-- **Docker auto-start** — Launches Docker Desktop on demand with hung-process recovery and 45-second timeout
-- **Tested in all combinations** — CN/public network, with/without proxy, Claude/CoPilot — validated by 17 end-to-end tests
-
-No manual network configuration needed for most environments. See [Getting Started - Network Setup](docs/getting-started.md#network-setup-corporateproxy) for details.
-
-#### Docker Build Proxy Management
-
-The Docker **build** (compiling `coding-services`) fetches OS packages via `apt-get`
-and npm/Python dependencies, so it needs working network access at build time.
-Docker normally auto-injects `http_proxy`/`https_proxy` build-args from
-`~/.docker/config.json`. On a corporate laptop that proxy often points at a
-host-only address (e.g. `127.0.0.1` rewritten to the Docker bridge gateway) which
-is **unreachable from inside the build container when off-VPN** — causing
-`apt-get update` to fail with `Unable to locate package ...`.
-
-The launcher resolves this automatically, keyed to the corporate-VPN detection
-(`INSIDE_CN`):
-
-| State | Build proxy behavior |
-|-------|----------------------|
-| **Inside CN** (on VPN) | Passes the detected proxy through to the build (`http_proxy`/`https_proxy` build-args) |
-| **Outside CN** (off VPN) | Forces the build-args **empty**, overriding any proxy from `~/.docker/config.json` so the build goes direct |
-
-This is implemented in `_configure_docker_build_proxy()`
-([scripts/launch-agent-common.sh](scripts/launch-agent-common.sh)), which exports
-`DOCKER_BUILD_HTTP_PROXY` / `DOCKER_BUILD_HTTPS_PROXY` / `DOCKER_BUILD_NO_PROXY`.
-These feed the `build.args` block in
-[docker/docker-compose.yml](docker/docker-compose.yml). No manual configuration is
-needed.
-
-**Overrides** (rarely needed):
-- `CODING_DOCKER_BUILD_PROXY=http://host:port` — force a specific build proxy (takes precedence when inside CN)
-- `CODING_FORCE_CN=true|false` — force VPN detection on/off, which also flips the build proxy
-
-### Installation Safety
-
-The installer follows a **non-intrusive policy** - it will NEVER modify system tools without explicit consent:
+The installer follows a **non-intrusive policy** — it will NEVER modify system tools
+without explicit consent:
 
 - **Confirmation prompts** before installing any system packages (Node.js, Python, jq)
 - **Skip options**: `y` (approve), `N` (skip), `skip-all` (skip all system changes)
 - **Shell config backup** with timestamped files before any modifications
 - **Syntax verification** after shell config changes
 
-![Installation Flow](docs/images/installation-flow.png)
-
-**Next Steps**: [Getting Started Guide](docs/getting-started.md)
-
----
-
-## 🎯 What It Provides
-
-### Core Capabilities
-
-- **🏥 Health System** - Real-time monitoring, auto-healing, and status line indicators
-- **📋 Live Session Logging** - Real-time conversation classification and routing
-- **🔒 Constraint Monitoring** - PreToolUse hook enforcement for code quality
-- **🧠 Knowledge Management** - Capture, visualize, and share development insights
-- **👁️ Observational Memory** - Per-exchange LLM observations from live sessions, browsable dashboard
-- **🤖 Multi-Agent Analysis** - 11 specialized AI agents for comprehensive code analysis
-
-### LLM Providers (Zero-Cost Routing)
-
-The unified LLM layer (`lib/llm/`) intelligently routes requests to maximize cost savings:
-
-- **Subscription-First**: Claude Code → GitHub Copilot → Groq → Anthropic → OpenAI
-- **10 Providers**: 2 subscription (CLI), 5 cloud API, 2 local, 1 mock
-- **Automatic Fallback**: Quota exhausted? Seamlessly fall back to paid APIs
-- **Quota Tracking**: Persistent usage tracking with exponential backoff
-- **Cost Savings**: ~$50-100/month for active development (all UKB/LSL analysis is $0)
-
-**Provider Status**:
-- ✅ Claude Code (sonnet/opus) - **Zero cost** via subscription
-- ✅ GitHub Copilot (gpt-4o-mini/gpt-4o) - **Zero cost** via subscription
-- ✅ Groq (llama-3.1/3.3) - Fast, low-cost API fallback
-- ✅ Anthropic, OpenAI, Gemini, GitHub Models - Cloud API fallback
-- ✅ DMR, Ollama - Local fallback (no API costs)
-
-See [LLM Architecture](docs-content/architecture/llm-architecture.md) for details.
-
-### Integration Support
-
-- **Claude Code** - Full MCP server integration (default agent)
-- **GitHub Copilot CLI** - Pipe-pane capture with session logging
-- **OpenCode** - Pipe-pane capture with session logging
-- **Agent Abstraction API** - Unified adapter system for any coding agent
-- **Docker Support** - Containerized deployment with HTTP/SSE transport for MCP servers
-
-### Agent Abstraction Architecture
-
-The system uses a unified Agent Abstraction API (`lib/agent-api/`) that enables consistent features across different coding agents:
-
-- **BaseAdapter** - Common interface for all agent adapters
-- **StatuslineProvider** - Unified status display (rendered via tmux status bar)
-- **HooksManager** - Bridge between native hook systems and unified hooks
-- **TranscriptAdapter** - Unified session log format (LSL)
-
-![Agent Abstraction Architecture](docs/images/agent-abstraction-architecture.png)
-
-See [Agent Abstraction API](docs/architecture/agent-abstraction-api.md) for details.
+Observation summarization routes through the unified LLM layer with
+**subscription-first** zero-cost routing (Claude Code → GitHub Copilot → Groq →
+Anthropic → OpenAI), so all observation, digest, and insight generation runs at **$0**
+via existing subscriptions, with automatic fallback when a quota is exhausted.
 
 ---
 
-## 📚 Documentation
+## 📖 Table of Contents
 
-### Core Systems
-
-#### [🏥 Health System](docs/health-system/)
-Automatic health monitoring and self-healing with real-time dashboard
-- Pre-prompt health verification with 3-layer resilience
-- Auto-healing failed services (Docker-aware)
-- Dashboard at `http://localhost:3032`
-- Service supervision hierarchy ensures services stay running
-- **[📊 Status Line System](docs/health-system/status-line.md)** - Real-time indicators via unified tmux status bar (all agents)
-
-![Health Supervision Hierarchy](docs/images/supervisor-restart-hierarchy.png)
-
-#### [📊 Token Usage Telemetry](docs/architecture/token-usage.md)
-Real-time LLM token-consumption visibility on the Health Dashboard (`http://localhost:3032/token-usage`).
-- Every `/api/complete` call through the LLM CLI Proxy (port `12435`) is recorded with provider, model, process, token counts and latency
-- The proxy serves `/api/token-usage/summary`, `/api/token-usage/recent` and `/api/llm/settings`, read directly by the dashboard
-- Per-hour, per-user JSON exports under `.data/llm-proxy-export/` survive restarts and merge across teammates after `git pull`
-- Per-process provider pins (the ⚙ Settings dialog) let you force a service to a specific provider + model
-
-The repo wrapper (`src/llm-proxy/llm-proxy.mjs`) fronts the upstream `@rapid/llm-proxy` package: it starts the package on an internal port and exposes the token-usage endpoints on `12435` while transparently proxying completions and recording usage.
-
-```mermaid
-graph TD
-    subgraph Callers[Cognitive Processes]
-        OW[observation-writer]
-        HC[health-coordinator]
-        SA[semantic-analyzer]
-    end
-
-    subgraph Proxy[LLM CLI Proxy · port 12435]
-        FRONT[Front server<br/>llm-proxy.mjs]
-        STORE[(Token-Usage Store<br/>in-memory + JSON export)]
-        UP[Upstream @rapid/llm-proxy<br/>internal free port]
-    end
-
-    DASH[Health Dashboard UI<br/>/token-usage]
-
-    OW -->|POST /api/complete + process| FRONT
-    HC -->|POST /api/complete + process| FRONT
-    SA -->|POST /api/complete + process| FRONT
-
-    FRONT -->|forward completion| UP
-    UP -->|tokens, model, latency| FRONT
-    FRONT -->|record| STORE
-    STORE -->|hourly JSON| EXPORT[(.data/llm-proxy-export/<br/>YYYY/MM/...json)]
-
-    DASH -->|GET /api/token-usage/summary| FRONT
-    DASH -->|GET /api/token-usage/recent| FRONT
-    DASH -->|GET/PUT /api/llm/settings| FRONT
-    FRONT -->|aggregated JSON| DASH
-```
-
-##### 🩺 LLM-Proxy Liveness Auto-Heal (3-second watchdog)
-
-The `health-coordinator` continuously supervises the LLM CLI Proxy so it never
-stays down. Two cooperating layers heal it:
-
-- **3-second liveness watchdog** — probes `GET /health` every 3s. If the proxy
-  fails (`HTTP ≠ 200`) or does not respond (crash → `ECONNREFUSED`, hang →
-  timeout), it is restarted immediately.
-- **60-second semantic FSM** — probes a real `POST /api/complete` and restarts
-  on sustained quality failure (`semantic_ok=false`).
-
-Restarts are **cross-platform** (macOS `launchctl`; Linux/Windows free port
-`12435` and respawn the wrapper detached), **serialized** to avoid `EADDRINUSE`
-races, and guarded by a **20-second post-restart settle window** so a freshly
-spawned proxy is never restarted while its upstream is still warming up. State
-is surfaced on `GET /health/state` (`proxy.liveness_ok`, `liveness_restart_count`).
-
-```mermaid
-graph TD
-    START([health-coordinator<br/>systemd user service]) --> TIMER[Liveness timer<br/>every 3s]
-    TIMER --> SETTLE{Within 20s<br/>post-restart<br/>settle window?}
-    SETTLE -->|Yes| SKIP[Skip this cycle]
-    SETTLE -->|No| PROBE[GET /health<br/>4s timeout]
-    PROBE --> OK{HTTP 200?}
-    OK -->|Yes| HEALTHY[liveness_ok = true<br/>no action]
-    OK -->|No: non-200 / refused / timeout| KILLSW{auto_heal<br/>enabled?}
-    KILLSW -->|No kill-switch| DISABLED[Skip — alert only]
-    KILLSW -->|Yes| RESTART[restart_llm_cli_proxy<br/>free port 12435 + respawn]
-    RESTART --> WAIT[Wait for /health 200<br/>then start 20s settle]
-    WAIT --> TIMER
-    HEALTHY --> TIMER
-    SKIP --> TIMER
-```
-
-**Egress & semantic health.** When the proxy is respawned (by the watchdog or
-systemd) it no longer inherits the shell's `HTTPS_PROXY`. The wrapper
-(`src/llm-proxy/llm-proxy.mjs`) resolves the corporate proxy from the proxydetox
-controller, installs a Node-20-compatible `undici` global dispatcher, then clears
-`HTTPS_PROXY` so the upstream provider tunnels through the now-proxy-aware global
-`fetch` — restoring `semantic_ok=true` completions after every heal.
-
-**Dashboard accuracy.** The coordinator's network probe (`pollNetworkStatus`)
-resolves the local proxy host:port from the proxydetox controller instead of the
-hard-coded legacy `px` port `3128`, so the systemd-launched coordinator (which
-has no shell proxy env) probes the right port. This eliminates the false
-"Local proxy: Not running" / "Internet: Unreachable" failures previously shown on
-the Health Dashboard's **LLM Proxy Health** card (port `3032`).
-
-**ETM coverage.** The coordinator's transcript-monitor safety net unions active
-Copilot CLI session cwds (`~/.copilot/session-state/*/events.jsonl`) into its
-candidate set, so the Enhanced Transcript Monitor is auto-respawned even for
-sessions rooted outside the Agentic dir. The monitor's idle-timeout guard also
-checks for active Copilot (and OpenCode/tmux) sessions before exiting, preventing
-a premature mid-session exit that would lapse the heartbeat.
-
-
-#### [📋 Live Session Logging (LSL)](docs/lsl/)
-Real-time conversation classification and routing with security redaction
-- 5-layer classification system
-- Multi-project support with foreign session tracking
-- 98.3% security effectiveness
-- Zero data loss architecture
-
-#### [📈 Trajectories](docs/trajectories/)
-Real-time development state tracking and comprehensive project analysis
-- AI-powered activity classification (exploring, implementing, verifying, etc.)
-- Status line integration
-- Automated project capability documentation
-
-#### [🔒 Constraints](docs/constraints/)
-Real-time code quality enforcement through PreToolUse hooks
-- 18 active constraints (security, architecture, code quality, PlantUML, documentation)
-- Severity-based enforcement (CRITICAL/ERROR blocks, WARNING/INFO allows)
-- Dashboard monitoring at `http://localhost:3030`
-- Compliance scoring (0-10 scale)
-
-#### [🧠 Knowledge Management](docs/knowledge-management/)
-**Two Complementary Approaches** for knowledge capture and retrieval:
-- **Manual/Batch (UKB)**: Git analysis and interactive capture for team sharing
-- **Online (Continuous Learning)**: Real-time session learning with semantic search
-- **Visualization (VKB)**: Web-based graph visualization at `http://localhost:8080`
-- **Ontology Classification**: 4-layer classification pipeline
-
-#### [👁️ Observational Memory](docs/observations/)
-Real-time per-exchange observations from live coding sessions, inspired by the observational memory concepts in the Mastra codebase:
-- **Structured LLM summaries**: Each exchange summarized into Intent/Approach/Artifacts/Result via subscription providers
-- **Multi-agent capture**: All four agents (Claude, Copilot, OpenCode, Mastracode) generate observations
-- **Dashboard**: Browsable at `http://localhost:3032/observations` with filters, search, compact view
-- **Auto-fallback**: LLM proxy automatically tries the next provider on failure (health tracking with cooldowns)
-- **Transcript converters**: Batch-convert historical Claude JSONL, Copilot events, and .specstory files
-- **Zero-cost summarization**: Routes through subscription providers (Claude Max, Copilot Enterprise)
-
-![Observation Viewer -- browsable dashboard with agent/project filters](docs/images/observation-viewer.png)
-
-![Observation Viewer -- expanded observation with structured summary](docs/images/observation-viewer-item.png)
-
-![Mastracode in VS Code](docs/images/coding-mastracode-vscode.png)
-
-##### Digests & Insights — Project-Root Scoped Consolidation
-
-Observations are consolidated in two LLM-driven stages, both **strictly scoped to a single codebase**:
-
-| Stage | Cadence | Output |
-|-------|---------|--------|
-| **Digest** | Daily | Thematic grouping of that day's observations into narrative summaries |
-| **Insight** | On demand / cron | Persistent reference articles synthesized from unsynthesized digests |
-
-**Partition key — `projectRoot`**: every observation records the absolute path of its codebase (e.g. `~/Ritwik/Memory/agent_agnostic/obs-memory`). The consolidator normalises this to a `~/…` key so observations from the same codebase always converge, regardless of whether they were captured with a full or redacted path. Two codebases that share a basename (e.g. two forks both called `obs-memory`) are kept separate.
-
-**Root derivation** (for observations without an explicit `projectRoot`):
-1. Extract from `metadata.projectRoot` captured at ingestion.
-2. Derive from `modifiedFiles`/`readFiles` paths matched against the local repo corpus.
-3. Fall back to the basename label as a provisional key.
-4. Unresolvable rows go to an isolated `unknown` bucket — never merged with any real root.
-
-```mermaid
-graph TD
-    O[Raw Observations<br/>metadata.projectRoot + label] --> K{Resolve root key}
-    K -->|metadata.projectRoot present| R1[Normalized root<br/>~/path/to/repo]
-    K -->|derive from file paths| R2[Local repo root]
-    K -->|no evidence| U[unknown bucket<br/>isolated — never merged]
-
-    R1 --> P[Partition by root]
-    R2 --> P
-    U --> P
-
-    P --> D[consolidateDay<br/>Digests — per root, per day]
-    D --> S[synthesizeInsights<br/>Insights — per root]
-    S --> V[verifyInsights / compactInsights<br/>claims checked against repo files]
-
-    SEL[Roots selection<br/>CLI ・ API ・ Dashboard] -.scopes.-> D
-    SEL -.scopes.-> S
-```
-
-**Selecting which root(s) to run:**
-
-```bash
-# CLI
-node scripts/consolidate-observations.js --list-roots
-node scripts/consolidate-observations.js --roots=~/path/to/repo
-node scripts/consolidate-observations.js --root=~/repoA --root=~/repoB
-
-# REST API
-curl http://localhost:12436/api/project-roots
-curl -X POST http://localhost:12436/api/consolidation/run \
-  -H 'Content-Type: application/json' \
-  -d '{"roots":["~/path/to/repo"]}'
-```
-
-The **Insights page** (`http://localhost:3032/insights`) includes a project-root multi-select so you can trigger a scoped consolidation run and view/filter insights by codebase directly from the dashboard.
-
-**Truthfulness & Confidence**: after synthesis each insight's backticked code/path claims are verified against the codebase files. `verificationRatio` (verified / total claims), `confidence` (LLM-assigned, decays over time), and `fresh`/`partial`/`stale` bands are surfaced in the Coverage tab.
-
-See [Consolidation & Project-Root Scoping](docs/observations/README.md#consolidation--project-root-scoping) for full details.
-
-### Integration Components
-
-- **[System Health Dashboard](integrations/system-health-dashboard/)** - Real-time health visualization
-- **[MCP Constraint Monitor](integrations/mcp-constraint-monitor/)** - PreToolUse hook enforcement
-- **[MCP Semantic Analysis](integrations/mcp-semantic-analysis/)** - 11-agent AI analysis system
-- **[VKB Visualizer](integrations/vkb-visualizer/)** - Knowledge graph visualization
-- **[All Integrations](integrations/)** - Complete integration list
-
-### Skills & Commands
-
-#### [Skills System](docs/skills-system.md)
-Reusable workflow instructions shared across all agents — drop a `.md` into `.claude/commands/` and it propagates to Claude, Copilot, and OpenCode automatically.
-
-![Skills System](docs/images/skills-system.png)
-
-### Getting Started
-
-- **[Installation & Setup](docs/getting-started.md)** - Complete installation guide
-- **[Provider Configuration](docs/provider-configuration.md)** - LLM provider setup
-- **[Troubleshooting](docs/troubleshooting.md)** - Common issues and solutions
+- [🚀 Quick Start](#-quick-start)
+  - [🐳 Docker Deployment](#-docker-deployment)
+  - [🛡️ Installation Safety](#️-installation-safety)
+1. [What Makes It Different](#1-what-makes-it-different)
+2. [The Three-Tier Memory Hierarchy](#2-the-three-tier-memory-hierarchy)
+3. [Creation Pipeline — How Memories Are Born](#3-creation-pipeline--how-memories-are-born)
+4. [Consolidation — From Observations to Knowledge](#4-consolidation--from-observations-to-knowledge)
+5. [Storage Mechanism — Where Everything Lives](#5-storage-mechanism--where-everything-lives)
+6. [Retrieval Pipeline — The Read Path](#6-retrieval-pipeline--the-read-path)
+7. [★ Live Human-Feedback Reranking](#7--live-human-feedback-reranking-the-standout-feature)
+8. [Retrieval Tuning Controls — Slider & Exponential Toggle](#8-retrieval-tuning-controls--slider--exponential-toggle)
+9. [Configuration & Tuning](#9-configuration--tuning)
+10. [Future Optimization — Supervised Embedder Fine-Tuning](#10-future-optimization--supervised-embedder-fine-tuning)
+11. [API Quick Reference](#11-api-quick-reference)
+12. [Glossary](#12-glossary)
 
 ---
 
-## 🔧 Core Features
-
-### Live Session Logging (LSL)
-
-Real-time conversation classification and routing with enterprise-grade security:
-
-- **3-Layer Classification**: Path analysis → Keyword matching → Semantic analysis
-- **98.3% Security Effectiveness**: Enhanced redaction with bypass protection
-- **Multi-User Support**: Secure user isolation with SHA-256 hash generation
-- **Zero Data Loss**: Every exchange properly classified and preserved
-- **200x Performance**: Optimized bulk processing with sub-millisecond tracking
-
-**Status**: ✅ Production Ready
-
-### Constraint Monitoring
-
-PreToolUse hook integration for real-time code quality enforcement:
-
-- **18 Active Constraints**: Security, architecture, code quality, PlantUML, documentation
-- **Severity-Based**: CRITICAL/ERROR blocks, WARNING/INFO allows with feedback
-- **Dashboard Monitoring**: Live violation feed (port 3030)
-- **REST API**: Programmatic access (port 3031)
-- **Testing Framework**: Automated and interactive constraint testing
-
-**Status**: ✅ Production Ready
-
-### Knowledge Management
-
-Capture, organize, and visualize development insights with git-based team collaboration:
-
-- **UKB (Update Knowledge Base)**: Auto git analysis + interactive capture
-- **VKB (Visualize Knowledge Base)**: Web-based graph visualization
-- **Graph Database**: Agent-agnostic persistent storage (Graphology + Level)
-- **Git-Tracked JSON**: Team collaboration via pretty JSON exports
-- **graph-sync CLI**: Manual export/import/status operations
-- **Auto-Sync**: Import on startup, export on changes (5s debounce)
-- **Team Isolation**: Multi-team support with conflict resolution
-- **Domain-Specific**: Automatic domain knowledge bases per team
-
-**Status**: ✅ Production Ready
-
-### Multi-Agent Semantic Analysis
-
-11 specialized agents for comprehensive code analysis:
-
-1. **CoordinatorAgent** - Workflow orchestration
-2. **GitHistoryAgent** - Git commits and architectural decisions
-3. **VibeHistoryAgent** - Conversation file processing
-4. **SemanticAnalysisAgent** - Deep code analysis (uses LLM)
-5. **WebSearchAgent** - External pattern research
-6. **InsightGenerationAgent** - Insight generation with PlantUML (uses LLM)
-7. **ObservationGenerationAgent** - Structured UKB-compatible observations
-8. **QualityAssuranceAgent** - Output validation with auto-correction (uses LLM)
-9. **ContentValidationAgent** - Stale entity detection and knowledge refresh
-10. **PersistenceAgent** - Knowledge base persistence
-11. **DeduplicationAgent** - Semantic duplicate detection
-
-**Debug Mode**: Full debugging support with single-step execution, substep inspection, and mock LLM mode for cost-free testing. See [UKB Workflow System](docs/health-system/ukb-workflow-system.md).
-
-**Status**: ✅ Production Ready
-
-### Live Memory Context Preview
-
-See the **Working** and **Observational** memory that would be retrieved for the prompt
-you are *typing* in the CLI — **before** you press Enter. Because the prompt has not
-been submitted yet, no `UserPromptSubmit`-style hook has fired; the draft only exists on
-screen. A host-side monitor reads it straight from the terminal via `tmux capture-pane`,
-so the mechanism is fully **agent-agnostic** and works for **GitHub Copilot CLI**,
-**Claude Code**, and **OpenCode** without any CLI-specific plugin.
-
-How it works:
-
-- **Capture** — every coding agent runs inside the shared tmux wrapper. `scripts/live-query-monitor.js` polls the pane (`tmux capture-pane -p`) and extracts the current input-box draft with [`InputDraftExtractor`](src/live-logging/InputDraftExtractor.js) (structure-first parsing of the box border + prompt marker; placeholders and UI noise are filtered out).
-- **Draft stream** — on every change, the draft is POSTed to `/api/live-context/draft` and streamed straight into the **main heading bar**, so you see the prompt update live as you type. The same payload also carries the **enhanced conversation context** — the deterministic topic summary (`paneContext`) that [`buildRetrievalQuery`](src/hooks/query-builder.js) appends as `[context: …]` — which is rendered on a muted sub-line **directly beneath the typed query** for seamless visibility of exactly what enrichment will be sent to retrieval. The enrichment is purely deterministic string extraction (no LLM call), so streaming it adds no inference cost.
-- **Debounce + retrieve** — once the draft is *stable* (unchanged for **3 s**) and new, it is passed through the Knowledge Context Injection memory pipeline (`/api/retrieve` → `RetrievalService`), which returns **Working Memory (≤300 tokens)** and **Observational memory (≤700 tokens)** for the live query.
-- **Ranked candidates** — the same response also carries `rankedResults`, the full pre-token-budget Observational Memory candidate list in final ranked order, so dashboard views can inspect every match even when the rendered markdown is truncated.
-- **Human rerank capture** — the **All Results** sidebar lets a user move candidates up/down, then save the human order. The dashboard forwards the event to the host Observations API, which embeds the query and stores compact rank-delta signals in Qdrant collection `human_rerank_feedback`. These signals close a **learned rerank loop**: similar future queries automatically promote the items humans preferred (see *Learned rerank boost* below).
-- **Submitted log** — when you press Enter (the input box clears), the sent query is POSTed to `/api/live-context/submitted` and appended to the **Recent Queries** log on the left — a history of prompts actually submitted to the CLI.
-- **Display** — the **Live Context** tab renders four zones in real time over a dedicated WebSocket: the heading bar (live typing), the Recent Queries log (submitted prompts), the Working | Observational memory columns, and an **All Results** sidebar listing every ranked candidate with tier and score.
-
-```mermaid
-graph TD
-    subgraph CLI["CLI in tmux session (Copilot / Claude / OpenCode)"]
-        A["User types a prompt<br/>NOT yet submitted"]
-    end
-
-    A -->|"tmux capture-pane -p (poll ~350ms)"| B["live-query-monitor.js"]
-
-    subgraph MON["Host monitor"]
-        B --> C["InputDraftExtractor<br/>box + prompt-marker parse"]
-        C --> D{"Draft state?"}
-    end
-
-    D -->|"changed (still typing)"| E["POST /api/live-context/draft<br/>query + enhanced context"]
-    D -->|"stable for 3s"| F["POST /api/live-context/query"]
-    D -->|"non-empty → empty (Enter)"| G["POST /api/live-context/submitted"]
-
-    subgraph DASH["Health Dashboard API :3033"]
-        E --> H["Broadcast LIVE_DRAFT"]
-        F --> I["Knowledge Context Injection<br/>/api/retrieve → RetrievalService<br/>markdown + meta + rankedResults"]
-        I --> O["Token-budgeted context<br/>Working ≤300 + Observational ≤700 tok"]
-        I --> P["rankedResults[]<br/>full pre-budget candidate list"]
-        O --> J["Ring buffer + broadcast LIVE_CONTEXT"]
-        P --> J
-        G --> K["Submitted log + broadcast LIVE_SUBMITTED"]
-    end
-
-    H -->|WebSocket| L["Heading bar<br/>live typing + context sub-line"]
-    J -->|WebSocket markdown| M["Working | Observational columns"]
-    J -->|WebSocket rankedResults| Q["All Results sidebar<br/>rank asc + tier + score"]
-    K -->|WebSocket| N["Recent Queries log"]
-```
-
-Human rerank capture flow:
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant Sidebar as All Results Sidebar
-    participant Dashboard as Dashboard API :3033
-    participant Host as Observations API :12436
-    participant Qdrant as Qdrant human_rerank_feedback
-
-    User->>Sidebar: Move results up/down
-    User->>Sidebar: Save ranking
-    Sidebar->>Dashboard: POST /api/live-context/rerank
-    Dashboard->>Host: POST /api/rerank-feedback
-    Host->>Host: embed query + hash user/query + rank deltas
-    Host->>Qdrant: upsert compact feedback event
-    Qdrant-->>Host: persisted
-    Host-->>Dashboard: { ok, eventId, persisted }
-    Dashboard-->>Sidebar: save status
-```
-
-#### Learned rerank boost (closed feedback loop)
-
-Captured re-rankings are not just stored — for **future similar queries** they
-become a bounded, fail-open ranking signal. During retrieval, `RetrievalService`
-embeds the query, finds cosine-similar prior feedback events in
-`human_rerank_feedback` (top-K 10, threshold 0.85), and converts their per-item
-rank deltas into a clamped multiplier on `rrfScore` so human-promoted items rank
-higher. The boost is applied **after** freshness rerank and **before** the final
-sort, affecting both `rankedResults` and the token-budgeted markdown. It is a
-strict no-op whenever the feedback store is empty or unavailable, so cold-start
-behavior is identical to today.
-
-The multiplier is `clamp(1 + 0.30 × learnedSignal, 0.90, 1.25)` where
-`learnedSignal` blends each event's **query↔query similarity weight**, exponential
-age decay (45-day half-life), project scope, and the normalized rank delta. The
-similarity weight is the reshaped query↔query cosine: `cosine^exponent` when the
-Query↔Query exponential is enabled (sharper — only near-duplicate queries carry
-weight), or the raw `cosine` when disabled (linear). Boosted items carry an
-optional `learnedRerank` `{ multiplier, signal, matchedEvents }` field for
-explainability. Tunables live as env-overridable constants at the top of
-[`src/retrieval/feedback-store.js`](src/retrieval/feedback-store.js)
-(`LEARNED_RERANK_THRESHOLD`, `LEARNED_RERANK_TOPK`,
-`LEARNED_RERANK_HALF_LIFE_DAYS`, `LEARNED_RERANK_COEFFICIENT`,
-`LEARNED_RERANK_MIN/MAX_MULTIPLIER`, `LEARNED_RERANK_SIMILARITY_EXPONENT`,
-`LEARNED_RERANK_EXPONENTIAL_ENABLED`, `LEARNED_RERANK_GLOBAL`) — and the
-`threshold`/`exponential`/`exponent` values are **overridden at runtime** by the
-user-tunable global retrieval settings described in *Retrieval pipeline & tunable
-scoring* below.
-
-```mermaid
-graph TD
-    subgraph CAPTURE["1. Capture (one-time, per human action)"]
-        A["Human re-orders results<br/>in All Results sidebar"]
-        A --> B["POST /api/rerank-feedback"]
-        B --> C["Embed query + derive<br/>rank-delta itemSignals"]
-        C --> D["Qdrant human_rerank_feedback<br/>1 point per event"]
-    end
-
-    subgraph RETRIEVE["2. Future similar query (every retrieve)"]
-        E["New query → embed vector"]
-        E --> F["FeedbackStore.findSimilar<br/>cosine topK=10, threshold 0.85<br/>project-scoped"]
-        D -.->|"similar events"| F
-        F --> G{"matches?"}
-        G -->|"none / store empty"| H["NO-OP<br/>scores unchanged"]
-        G -->|"≥1 match"| I["aggregateLearnedSignals<br/>similarity × age-decay × scope × delta"]
-        I --> J["rrfScore ×= clamp(1 + 0.30·signal, 0.90, 1.25)<br/>attach learnedRerank metadata"]
-    end
-
-    subgraph RANK["3. Ranking output"]
-        H --> K["Final sort + token-budget assembly"]
-        J --> K
-        K --> L["Human-promoted items rank higher<br/>for similar future queries"]
-        L -.->|"user may re-rank again"| A
-    end
-```
-
-
-#### Retrieval pipeline & tunable scoring
-
-Every retrieval — whether triggered by the **`UserPromptSubmit` Knowledge
-Injection Hook** (the actual submitted prompt) or by the **dashboard live preview**
-(the draft you are typing) — converges on a single function,
-[`RetrievalService.retrieve()`](src/retrieval/retrieval-service.js). Both paths
-therefore score **identically** and honor the same user-tunable settings, so what
-you preview in the **Live Context** tab is exactly what gets injected on submit.
-
-**Path convergence**
-
-```
-KnowledgeInjectionHook (UserPromptSubmit)        Dashboard Live Preview (typing)
-  knowledge-injection-hook.js                       live-query-monitor.js
-        │ buildRetrievalQuery(prompt, ctx)                 │ pane draft + context
-        ▼                                                  ▼
-  retrieval-client.js ──► POST /api/retrieve ──► Dashboard :3033 ──► Host :12436
-                                                                        │
-                                                          RetrievalService.retrieve()
-                                                          (reads global settings)
-```
-
-**The `retrieve()` pipeline (in order)**
-
-| # | Step | Function / constant | Notes |
-|---|------|---------------------|-------|
-| 0 | Working memory | `buildWorkingMemory(codingRoot)` | Fail-open; ≤300 tok prefix |
-| 1 | Embed query | `embeddingService.embedOne` | MiniLM-L6-v2, 384-dim |
-| 2 | Parallel recall | `_semanticSearch(vector, 20, threshold)` + `_keywordSearch` | Semantic uses the **Query↔Item threshold** as Qdrant `score_threshold` |
-| 3 | Recency list | `buildRecencyList` | Time-ordered unique union |
-| 4 | **RRF fusion** | `rrfFuse([semantic, keyword, recency], 60, agentProfile)` | Rank-based reciprocal-rank fusion (k=60) + tier weights |
-| 4.5 | Context boost | `_applyContextBoost` | project ×1.15, cwd ×1.10, recent-file ×1.20 |
-| 4.6 | Topic relevance | `_applyTopicRelevance` | Keyword-overlap demotion (cosines cluster 0.75–0.82) |
-| 4.7 | Freshness | `_applyFreshnessRerank` | Demotes insights with stale code claims |
-| 4.75 | **Query↔Item exponential** | `_applyQueryItemExponential` | When enabled: `rrfScore ×= clamp(cosine,0,1)^k` on semantic-origin items |
-| 4.8 | **Learned rerank** | `_applyLearnedRerank` | Query↔Query feedback boost (see above) |
-| 5 | Sort + rank | `fused.sort(rrfScore desc)` → `toRankedResult` | Produces `rankedResults` |
-| 6 | Token budget | `assembleBudgetedMarkdown` | Working ≤300 + Observational ≤700 tok markdown; OM items emitted in **final rank order** (most-favoured first), each tagged `**[Insight/Digest/Entity/Observation]**` |
-
-**Two-stage tunable similarity model**
-
-Scoring is governed by two independent similarity stages, each exposing the same
-three knobs in the **Live Context → Retrieval Tuning** panel:
-
-| Stage | What the cosine compares | Where it acts | Threshold default | Exponential default |
-|-------|--------------------------|---------------|-------------------|---------------------|
-| **Query ↔ Item** | current query ↔ candidate memory item | semantic admission (step 2) + emphasis (step 4.75) | `0.70` | **off**, k=3 |
-| **Query ↔ Query** | current query ↔ past human-ranked query | learned-rerank feedback gate (step 4.8) | `0.85` | **on**, k=3 |
-
-Each stage has:
-
-- **Threshold slider** (cosine admission floor, range **0.50–0.99**). Query↔Item:
-  the Qdrant `score_threshold` deciding which items are retrieved. Query↔Query:
-  the floor a past feedback event's query must clear to influence ranking.
-- **Exponential toggle** (on/off). When **on**, the similarity is reshaped as
-  `weight = similarity^k`, so near matches dominate and loosely-similar ones are
-  suppressed. When **off**, the raw cosine is used (linear).
-- **Exponent slider** `k` (range **1.0–8.0**, disabled when the toggle is off).
-  Higher `k` = steeper falloff = only near-duplicate queries/items keep weight.
-
-The math, per stage:
-
-```
-Query↔Item  (step 4.75):  rrfScore     ×= clamp(cosine, 0, 1) ^ k     # enabled only
-Query↔Query (step 4.8):   weight        = enabled ? cosine ^ k : cosine
-                          eventWeight   = weight × ageDecay × scope × userTrust
-                          rrfScore     ×= clamp(1 + 0.30 × signal, 0.90, 1.25)
-```
-
-This makes human feedback **query-specific**: with the Query↔Query exponential on,
-a re-ranking saved for one query barely moves results for a *very different* query
-(its low cosine, raised to `k`, collapses toward zero) while still strongly
-shaping *similar* queries.
-
-**Observational Memory emission order.** `assembleBudgetedMarkdown` still uses the
-per-tier reservation + caps (G2) to decide **which** candidates fit the ≤700-token
-budget, but it emits the selected items as a single `## Observational Memory`
-list ordered by **final score/rank** — most-favoured first — rather than grouping
-them into per-tier sections. Each line is prefixed with a compact tier tag
-(`**[Insight]**`, `**[Digest]**`, `**[Entity]**`, `**[Observation]**`) so tier
-attribution survives. The dashboard renders this same ranked list in the
-Observational Memory column, and the per-item `usedInObservational` flag (surfaced
-as the **OM** pill on All Results) marks exactly the candidates that made it in.
-
-**Global, persisted, single source of truth.** Settings are stored server-side in
-[`src/retrieval/retrieval-settings.js`](src/retrieval/retrieval-settings.js)
-(`<repo>/.observations/retrieval-settings.json`, override with
-`RETRIEVAL_SETTINGS_PATH`). The store is mtime-cached, fail-open to defaults, and
-written atomically. Because `retrieve()` reads it as the authoritative source,
-changing a slider **immediately** re-tunes both the live preview **and** the next
-`UserPromptSubmit` injection — no hook redeploy, no restart.
-
-Settings model and bounds:
-
-```jsonc
-{
-  "queryQuery": { "threshold": 0.85, "exponentialEnabled": true,  "exponent": 3.0 },
-  "queryItem":  { "threshold": 0.70, "exponentialEnabled": false, "exponent": 3.0 }
-}
-// threshold ∈ [0.50, 0.99], exponent ∈ [1.0, 8.0]; out-of-range values are clamped.
-```
-
-**API + UI**
-
-- `GET /api/retrieval-settings` — read current settings (host `:12436` and dashboard `:3033` proxy).
-- `PUT /api/retrieval-settings` — partial update; validates, clamps, persists, returns the saved value.
-- `POST /api/live-context/rerun` — re-run retrieval for the most recent draft so the preview re-tunes instantly after a change.
-- **Retrieval Tuning panel** ([`RetrievalTuningPanel.tsx`](integrations/system-health-dashboard/src/components/RetrievalTuningPanel.tsx)) — two groups (Query↔Query, Query↔Item), each with the threshold slider, exponential switch, exponent slider, and an info-icon tooltip; debounced `PUT` via [`useRetrievalSettings.ts`](integrations/system-health-dashboard/src/hooks/useRetrievalSettings.ts).
-
-```mermaid
-graph LR
-    subgraph UI["Live Context → Retrieval Tuning"]
-        S1["Query↔Query<br/>threshold · exp · k"]
-        S2["Query↔Item<br/>threshold · exp · k"]
-    end
-    S1 & S2 -->|"debounced PUT"| P["Dashboard :3033<br/>/api/retrieval-settings"]
-    P -->|proxy| H["Host :12436<br/>updateSettings()"]
-    H --> F["retrieval-settings.json<br/>(atomic, mtime-cached)"]
-    F --> R["retrieve() — getSettings()"]
-    HOOK["UserPromptSubmit hook"] --> R
-    PREV["Live preview (draft)"] --> R
-    R --> O["Query↔Item: rrfScore ×= cosine^k<br/>Query↔Item: score_threshold<br/>Query↔Query: learned-rerank weight"]
-```
-
-Configuration: enabled per agent via `AGENT_ENABLE_LIVE_CONTEXT=true` (default) in
-`config/agents/*.sh`. Tunables (env): `LQM_POLL_MS`, `LQM_STABLE_MS`,
-`LQM_MIN_INTERVAL_MS`, `LQM_BUDGET`, and `LQM_INPUT_MARKERS` (override prompt markers
-for a CLI whose chrome changed). The feature is fail-open end to end — if the monitor,
-dashboard, or retrieval service is unavailable, the CLI is never affected.
-
-**Requirement — the CLI must run inside tmux.** Capture works by reading the agent's
-tmux pane, so the draft is only visible when the agent is launched through the shared
-tmux wrapper. Launch any agent with `coding --copilot`, `coding --claude`, or
-`coding --opencode` and the monitor starts automatically. A CLI started **directly**
-(e.g. running `copilot` outside `coding`, with no tmux session) cannot be captured — it
-has no pane to read, so the **Live Context** tab will stay empty for that session even
-though it shows *Live* (connected). Open the dashboard at
-[http://localhost:3032](http://localhost:3032) → **Live Context**.
-
-To enable Live Context for a tmux session that is **already running** (one that predates
-the feature, or where it was disabled), attach the monitor on demand:
-
-```bash
-# Auto-detect the current ($TMUX) or single coding-* session, infer the agent:
-scripts/live-context-attach.sh
-
-# Or target a specific session explicitly:
-scripts/live-context-attach.sh coding-copilot-12345 copilot
-```
-
-The monitor self-exits when its tmux session closes; re-running the helper for an
-already-monitored session is a no-op.
-
-**Status**: ✅ Production Ready
-
-## ⚡ Usage Examples
-
-### Knowledge Management
-
-```bash
-# Start visualization server
-vkb
-
-# View at http://localhost:8080
-
-# Manual sync operations
-graph-sync status      # View sync status
-graph-sync export      # Export all teams to JSON
-graph-sync import      # Import all teams from JSON
-graph-sync sync        # Full bidirectional sync
-```
-
-### Constraint Monitoring
-
-```bash
-# Start dashboard (automatic with install)
-cd integrations/mcp-constraint-monitor
-npm run dashboard  # http://localhost:3030
-
-# API access
-curl http://localhost:3031/api/status
-curl http://localhost:3031/api/violations
-```
-
-### Live Session Logging
-
-```bash
-# Automatic during Claude Code sessions
-# Session files in .specstory/history/
-
-# Status line shows:
-📋🟠2130-2230(3min) →coding
-# 📋 = logging, 🟠 = window closing, →coding = activity detected
-```
-
-### Semantic Analysis Workflows
-
-**Claude Code:**
-```
-# Repository analysis workflow
-start_workflow {
-  "workflowType": "repository-analysis",
-  "parameters": {
-    "repository": ".",
-    "depth": 25,
-    "significanceThreshold": 6
-  }
-}
-```
-
-**VSCode CoPilot:**
-```bash
-# Via HTTP API
-curl -X POST http://localhost:8765/api/semantic/analyze-repository \
-  -H "Content-Type: application/json" \
-  -d '{"repository": ".", "depth": 25}'
-```
-
-### Digests & Insights (Observational Memory)
-
-```bash
-# List codebases with observations
-node scripts/consolidate-observations.js --list-roots
-
-# Consolidate one codebase (digests + insights + verification)
-node scripts/consolidate-observations.js --roots=~/path/to/repo
-
-# Insights only for a specific root
-node scripts/consolidate-observations.js --insights --roots=~/path/to/repo
-
-# Via the Observations API
-curl http://localhost:12436/api/project-roots
-curl -X POST http://localhost:12436/api/consolidation/run \
-  -H 'Content-Type: application/json' \
-  -d '{"roots":["~/path/to/repo"]}'
-
-# Dashboard: http://localhost:3032/insights
-#   → use the project-root multi-select to scope and trigger runs
-```
+## 1. ✨ What Makes It Different
+
+Most "AI memory" systems are a single loop: embed text → store vectors → cosine
+search → inject top-k. That works until the embedding model's notion of
+"similar" diverges from what a human actually finds *useful*. Cosine similarity
+of the `all-MiniLM-L6-v2` model clusters in a narrow `0.75–0.82` band for any two
+documents from the same project, so raw vector similarity alone cannot reliably
+discriminate *relevance*.
+
+Observational Memory addresses this with three structural advantages:
+
+| Capability | Vanilla memory | Observational Memory |
+|------------|----------------|----------------------|
+| **Knowledge shape** | Flat chunks | 3-tier hierarchy: Observations → Digests → Insights |
+| **Retrieval** | Single vector search | Hybrid: semantic **+** keyword (FTS5) **+** recency, fused with RRF |
+| **Ranking signals** | Cosine only | Tier weight, agent profile, context, topic overlap, freshness, query↔item emphasis |
+| **Human in the loop** | None | **Live drag-to-reorder feedback** becomes a learned, decaying rerank boost |
+| **Truth maintenance** | Stale silently | Insights are re-verified against live code; stale claims demoted |
+
+The headline differentiator is **#7 — Live Human-Feedback Reranking**. Everything
+else is the well-engineered substrate that makes that loop safe, bounded, and
+fail-open.
 
 ---
 
-## 🛠️ Configuration
+## 2. 🏛️ The Three-Tier Memory Hierarchy
 
-### Quick Configuration
+Inspired by Mastra's Observer/Reflector model and adapted for cross-agent project
+knowledge, memory is organized into three tiers of increasing abstraction and
+persistence.
 
-```bash
-# Set API keys
-export ANTHROPIC_API_KEY="your-key-here"
-export OPENAI_API_KEY="optional-fallback"
+| Tier | What it is | Trigger | Typical volume |
+|------|-----------|---------|----------------|
+| **Observations** | Per-exchange structured summary (Intent / Approach / Artifacts / Result) | Real-time, per prompt-set | ~30 / day |
+| **Digests** | Daily thematic work-session summaries | End of day (cron or manual) | ~7 / day |
+| **Insights** | Persistent, structured project knowledge articles | Weekly, or ≥ 5 new digests | ~10 total |
 
-# Configure preferred agent
-export CODING_AGENT="claude"  # or "copilot"
+[![Three-Tier Memory Hierarchy](docs/images/memory-tier-hierarchy.png)](docs/images/memory-tier-hierarchy.png)
+
+Each tier is queryable independently and all four contribute to retrieval, but
+with different **tier weights** (insights count most; raw observations least) —
+see [§6](#6-retrieval-pipeline--the-read-path).
+
+---
+
+## 3. 🌱 Creation Pipeline — How Memories Are Born
+
+Observations are created automatically as you work. The **Enhanced Transcript
+Monitor (ETM)** watches each agent's transcript; when a prompt-set (a completed
+user + assistant exchange) finishes, it fires an observation — **fire-and-forget**,
+so it never blocks your session.
+
+[![Observation Creation Pipeline](docs/images/observation-creation-pipeline.png)](docs/images/observation-creation-pipeline.png)
+
+### 🔢 Step-by-step
+
+1. **Exchange completed** — the ETM detects a finished prompt-set.
+2. **Fire-and-forget over HTTP** — `ObservationApiClient.processMessages()` POSTs
+   to the host obs-api on `localhost:12436`. It is never awaited and never blocks
+   live logging.
+3. **LLM summarization** — inside obs-api, `ObservationWriter` calls the LLM proxy
+   to produce a structured **Intent / Approach / Artifacts / Result** summary.
+4. **Sanitization** — `_sanitizeSummary()` strips unfilled template placeholders
+   (e.g. `[what the developer…]`) and LLM self-correction artifacts (duplicate
+   `Intent:` blocks).
+5. **Serialized write** — `_serializedWrite()` holds a promise-chain lock so
+   concurrent fire-and-forget calls cannot race past the dedup check (TOCTOU
+   prevention). Only the dedup-check + DB-write is serialized; LLM calls run
+   concurrently.
+6. **Dedup check** — multi-layer (see below).
+7. **Storage** — written to SQLite with metadata (agent, project, LLM
+   model/provider, token counts).
+8. **JSON export** — debounced (~10 s coalesce) export to
+   `.data/observation-export/observations.json`.
+
+### 🧹 Deduplication concepts
+
+Observations are deduplicated *before* storage at several levels:
+
+| Layer | Mechanism | Threshold |
+|-------|-----------|-----------|
+| **Content hash** | MD5 of `sessionId \| userContent \| assistantContent` | Exact match → reject |
+| **Semantic dedup** | Stemmed keyword similarity over a 4-hour sliding window (last 50 obs/agent). Synonymous verbs canonicalized (`debug/diagnose/investigate → debug`), stop words stripped | Jaccard > 0.4 **or** containment > 0.7 |
+| **Trivial filter** | Drops "trivial exchange" / "no actionable content" | Substring match |
+| **Sanitization** | Discards unfilled-placeholder or self-corrected LLM output | Pattern match |
+
+---
+
+## 4. 🔮 Consolidation — From Observations to Knowledge
+
+Consolidation runs **in-process inside the obs-api server** (it already owns the
+SQLite handle, so there is no second writer and no WAL race). It produces the two
+higher tiers.
+
+[![Consolidation Pipeline](docs/images/consolidation-pipeline.png)](docs/images/consolidation-pipeline.png)
+
+### 📰 Digests (Tier 2)
+- **Trigger:** end of day (daemon at 02:00), manual run, or dashboard
+  "Consolidate" button. The daemon skips *today* (still being written); manual
+  triggers can include today via `includeToday: true`.
+- **Project-aware:** observations carry a `project` column, so a session touching
+  two projects yields two digests (no cross-project blending).
+
+### 💡 Insights (Tier 3)
+- **Trigger:** when ≥ 5 unsynthesized digests exist.
+- **Output:** self-contained reference articles (not changelogs), optimized for
+  context-priming injection.
+- **Confidence:** starts ~0.8–0.95, decays −0.05 per week of inactivity, floor 0.3.
+
+### ✅ Truthfulness & freshness verification
+
+Insights age — a renamed file or moved route makes the prose silently rot. The
+verifier extracts every backticked code claim (paths, `funcName()`, env vars,
+`GET /api/…` routes, `@scoped/pkg`) and checks each against the live codebase
+(repo + submodules + sibling `_work/*` checkouts), re-running on a 7-day cadence.
+
+`verificationRatio = verifiedClaims / totalClaims` is bucketed into bands that
+directly affect retrieval:
+
+| Band | Ratio | Retrieval consequence |
+|------|-------|------------------------|
+| **FRESH** | ≥ 0.70 | Full retrieval weight |
+| **PARTIAL** | 0.50 – 0.70 | `rrfScore *= 0.3 + 0.7 × ratio` (insight tier) |
+| **STALE** | < 0.50 | Heavily demoted + one-shot confidence penalty (up to −0.20, floor 0.30) |
+
+---
+
+## 5. 🗄️ Storage Mechanism — Where Everything Lives
+
+Observational Memory uses **three coordinated stores**: SQLite for structured
+records, Qdrant for vector search, and git-tracked JSON for portability.
+
+[![Storage Architecture](docs/images/storage-architecture.png)](docs/images/storage-architecture.png)
+
+### 5.1 🗃️ SQLite — the single-owner runtime store
+
+The runtime DB (`.observations/observations.db`) has **exactly one owner**: the
+host **Observations API server** (`scripts/observations-api-server.mjs`, port
+`12436`). Every other consumer — the transcript monitor, the dashboard inside the
+container, the consolidator, the retrieval pipeline — reaches the DB *only*
+through this HTTP service. The `.observations` directory is **not** bind-mounted
+into the container.
+
+This eliminates the classic SQLite-on-Docker-Desktop corruption pattern (host
+writer + container reader losing WAL/SHM coherence across the bind-mount). It runs
+in **WAL mode** with `busy_timeout=5000ms`; the in-process writer, consolidator,
+and retrieval connections coexist safely because they share the same SQLite shared
+memory. One writer, everyone else over HTTP.
+
+#### 📋 Table schemas
+
+```sql
+CREATE TABLE observations (
+  id TEXT PRIMARY KEY,
+  summary TEXT,            -- Intent / Approach / Artifacts / Result
+  messages TEXT,           -- JSON array of original messages
+  agent TEXT,              -- claude, copilot, opencode, mastra
+  session_id TEXT,
+  source_file TEXT,
+  created_at TEXT,         -- ISO 8601
+  metadata TEXT,           -- JSON: project, llmModel, llmProvider, llmTokens
+  content_hash TEXT,       -- MD5 for dedup
+  quality TEXT,            -- high, normal, low
+  digested_at TEXT         -- set when consolidated into a digest
+);
+
+CREATE TABLE digests (
+  id TEXT PRIMARY KEY,
+  date TEXT NOT NULL,            -- YYYY-MM-DD
+  theme TEXT NOT NULL,
+  summary TEXT NOT NULL,        -- consolidated narrative
+  observation_ids TEXT NOT NULL,-- JSON array of source observation IDs
+  agents TEXT,                  -- JSON array
+  files_touched TEXT,           -- JSON array
+  quality TEXT DEFAULT 'normal',
+  created_at TEXT NOT NULL,
+  metadata TEXT
+);
+
+CREATE TABLE insights (
+  id TEXT PRIMARY KEY,
+  topic TEXT NOT NULL,
+  summary TEXT NOT NULL,        -- living knowledge document
+  confidence REAL DEFAULT 0.8,  -- decays -0.05/week, floor 0.3
+  digest_ids TEXT NOT NULL,     -- JSON array of source digest IDs
+  last_updated TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  metadata TEXT                 -- JSON: incl. codeVerification.verificationRatio
+);
 ```
 
-### Detailed Configuration
+Observations additionally have an **FTS5** virtual table powering full-text
+keyword search; digests and insights use `LIKE` fallback.
 
-See [Getting Started](docs/getting-started.md) for:
-- API key setup
-- MCP configuration
-- Network setup (proxies/firewalls)
-- Verification steps
+### 5.2 🔷 Qdrant — the vector store
+
+Five collections, each **384-dimensional Cosine** (matching `all-MiniLM-L6-v2`):
+
+| Collection | Purpose |
+|------------|---------|
+| `insights` | Insight embeddings (semantic search, tier weight 1.5) |
+| `digests` | Digest embeddings (tier weight 1.2) |
+| `kg_entities` | Knowledge-graph entity embeddings (tier weight 1.0) |
+| `observations` | Observation embeddings (tier weight 0.8) |
+| `human_rerank_feedback` | **One point per human rerank event** — powers [§7](#7--live-human-feedback-reranking-the-standout-feature) |
+
+### 5.3 📤 Git-tracked JSON export
+
+Mirroring the UKB knowledge-export pattern, the system exports human-readable,
+diff-friendly JSON to `.data/observation-export/` for cross-machine portability
+and backup:
+
+| File | Content |
+|------|---------|
+| `observations.json` | Summaries + metadata (excludes raw `messages`) |
+| `digests.json` | Daily thematic digests |
+| `insights.json` | Persistent insights + confidence |
+| `metadata.json` | Export timestamp + counts |
+
+Triggers: after each write (debounced 10 s, observations only), and a full
+`exportAll()` after each consolidation run.
 
 ---
 
-## 📊 System Status
+## 6. 🔍 Retrieval Pipeline — The Read Path
 
-### Quick Health Check
+When an agent submits a prompt, the retrieval pipeline assembles a token-budgeted
+slice of memory to prime its context. Retrieval is **hybrid** (semantic + keyword
++ recency) and **fused** with Reciprocal Rank Fusion, then refined by a sequence
+of reranking passes before the final token-budgeted markdown is built.
 
-```bash
-# Test all components (check-only mode - safe, no modifications)
-./scripts/test-coding.sh
+### 6.1 🧩 Core concepts
 
-# Interactive mode - prompts before each repair
-./scripts/test-coding.sh --interactive
+| Concept | What it is |
+|---------|-----------|
+| **Embeddings** | `all-MiniLM-L6-v2`, 384-dim, cosine. Query embedded once (`embedOne`), ~20 ms warm. |
+| **Semantic search** | Qdrant search across the 4 content collections in parallel, ≤ 20 hits each, `score_threshold` (default 0.70 via settings). |
+| **Keyword search** | SQLite **FTS5 MATCH** for observations, `LIKE` for digests/insights — catches exact terms embeddings miss. |
+| **Recency** | Exponential decay, 14-day half-life: `score = 0.5 ^ (ageDays / 14)`. |
+| **RRF** | Reciprocal Rank Fusion: each list contributes `1 / (k + rank + 1)`, `k = 60`. Rank-based, so it is robust to incomparable raw scores. |
+| **Tier weights** | After fusion: insights ×1.5, digests ×1.2, kg_entities ×1.0, observations ×0.8. |
+| **Agent profiles** | Optional per-agent tier multipliers (a second pass on top of tier weights). |
+| **Working memory** | A small always-on prefix (VKB team, project STATE) built per-query. |
+| **Token budget** | `gpt-tokenizer` counts tokens; per-tier reserved slots + caps guarantee a blend (insights first, observations last). |
 
-# Auto-repair mode - fixes coding-internal issues only
-./scripts/test-coding.sh --auto-repair
+### 6.2 🔗 The pipeline, stage by stage
 
-# Check MCP servers
-cd integrations/mcp-server-semantic-analysis && npm test
+[![Retrieval Pipeline](docs/images/retrieval-pipeline.png)](docs/images/retrieval-pipeline.png)
 
-# Check constraint monitor
-cd integrations/mcp-constraint-monitor && npm test
+Each pass mutates an `rrfScore` on the fused candidates:
+
+- **4.5 Context boost** — multiplicative: project match ×1.15 (or ×0.5 for a
+  *different* labelled project), cwd path-segment match ×1.10, recent-file
+  basename match ×1.20.
+- **4.6 Topic-relevance demotion** — because MiniLM cosines cluster at 0.75–0.82
+  within a project, keyword overlap between query and a result's topic/theme is
+  used as a discriminating proxy to demote off-topic hits.
+- **4.7 Freshness rerank** — for the `insights` tier only, multiply `rrfScore` by
+  `0.3 + 0.7 × verificationRatio` so a fully-fresh insight is untouched and a
+  fully-stale one drops to 0.3× (never fully filtered).
+- **4.75 Query↔Item emphasis** *(optional, user-tunable)* — RRF is rank-based and
+  discards the raw cosine, so when enabled this multiplies each semantic-origin
+  item's score by `clamp(cosine, 0, 1) ^ exponent`. Keyword/recency-only items
+  (no true cosine) are left untouched.
+- **4.8 Learned rerank** — the human-feedback boost; see [§7](#7--live-human-feedback-reranking-the-standout-feature).
+
+Finally, candidates are re-sorted, the token-budgeted markdown is assembled
+(reserving slots per tier so insights/digests actually reach the agent rather than
+being crowded out by high-volume observations), and the working-memory prefix is
+prepended. Items actually emitted are flagged `usedInObservational` for dashboard
+provenance pills.
+
+---
+
+## 7. ⭐ Live Human-Feedback Reranking (the standout feature)
+
+This is the capability that elevates Observational Memory above a vanilla
+retrieval pipeline. **A human can reorder retrieval results to reflect what was
+actually useful, and the system learns from that judgment** — applying a bounded,
+decaying, confidence-weighted boost to similar future queries.
+
+It implements the approved design *"Feedback Loop Design: Human Re-Ranking as a
+Learned Path-A Boost"*. Two phases: **capture** and **apply**.
+
+[![Live Human-Feedback Reranking — Capture & Apply](docs/images/learned-rerank-capture-apply.png)](docs/images/learned-rerank-capture-apply.png)
+
+### 7.1 📸 Capture — turning a reorder into a learning signal
+
+When a human reorders results in the dashboard live-context view, the client
+sends the query plus the before/after ordering to `POST /api/rerank-feedback`.
+The obs-api:
+
+1. Embeds the **query text** (must be 384-dim).
+2. Builds one `itemSignals` entry per item, capturing its stable `itemKey`
+   (`tier:id`), `originalRank`, the human-chosen `humanRank`, and the
+   `rankDelta = originalRank − humanRank`.
+3. **Upserts a single Qdrant point** into `human_rerank_feedback` — vector = the
+   query embedding, payload = the item signals plus scope context (`project`,
+   `agent`, `cwd`, `sessionId`, `userHash`, `capturedAt`, `schemaVersion`).
+
+One human save = one compact, query-keyed event. A `GET /api/rerank-feedback`
+endpoint provides an audit view (vectors omitted).
+
+### 7.2 🚀 Apply — the learned boost at query time
+
+On the next retrieval, `_applyLearnedRerank` (Step 4.8) consults the feedback
+store. `FeedbackStore.findSimilar` searches `human_rerank_feedback` for events
+whose stored **query embedding** is cosine-similar to the current query
+(default threshold 0.85), **project-scoped first**, with an optional reduced-weight
+global fallback only when project matches are sparse.
+
+Matched events are aggregated by the **pure, deterministic, time-injectable**
+`aggregateLearnedSignals()` (no I/O — unit-testable without Qdrant):
+
+```text
+similarityWeight = exponentialEnabled ? clamp(score, 0, 1) ^ exponent : score
+ageWeight        = 0.5 ^ (ageDays / HALF_LIFE_DAYS)        // default half-life 45 days
+eventWeight      = similarityWeight × ageWeight × scopeWeight × userWeight
+deltaNorm        = clamp((originalRank − humanRank) / max(windowSize − 1, 1), −1, 1)
+weightedDelta    = Σ(deltaNorm × eventWeight) / max(Σ eventWeight, ε)
+confidence       = min(1, Σ|eventWeight| / CONFIDENCE_DIVISOR)   // divisor default 1.5
+learnedSignal    = clamp(weightedDelta × confidence, −1, 1)
+multiplier       = clamp(1 + COEFFICIENT × learnedSignal, MIN, MAX)  // 0.30, [0.90, 1.25]
 ```
 
-**Note**: The test script defaults to `--check-only` mode and will NEVER auto-install system packages.
+The multiplier is applied as `item.rrfScore *= multiplier` — but **only** to items
+already present in the fused candidate list (missing-candidate recall is
+deliberately out of scope). Each boosted item carries a `learnedRerank`
+`{ multiplier, signal, matchedEvents }` object for explainability, surfaced as a
+dashboard pill.
 
-### Current Status
+### 7.3 🚪 The two gates that decide how much a reorder counts
 
-✅ **Health System** - 4-layer monitoring with auto-healing
-✅ **Live Session Logging** - Real-time classification with 98.3% security
-✅ **Constraint Monitoring** - 18 active constraints with PreToolUse hooks
-✅ **Knowledge Management** - UKB/VKB with MCP integration
-✅ **Multi-Agent Analysis** - 11 agents with workflow orchestration
-✅ **Observational Memory** - Per-exchange LLM observations with dashboard
-✅ **Status Line System** - Real-time indicators via unified tmux status bar
-✅ **Cross-Platform** - macOS, Linux, Windows support
+Not every past reorder should influence the current query equally. A reorder you
+made for *"why does the docker build time out"* should strongly shape a near-identical
+future query, but should barely touch *"how does RRF fusion work"*. Two gates,
+applied in sequence inside `aggregateLearnedSignals()`, enforce exactly that.
+
+**Gate 1 — the similarity admission gate (hard cutoff).**
+`FeedbackStore.findSimilar` only returns feedback events whose stored query
+embedding has cosine similarity **≥ the `queryQuery` threshold** (default `0.85`)
+to the current query, via Qdrant's `score_threshold`. Anything below the floor is
+never even considered — a binary in/out decision. This keeps unrelated past
+opinions out of the picture entirely.
+
+**Gate 2 — the exponential emphasis gate (soft reshape).**
+Admission is not enough, because the admitted band (`0.85 → 1.00`) still mixes
+"basically the same question" with "loosely related". MiniLM cosine scores are
+compressed: a *near-duplicate* query might score `0.97` while a *merely related*
+one scores `0.86`, only `0.11` apart. A linear weight (`weight = similarity`)
+would treat those almost identically. The exponential reshape
+
+```text
+similarityWeight = clamp(similarity, 0, 1) ^ k        // k = queryQuery exponent, default 3
+```
+
+**stretches** that compressed band so small similarity differences become large
+weight differences — letting the system make a *fine-grained* selection among
+very-similar queries.
+
+![Exponential gate: similarity weight vs. query↔query cosine similarity for several exponents](docs/images/learned-rerank-exponential-curve.png)
+
+Reading the plot (x = query↔query cosine similarity, y = the weight that feedback
+event receives):
+
+- **`k = 1` (linear, exponential OFF)** — weight equals raw cosine. At the `0.85`
+  floor an admitted event still carries `0.85` weight, so a barely-related past
+  query counts almost as much as a perfect match. Coarse.
+- **`k = 3` (default)** — the curve bows downward: `0.86` collapses to
+  `0.86³ ≈ 0.64`, while `0.97` stays high at `0.97³ ≈ 0.91`. The gap between
+  "related" and "near-duplicate" widens from `0.11` to `~0.27`.
+- **`k = 5` / `k = 8`** — progressively sharper. At `k = 8`, `0.86⁸ ≈ 0.30` is
+  heavily suppressed while `0.99⁸ ≈ 0.92` survives — only near-identical queries
+  retain meaningful weight.
+
+**Why this matters for fine-grained selection.** Within the narrow, high-similarity
+band that survives Gate 1, the *ordering* of influence is what determines whether
+the boost reflects the *right* prior judgment. The exponential turns a flat,
+indiscriminate band into a steep ramp, so the event from the query that truly
+matches dominates the events from queries that merely overlap. Raising `k`
+(via the dashboard, see [§8](#8-retrieval-tuning-controls--slider--exponential-toggle))
+tightens this to near-duplicate-only; lowering it broadens generalization.
+
+The same two-gate idea is reused on the read path as **Query↔Item** emphasis
+(Step 4.75): Gate 1 is the `queryItem` admission threshold (which *items* are
+retrieved), Gate 2 is `cosine^k` applied to each item's score (how steeply
+near-duplicate *items* are emphasized).
+
+### 7.4 🧪 Worked example — from a drag to a boost
+
+Suppose last week you searched **"docker build times out on coding-services"** and
+dragged the insight *"ETM Docker Build Timeout Hardening"* from rank 5 up to rank 1,
+out of 8 shown results. That created one feedback event. Today a teammate asks
+**"docker-compose build hangs for coding-services"** — cosine similarity to your
+stored query is `0.95`. With defaults (`k = 3`, half-life `45 d`, coefficient
+`0.30`, confidence divisor `1.5`), and the event captured `10` days ago:
+
+```text
+similarityWeight = 0.95 ^ 3                     = 0.857     (Gate 2 reshape)
+ageWeight        = 0.5 ^ (10 / 45)              = 0.857     (45-day decay)
+eventWeight      = 0.857 × 0.857 × 1.0 × 1.0    = 0.735     (scope/user weight = 1.0)
+deltaNorm        = (5 − 1) / (8 − 1)            = 0.571     (promoted 4 ranks of 7)
+weightedDelta    = (0.571 × 0.735) / 0.735      = 0.571     (single event)
+confidence       = min(1, 0.735 / 1.5)          = 0.490     (one event ⇒ modest)
+learnedSignal    = clamp(0.571 × 0.490, −1, 1)  = 0.280
+multiplier       = clamp(1 + 0.30 × 0.280, 0.90, 1.25) = 1.084
+```
+
+The insight's `rrfScore` is boosted **≈ 8.4 %** — enough to lift it a rank or two,
+not enough to override a strongly off-topic result. Now contrast the gates and the
+loop's self-reinforcement:
+
+| Scenario | Effect on multiplier |
+|----------|----------------------|
+| Similarity only `0.86` (just above floor), `k = 3` | `0.86³ = 0.64` weight → `confidence ≈ 0.36` → multiplier `≈ 1.062` (smaller) |
+| Same `0.86` but exponential **OFF** (linear) | weight `0.86` → larger, indiscriminate boost — the coarse behavior the exponential prevents |
+| **Five** teammates agree (5 similar events) | `Σ|eventWeight|` grows → `confidence → 1.0` → multiplier approaches the `1.25` cap |
+| Event is now `90` days old | `ageWeight = 0.5^(90/45) = 0.25` → boost shrinks ~4× as the opinion ages out |
+
+This is the crux of the feature: **a single human drag becomes a small, principled,
+decaying nudge; repeated human agreement on similar queries compounds into a strong,
+bounded boost** — and the exponential gate guarantees that compounding only happens
+for the queries that genuinely match.
+
+### 7.5 🛡️ Why this is safe — design guarantees
+
+| Guarantee | How |
+|-----------|-----|
+| **Fail-open** | Any Qdrant error, missing collection, or zero matches → `[]` and a no-op multiplier of 1.0. Learned rerank can never degrade baseline retrieval. |
+| **Bounded** | Multiplier hard-clamped to `[0.90, 1.25]` — always weaker than context/topic signals, so feedback nudges rather than dominates. |
+| **Decaying** | Exponential 45-day half-life: stale opinions fade automatically. |
+| **Confidence-weighted** | A single weak event barely moves the score; agreement across many strong, recent, similar events is required for a full boost. |
+| **Query-similarity-gated** | The optional `score^exponent` reshape concentrates influence on near-duplicate queries; loosely-similar past queries contribute little. |
+| **Scoped** | Project-scoped by default; global fallback is off unless explicitly enabled and runs at higher threshold + reduced weight. |
+| **Explainable** | `learnedRerank` metadata records exactly why an item was boosted. |
+
+### 7.6 🔄 The self-improving loop
+
+[![The Self-Improving Loop](docs/images/self-improving-loop.png)](docs/images/self-improving-loop.png)
+
+Over time, the system's ranking converges toward **human-validated usefulness**
+for the queries that matter most — something pure embedding similarity cannot do.
 
 ---
 
-## 🤝 Contributing
+## 8. 🎛️ Retrieval Tuning Controls — Slider & Exponential Toggle
 
-This is a personal development toolkit. For issues or suggestions:
+The dashboard exposes the two similarity stages as live, draggable controls in the
+**Retrieval Tuning** panel (`RetrievalTuningPanel.tsx`). These are not per-session
+toys — they write to the same `.observations/retrieval-settings.json` that the
+production retrieval path reads, so **whatever you set here is the single source of
+truth** for both the UserPromptSubmit knowledge-injection hook and the dashboard's
+live preview.
 
-1. Check [Troubleshooting](docs/troubleshooting.md)
-2. Review [Architecture Documentation](docs/architecture/README.md)
-3. Create an issue with detailed information
+[![Retrieval Tuning Controls](docs/images/retrieval-tuning-controls.png)](docs/images/retrieval-tuning-controls.png)
+
+### 8.1 🎚️ The two control groups
+
+| Group | Governs | Stage in pipeline | Default |
+|-------|---------|-------------------|---------|
+| **Query ↔ Query** | How strongly a *past human-ranked query* influences the current ranking (the learned-rerank feedback gate) | Step 4.8 ([§7](#7--live-human-feedback-reranking-the-standout-feature)) | threshold `0.85`, exponential **on**, `k = 3.0` |
+| **Query ↔ Item** | Which *memory items* are admitted for the current query, and how steeply their similarity is emphasized | Steps 2 + 4.75 ([§6](#6-retrieval-pipeline--the-read-path)) | threshold `0.70`, exponential **off**, `k = 3.0` |
+
+### 8.2 🔩 The three knobs in each group
+
+Each group has the same three controls:
+
+| Control | UI | Range / step | Effect on retrieval |
+|---------|-----|--------------|---------------------|
+| **Threshold** | Slider | `0.50 – 0.99`, step `0.01` | The cosine **admission floor** (Gate 1). Raise it → fewer, stricter matches (precision ↑, recall ↓). Lower it → more, looser matches (recall ↑, noise ↑). For Query↔Item this is Qdrant's `score_threshold`; for Query↔Query it is the feedback-event admission floor. |
+| **Exponential** | Switch | on / off | Turns Gate 2 on/off. **On** → `weight = similarity^k` (near-matches emphasized, far-matches suppressed). **Off** → linear/raw cosine (rank-based only for Query↔Item; flat weighting for Query↔Query). |
+| **Exponent (k)** | Slider | `1.0 – 8.0`, step `0.5` | Sharpness of the falloff (disabled, shown `—`, when the switch is off). Higher `k` → only near-duplicate queries/items keep weight (see the curve in [§7.3](#73-the-two-gates-that-decide-how-much-a-reorder-counts)); lower `k` → broader generalization. |
+
+### 8.3 📡 How a change propagates
+
+1. You drag a slider or flip a switch → local state updates **optimistically**
+   (instant UI feedback).
+2. The change is **debounced 400 ms** so dragging doesn't spam the server, then
+   `PUT /api/retrieval-settings` persists it.
+3. The server **validates and clamps** to bounds (threshold `[0.5, 0.99]`,
+   exponent `[1.0, 8.0]`), writes atomically (tmp file + rename), and returns the
+   stored value.
+4. The dashboard's `onSaved` callback **re-runs the live preview**, so you
+   immediately see how the new settings reorder a real query's results.
+5. The very next agent prompt picks up the same file (mtime-cached, fail-open to
+   defaults on any read error) — no restart required.
+
+### 8.4 🍳 Practical tuning recipes
+
+| Goal | Adjustment |
+|------|-----------|
+| Feedback is over-generalizing to loosely-related queries | **Query↔Query:** raise threshold toward `0.90` and/or raise `k` to `5–8` |
+| Feedback barely affects anything | **Query↔Query:** lower threshold toward `0.80`, keep exponential on at `k ≈ 3` |
+| Too few memories retrieved | **Query↔Item:** lower threshold toward `0.60` |
+| Retrieved items feel off-topic | **Query↔Item:** turn exponential **on**, `k ≈ 3` to emphasize true near-duplicates |
 
 ---
 
-## 📄 License
+## 9. ⚙️ Configuration & Tuning
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+### 9.1 📐 Retrieval settings (`.observations/retrieval-settings.json`)
 
-Copyright © 2025 Frank Wornle
+A single JSON file is the **single source of truth** read by `retrieve()`, so the
+UserPromptSubmit hook and the dashboard live preview honor identical values. It
+exposes two similarity stages, each with `threshold`, `exponentialEnabled`, and
+`exponent` — surfaced as the controls in [§8](#8-retrieval-tuning-controls--slider--exponential-toggle):
+
+| Stage | Controls | Default threshold | Default exponential |
+|-------|----------|-------------------|---------------------|
+| `queryQuery` | Learned-rerank gate (query↔query similarity) | 0.85 | enabled, exponent 3.0 |
+| `queryItem` | Semantic admission + emphasis (query↔item similarity) | 0.70 | disabled, exponent 3.0 |
+
+Bounds: threshold `[0.5, 0.99]`, exponent `[1.0, 8.0]`. Reads/writes are
+fail-open (defaults on error) and atomic (tmp file + rename).
+
+### 9.2 🌿 Learned-rerank env overrides
+
+All tuning constants are env-overridable, so the loop can be tuned without code
+changes:
+
+| Env var | Default | Meaning |
+|---------|---------|---------|
+| `LEARNED_RERANK_THRESHOLD` | 0.85 | Cosine floor for a feedback event to apply |
+| `LEARNED_RERANK_TOPK` | 10 | Max feedback events fetched per query |
+| `LEARNED_RERANK_HALF_LIFE_DAYS` | 45 | Age decay half-life |
+| `LEARNED_RERANK_COEFFICIENT` | 0.30 | Boost coefficient |
+| `LEARNED_RERANK_MIN_MULTIPLIER` / `MAX_MULTIPLIER` | 0.90 / 1.25 | Hard multiplier bounds |
+| `LEARNED_RERANK_CONFIDENCE_DIVISOR` | 1.5 | Confidence normalizer |
+| `LEARNED_RERANK_GLOBAL` | off | Enable reduced-weight cross-project fallback |
+
+### 9.3 🖊️ Observation creation (`.observations/config.json`)
+
+Per-agent LLM model selection and token limits, e.g. default
+`anthropic/claude-haiku-4-5`. Summarization routes through the LLM CLI proxy
+(`localhost:12435`) with automatic provider fallback (claude-code → copilot →
+groq → paid APIs), priority configured in `config/llm-providers.yaml`.
 
 ---
 
-## 🔗 Quick Links
+## 10. 🔭 Future Optimization — Supervised Embedder Fine-Tuning
 
-- **Documentation Hub**: [docs/README.md](docs/README.md)
-- **Installation Guide**: [docs/getting-started.md](docs/getting-started.md)
-- **LLM Providers & Local Models**: [docs/provider-configuration.md](docs/provider-configuration.md)
-- **Agent Abstraction API**: [docs/architecture/agent-abstraction-api.md](docs/architecture/agent-abstraction-api.md)
-- **Observational Memory**: [docs-content/core-systems/observational-memory.md](docs-content/core-systems/observational-memory.md)
-- **Digests & Insights Scoping**: [docs/observations/README.md](docs/observations/README.md#consolidation--project-root-scoping)
-- **Skills System**: [docs/skills-system.md](docs/skills-system.md)
-- **Adding Agents**: [docs/agent-integration-guide.md](docs/agent-integration-guide.md)
-- **Docker Architecture**: [docs/architecture-report.md](docs/architecture-report.md)
-- **Docker Deployment**: [docker/README.md](docker/README.md)
-- **System Overview**: [docs/system-overview.md](docs/system-overview.md)
-- **Core Systems**: [docs/core-systems/](docs/core-systems/)
-- **Integrations**: [docs/integrations/](docs/integrations/)
-- **Knowledge Management**: [docs/knowledge-management/](docs/knowledge-management/)
+Everything in [§6](#6-retrieval-pipeline--the-read-path) and
+[§7](#7--live-human-feedback-reranking-the-standout-feature) improves ranking
+*after* the embedder has spoken — RRF, tier weights, context, freshness, and the
+learned rerank all operate on top of a **frozen** `all-MiniLM-L6-v2`. That model
+was trained on generic web text, which is exactly why its cosine scores cluster in
+a narrow `0.75–0.82` band for any two documents in the same project: it has no
+notion of *this* codebase's relevance. The reranking layers compensate, but they
+cannot recover signal the embedding never encoded.
+
+The next leap is to **move relevance into the embedding space itself** by
+fine-tuning the embedder on *our own* supervised "good" examples — and we already
+collect them. Every saved rerank event in `human_rerank_feedback` is a labeled
+judgment: for query `q`, item `A` (promoted) is *more* relevant than item `B`
+(demoted). That is precisely the supervision signal contrastive sentence-embedding
+training consumes.
+
+[![Supervised Embedder Fine-Tuning](docs/images/embedder-finetuning-pipeline.png)](docs/images/embedder-finetuning-pipeline.png)
+
+### 10.1 🎯 Where the supervised pairs come from
+
+| Source | Positive (relevant) | Negative (less relevant) |
+|--------|---------------------|--------------------------|
+| **Rerank feedback** (strongest) | Item a human dragged **up** (`humanRank < originalRank`) | Item a human dragged **down**, or one ranked below it |
+| **Used-in-Observational provenance** | Items flagged `usedInObservational` for a query | Retrieved-but-dropped items for the same query |
+| **Consolidation links** | Observations cited by a digest / digests cited by an insight | Same-window items not cited |
+
+These yield `(anchor query, positive item, negative item)` **triplets** — the
+canonical input for `MultipleNegativesRankingLoss` or `TripletLoss` in
+`sentence-transformers`.
+
+### 10.2 🤝 Why this complements (not replaces) the rerank loop
+
+| Aspect | Learned rerank (today) | Fine-tuned embedder (proposed) |
+|--------|------------------------|--------------------------------|
+| **Where it acts** | Post-hoc, on the fused candidate list | At the source — the cosine scores themselves |
+| **Recall of new items** | None (only re-orders already-retrieved items) | **Yes** — a better embedder *surfaces* items the old one missed |
+| **Latency** | A single extra Qdrant lookup per query | Zero at query time (cost is offline training + one re-embed) |
+| **Failure mode** | Fail-open no-op | Needs versioning + offline eval gate before promotion |
+| **Data reuse** | Consumes feedback events | Consumes the *same* feedback events as training labels |
+
+The learned rerank is the fast, safe, online loop; embedder fine-tuning is the
+slower, offline loop that **bakes the accumulated human judgment into the model**
+so future queries start from a sharper similarity space — after which the rerank
+layer has less work to do and operates on cleaner candidates.
+
+### 10.3 🚧 Practical guardrails
+
+- **Cold-start threshold** — only fine-tune once enough distinct feedback triplets
+  exist (e.g. a few hundred), otherwise the model overfits a handful of queries.
+- **Hard-negative mining** — negatives should be *plausible* (retrieved but
+  demoted), not random; random negatives teach the model nothing new.
+- **Versioned, gated rollout** — train → evaluate nDCG/MRR against a held-out slice
+  of feedback → promote only on improvement; keep the previous embedder for rollback.
+- **Re-embed on promotion** — dimensions stay 384 (drop-in for the existing Qdrant
+  collections), but all vectors must be regenerated with the new model so query and
+  stored embeddings live in the same space.
+- **Keep it fail-open** — the retrieval pipeline must run unchanged on the frozen
+  baseline if a fine-tuned model is unavailable.
+
+---
+
+## 11. 📡 API Quick Reference
+
+All endpoints are served by the host obs-api (`localhost:12436`) and mirrored by
+the dashboard (`localhost:3033`) as thin HTTP forwarders.
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/retrieve` | POST | Hybrid retrieval for a query (returns markdown + ranked results + meta) |
+| `/api/rerank-feedback` | POST | **Capture a human-reordered result list** → one `human_rerank_feedback` event |
+| `/api/rerank-feedback?limit=N` | GET | Audit recent rerank events (vectors omitted) |
+| `/api/observations` | GET | Paginated observations (agent/date/project/quality/FTS filters) |
+| `/api/observations/messages` | POST | (host only) Summarize + dedup + insert a message chunk |
+| `/api/digests` | GET | Paginated digests |
+| `/api/insights` | GET | All insights (topic/text filter) |
+| `/api/projects/:project/coverage` | GET | Per-project truthfulness + coverage summary |
+| `/api/consolidation/status` | GET | Counts: total/undigested/pending, digests, insights |
+| `/api/consolidation/run` | POST | Trigger consolidation (optional `{ date }`) |
+
+---
+
+## 12. 📖 Glossary
+
+| Term | Definition |
+|------|-----------|
+| **Observation** | Tier-1 per-exchange structured summary (Intent/Approach/Artifacts/Result). |
+| **Digest** | Tier-2 daily thematic summary grouping related observations. |
+| **Insight** | Tier-3 persistent, structured knowledge article with a confidence score. |
+| **obs-api** | The single-owner host server (port 12436) that exclusively owns the SQLite DB. |
+| **RRF** | Reciprocal Rank Fusion — combines ranked lists via `1/(k+rank+1)`. |
+| **Tier weight** | Post-fusion multiplier reflecting a tier's trustworthiness (insights highest). |
+| **Recency score** | Exponential time decay (14-day half-life) used as a third fusion list. |
+| **Working memory** | Always-on context prefix (team/project state) prepended to retrieval output. |
+| **Freshness band** | FRESH/PARTIAL/STALE classification of an insight by code-claim verification ratio. |
+| **Learned rerank** | The bounded, decaying boost derived from human re-ranking feedback. |
+| **Admission gate (Gate 1)** | The cosine threshold below which a query/item is excluded entirely (hard cutoff). |
+| **Exponential gate (Gate 2)** | The `similarity^k` reshape that emphasizes near-duplicates over loosely-similar matches (soft). |
+| **Exponent (k)** | Sharpness of the exponential gate (1.0–8.0); higher = steeper falloff, near-duplicate-only. |
+| **Query↔Query** | Similarity between the current query and a past human-ranked query (drives learned rerank). |
+| **Query↔Item** | Similarity between the query and a memory item (drives semantic admission + emphasis). |
+| **`human_rerank_feedback`** | Qdrant collection storing one query-keyed event per human reorder. |
+| **itemSignals** | Per-item `originalRank`/`humanRank`/`rankDelta` records inside a feedback event. |
+| **learnedSignal** | Confidence-weighted, clamped rank-delta that drives the rerank multiplier. |
+| **Triplet** | `(anchor query, positive item, negative item)` training example mined from feedback for embedder fine-tuning. |
+| **Fail-open** | Design principle: any failure degrades to current behavior, never worse. |
+
+---
+
+### 🔗 Related documentation
+
+For dashboard screenshots and an image-rich walkthrough, see
+[`docs-content/core-systems/observational-memory.md`](docs-content/core-systems/observational-memory.md).
