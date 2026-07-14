@@ -49,7 +49,7 @@ interface ControlRowProps {
 
 function ControlRow({ label, info, value, children }: ControlRowProps) {
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-medium text-foreground/90">{label}</span>
@@ -86,9 +86,9 @@ function SimilarityGroup({
   onExponent,
 }: SimilarityGroupProps) {
   return (
-    <div className="space-y-3 rounded-lg border border-border/60 p-3">
+    <div className="space-y-2 rounded-lg border border-border/60 p-2.5">
       <div className="flex items-center gap-1.5">
-        <h4 className="text-sm font-semibold">{title}</h4>
+        <h4 className="text-xs font-semibold">{title}</h4>
         <InfoTip text={titleInfo} />
       </div>
 
@@ -180,16 +180,16 @@ export function RetrievalTuningPanel({ onSaved }: RetrievalTuningPanelProps) {
   return (
     <TooltipProvider delayDuration={150}>
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
+        <CardHeader className="px-4 py-2.5">
+          <CardTitle className="flex items-center gap-2 text-sm">
             <SlidersHorizontal className="size-4 text-primary" />
             Retrieval Tuning
             {saving && <span className="text-xs font-normal text-muted-foreground">saving…</span>}
             {error && <span className="text-xs font-normal text-destructive">{error}</span>}
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <CardContent className="px-4 pb-3 pt-0">
+          <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
             <SimilarityGroup
               title="Query ↔ Query"
               titleInfo={COPY.queryQuery.title}
