@@ -529,12 +529,15 @@ function HeadingCard({
   latencyMs: number | null
   resultsCount: number | null
 }) {
+  // Hide values that look like a user_id (e.g. "q677724") — only show a real
+  // project name beside the agent pill.
+  const showProject = !!project && !/^q\d/i.test(project)
   return (
     <Card>
       <CardContent className="pt-4">
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {agent && <Badge className={AGENT_COLORS[agent] || 'bg-muted'}>{agent}</Badge>}
-          {project && (
+          {showProject && (
             <span className="flex items-center gap-1">
               <Terminal className="h-3 w-3" /> {project}
             </span>
