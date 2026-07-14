@@ -81,13 +81,13 @@ export default function SystemHealthDashboard() {
   const getStatusColor = () => {
     switch (healthStatus.overallStatus) {
       case 'healthy':
-        return 'bg-green-50 border-green-200'
+        return 'bg-green-50 border-green-200 dark:bg-green-500/15 dark:border-green-500/40'
       case 'degraded':
-        return 'bg-yellow-50 border-yellow-200'
+        return 'bg-yellow-50 border-yellow-200 dark:bg-yellow-500/15 dark:border-yellow-500/40'
       case 'unhealthy':
-        return 'bg-red-50 border-red-200'
+        return 'bg-red-50 border-red-200 dark:bg-red-500/15 dark:border-red-500/40'
       default:
-        return 'bg-gray-50 border-gray-200'
+        return 'bg-gray-50 border-gray-200 dark:bg-muted/40 dark:border-border'
     }
   }
 

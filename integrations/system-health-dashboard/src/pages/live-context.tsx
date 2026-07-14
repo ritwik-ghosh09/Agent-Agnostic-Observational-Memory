@@ -155,15 +155,17 @@ function MemoryColumn({
   sections,
   empty,
   accent,
+  tint,
 }: {
   icon: React.ReactNode
   title: string
   sections: MdSection[]
   empty: string
   accent: string
+  tint: string
 }) {
   return (
-    <Card className="flex flex-col">
+    <Card className={`flex flex-col ${tint}`}>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <span className={accent}>{icon}</span>
@@ -213,6 +215,7 @@ function MemoryColumns({ entry, typing }: { entry: LiveContextEntry | null; typi
         icon={<Brain className="h-4 w-4" />}
         title="Working Memory"
         accent="text-violet-500"
+        tint="bg-violet-50/60 border-violet-200/70 dark:bg-transparent dark:border-border"
         sections={typing ? [] : working}
         empty={emptyFor('working')}
       />
@@ -220,6 +223,7 @@ function MemoryColumns({ entry, typing }: { entry: LiveContextEntry | null; typi
         icon={<Database className="h-4 w-4" />}
         title="Observational Memory"
         accent="text-sky-500"
+        tint="bg-sky-50/60 border-sky-200/70 dark:bg-transparent dark:border-border"
         sections={typing ? [] : observational.length ? observational : other}
         empty={emptyFor('observational')}
       />
@@ -387,7 +391,7 @@ function RankedResultsSidebar({ entry }: { entry: LiveContextEntry | null }) {
   }
 
   return (
-    <Card className="flex min-h-[28rem] flex-col overflow-hidden">
+    <Card className="flex min-h-[28rem] flex-col overflow-hidden bg-slate-50/60 border-slate-200/70 dark:bg-transparent dark:border-border">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center justify-between gap-2 text-sm">
           <span className="flex items-center gap-2">
