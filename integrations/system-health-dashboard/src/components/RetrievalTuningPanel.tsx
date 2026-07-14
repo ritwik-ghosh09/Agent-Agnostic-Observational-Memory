@@ -88,7 +88,7 @@ function SimilarityGroup({
   return (
     <div className="space-y-2 rounded-lg border border-border/60 p-2.5">
       <div className="flex items-center gap-1.5">
-        <h4 className="text-xs font-semibold">{title}</h4>
+        <h4 className="text-sm font-semibold">{title}</h4>
         <InfoTip text={titleInfo} />
       </div>
 
@@ -181,7 +181,7 @@ export function RetrievalTuningPanel({ onSaved }: RetrievalTuningPanelProps) {
     <TooltipProvider delayDuration={150}>
       <Card>
         <CardHeader className="px-4 py-2.5">
-          <CardTitle className="flex items-center gap-2 text-sm">
+          <CardTitle className="flex items-center gap-2 text-base">
             <SlidersHorizontal className="size-4 text-primary" />
             Retrieval Tuning
             {saving && <span className="text-xs font-normal text-muted-foreground">saving…</span>}
