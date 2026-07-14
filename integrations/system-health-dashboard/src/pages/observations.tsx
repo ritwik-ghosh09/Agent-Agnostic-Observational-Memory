@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import { RefreshCw, Eye, Filter, List, LayoutList } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -8,6 +9,9 @@ import type { Observation } from '@/components/observation-card'
 import { ObservationFilters, getDefaultFilters } from '@/components/observation-filters'
 import type { FilterState } from '@/components/observation-filters'
 import { PaginationBar } from '@/components/pagination-bar'
+import { useAppDispatch, useAppSelector } from '@/store'
+import { setObservationsCount } from '@/store/slices/tabCountsSlice'
+import { setRange } from '@/store/slices/dateRangeSlice'
 
 const API_PORT = process.env.SYSTEM_HEALTH_API_PORT || '3033'
 const API_BASE_URL = `http://localhost:${API_PORT}`
@@ -48,7 +52,16 @@ function hasActiveFilters(filters: FilterState): boolean {
 }
 
 export function ObservationsPage() {
-  const [filters, setFilters] = useState<FilterState>(getDefaultFilters())
+  const dispatch = useAppDispatch()
+  const location = useLocation()
+  // Persisted, cross-tab time range. Seed the filter's from/to from the store
+  // so a range chosen here (or on the Digests tab) survives tab switches.
+  const persistedRange = useAppSelector(s => s.dateRange)
+  const [filters, setFilters] = useState<FilterState>(() => ({
+    ...getDefaultFilters(),
+    from: persistedRange.from,
+    to: persistedRange.to,
+  }))
   const [observations, setObservations] = useState<Observation[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -73,11 +86,14 @@ export function ObservationsPage() {
       const data: ObservationResponse = await res.json()
       setObservations(data.data || [])
       setTotal(data.total || 0)
+      // Publish the range-scoped total so the NavBar badge matches this tab.
+      dispatch(setObservationsCount(data.total || 0))
     } catch (err) {
       setError('Failed to load observations. Check that the health API is running on port 3033.')
       if (!isAutoRefresh) {
         setObservations([])
         setTotal(0)
+        dispatch(setObservationsCount(0))
       }
     } finally {
       setLoading(false)
@@ -90,12 +106,12 @@ export function ObservationsPage() {
     fetchObservations(filters, page)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-refresh polling — recompute 'to' date so the window doesn't go stale overnight
+  // Auto-refresh polling — refetch the CURRENTLY selected range so newly
+  // captured rows in that window appear, without overriding the user's chosen
+  // 'to' bound (which would silently widen the range past what they picked).
   useEffect(() => {
     intervalRef.current = setInterval(() => {
-      const freshTo = new Date().toISOString().split('T')[0]
-      const refreshFilters = { ...filters, to: freshTo }
-      fetchObservations(refreshFilters, page, true)
+      fetchObservations(filters, page, true)
     }, REFRESH_INTERVAL)
 
     return () => {
@@ -127,6 +143,9 @@ export function ObservationsPage() {
     setPage(1)
     setFilters(newFilters)
     setSidebarOpen(false)
+    // Persist the range so it is shared with the Digests tab and survives tab
+    // switches.
+    dispatch(setRange({ from: newFilters.from, to: newFilters.to }))
     fetchObservations(newFilters, 1)
   }
 
@@ -143,6 +162,32 @@ export function ObservationsPage() {
   const handleToggle = (id: string) => {
     setExpandedId(prev => (prev === id ? null : id))
   }
+
+  // Deep-link handling: when navigated to with a `#observation-<id>` hash (e.g.
+  // from the Live Context "All Results" list), scroll the matching card into
+  // view, expand it, and briefly pulse a highlight ring. Runs whenever the hash
+  // changes or the loaded observation set changes (so it also fires once the
+  // list has finished loading).
+  useEffect(() => {
+    const hash = location.hash
+    if (!hash.startsWith('#observation-')) return
+    if (loading) return
+    const targetId = hash.slice('#observation-'.length)
+    if (!targetId) return
+
+    // Ensure the card is expanded so its full content is visible.
+    setExpandedId(targetId)
+
+    const raf = requestAnimationFrame(() => {
+      const el = document.getElementById(`observation-${targetId}`)
+      if (!el) return
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      const pulse = ['ring-2', 'ring-primary', 'ring-offset-2', 'ring-offset-background']
+      el.classList.add(...pulse)
+      window.setTimeout(() => el.classList.remove(...pulse), 2400)
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [location.hash, observations, loading])
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
   const isFiltered = hasActiveFilters(filters)
@@ -236,7 +281,7 @@ export function ObservationsPage() {
               <ScrollArea className="flex-1">
                 <div className={`px-6 py-4 ${compact ? 'space-y-1' : 'space-y-2'}`}>
                   {observations.map(obs => (
-                    <div key={obs.id} data-observation-card>
+                    <div key={obs.id} id={`observation-${obs.id}`} className="scroll-mt-24 rounded-lg" data-observation-card>
                       <ObservationCard
                         observation={obs}
                         isExpanded={expandedId === obs.id}

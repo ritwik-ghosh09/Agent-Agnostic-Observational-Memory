@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { httpBase, useLiveContextWebSocket } from '@/hooks/useLiveContextWebSocket'
 import type {
   LiveContextEntry,
@@ -234,6 +235,28 @@ function resultItemKey(result: RankedResult): string {
   return `${result.tier}:${result.id}`
 }
 
+/**
+ * Map a ranked retrieval result to the route + hash anchor of the tab that owns
+ * it, so clicking a result navigates to that exact item. Each destination page
+ * reads the `#<type>-<id>` hash and scrolls/expands/pulses the matching card.
+ *
+ * `kg_entities` has no dedicated tab in the dashboard, so it is intentionally
+ * NOT navigable (returns null → rendered as a non-clickable row).
+ */
+function resultRoute(result: RankedResult): string | null {
+  switch (result.tier) {
+    case 'observations':
+      return `/observations#observation-${result.id}`
+    case 'digests':
+      return `/digests#digest-${result.id}`
+    case 'insights':
+      return `/insights#insight-${result.id}`
+    case 'kg_entities':
+    default:
+      return null
+  }
+}
+
 type SaveStatus =
   | { kind: 'idle'; message: string | null }
   | { kind: 'saving'; message: string }
@@ -264,6 +287,7 @@ function ObservationalPill() {
 
 /** Ranked sidebar containing every retrieval candidate for the live query. */
 function RankedResultsSidebar({ entry }: { entry: LiveContextEntry | null }) {
+  const navigate = useNavigate()
   const original = useMemo(
     () => (entry?.rankedResults ?? []).slice().sort((a, b) => a.rank - b.rank),
     [entry]
@@ -406,13 +430,42 @@ function RankedResultsSidebar({ entry }: { entry: LiveContextEntry | null }) {
               {entry ? 'No results for this query.' : 'No results yet.'}
             </p>
           ) : (
-            ordered.map((result, index) => (
+            ordered.map((result, index) => {
+              const route = resultRoute(result)
+              const navigable = route !== null
+              const go = () => {
+                if (route) navigate(route)
+              }
+              return (
               <div key={resultItemKey(result)} className="rounded-md border border-border/60 px-3 py-2 text-sm">
                 <div className="flex items-start gap-2">
                   <span className="mt-0.5 w-7 shrink-0 text-xs font-semibold text-muted-foreground">
                     #{index + 1}
                   </span>
-                  <div className="min-w-0 flex-1">
+                  <div
+                    className={`min-w-0 flex-1 rounded-sm ${
+                      navigable
+                        ? 'cursor-pointer hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary'
+                        : ''
+                    }`}
+                    role={navigable ? 'button' : undefined}
+                    tabIndex={navigable ? 0 : undefined}
+                    aria-label={
+                      navigable ? `Open ${TIER_LABELS[result.tier]}: ${result.title}` : undefined
+                    }
+                    title={navigable ? `Open in ${TIER_LABELS[result.tier]} tab` : undefined}
+                    onClick={navigable ? go : undefined}
+                    onKeyDown={
+                      navigable
+                        ? (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              go()
+                            }
+                          }
+                        : undefined
+                    }
+                  >
                     <div className="flex items-center gap-1.5">
                       <Badge className={TIER_COLORS[result.tier]}>{TIER_LABELS[result.tier]}</Badge>
                       {result.usedInObservational && <ObservationalPill />}
@@ -451,7 +504,8 @@ function RankedResultsSidebar({ entry }: { entry: LiveContextEntry | null }) {
                   </div>
                 </div>
               </div>
-            ))
+              )
+            })
           )}
         </div>
       </ScrollArea>

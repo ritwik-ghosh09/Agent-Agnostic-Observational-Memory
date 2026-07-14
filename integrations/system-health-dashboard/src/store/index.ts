@@ -8,6 +8,8 @@ import autoHealingReducer from './slices/autoHealingSlice'
 import ukbReducer from './slices/ukbSlice'
 import cgrReducer from './slices/cgrSlice'
 import workflowConfigReducer from './slices/workflowConfigSlice'
+import tabCountsReducer from './slices/tabCountsSlice'
+import dateRangeReducer from './slices/dateRangeSlice'
 
 // Import middleware
 import { healthRefreshMiddleware } from './middleware/healthRefreshMiddleware'
@@ -20,6 +22,8 @@ const rootReducer = combineReducers({
   ukb: ukbReducer,
   cgr: cgrReducer,
   workflowConfig: workflowConfigReducer,
+  tabCounts: tabCountsReducer,
+  dateRange: dateRangeReducer,
 })
 
 export type RootState = ReturnType<typeof rootReducer>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
 import { RefreshCw, ChevronDown, ChevronRight, Calendar, Users, FileText, Snowflake } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -7,6 +8,9 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { MarkdownText, renderWithRedactionStyling } from '@/components/markdown-text'
 import { ConsolidationProgress, type InflightInfo, type ConsolidationStatusBase } from '@/components/consolidation-progress'
 import { ClipboardButton } from '@/components/clipboard-button'
+import { useAppDispatch, useAppSelector } from '@/store'
+import { setDigestsCount } from '@/store/slices/tabCountsSlice'
+import { setFrom, setTo } from '@/store/slices/dateRangeSlice'
 
 const API_PORT = process.env.SYSTEM_HEALTH_API_PORT || '3033'
 const API_BASE_URL = `http://localhost:${API_PORT}`
@@ -105,6 +109,8 @@ type ConsolidationStatus = ConsolidationStatusBase
 export type { InflightInfo }
 
 export function DigestsPage() {
+  const dispatch = useAppDispatch()
+  const location = useLocation()
   const [digests, setDigests] = useState<Digest[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -114,6 +120,11 @@ export function DigestsPage() {
   const [consolidationResult, setConsolidationResult] = useState<string | null>(null)
   const [projects, setProjects] = useState<string[]>([])
   const [projectFilter, setProjectFilter] = useState<string>('')
+  // Time Range — shared with the Observations tab via the store so the range
+  // survives tab switches AND the digests shown match the observations window.
+  const { from: fromDate, to: toDate } = useAppSelector(s => s.dateRange)
+  const setFromDate = (v: string) => dispatch(setFrom(v))
+  const setToDate = (v: string) => dispatch(setTo(v))
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -122,19 +133,27 @@ export function DigestsPage() {
     } catch { /* ignore */ }
   }, [])
 
-  const fetchDigests = useCallback(async (project: string = '') => {
+  const fetchDigests = useCallback(async (project: string = '', from: string, to: string) => {
     setLoading(true)
     try {
       const qs = new URLSearchParams({ limit: '200' })
       if (project) qs.set('project', project)
+      // The `from` bound both scopes the displayed range AND triggers the
+      // server-side cold-store merge (.data/observation-export). Without it the
+      // tab shows only the few digests still in SQLite's short retention window.
+      if (from) qs.set('from', from)
+      if (to) qs.set('to', to)
       const res = await fetch(`${API_BASE_URL}/api/digests?${qs.toString()}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data: DigestResponse = await res.json()
       setDigests(data.data || [])
       setTotal(data.total || 0)
+      // Publish the range-scoped total so the NavBar badge matches this tab.
+      dispatch(setDigestsCount(data.total || 0))
     } catch {
       setDigests([])
       setTotal(0)
+      dispatch(setDigestsCount(0))
     }
     setLoading(false)
   }, [])
@@ -176,14 +195,38 @@ export function DigestsPage() {
     } catch (err) {
       setConsolidationError(err instanceof Error ? err.message : 'Network error')
     }
-    await fetchDigests(projectFilter)
+    await fetchDigests(projectFilter, fromDate, toDate)
     await fetchStatus()
     setConsolidating(false)
-  }, [fetchDigests, fetchStatus, projectFilter])
+  }, [fetchDigests, fetchStatus, projectFilter, fromDate, toDate])
 
   useEffect(() => {
-    fetchDigests(projectFilter)
-  }, [fetchDigests, projectFilter])
+    fetchDigests(projectFilter, fromDate, toDate)
+  }, [fetchDigests, projectFilter, fromDate, toDate])
+
+  // Deep-link handling: when navigated to with a `#digest-<id>` hash (e.g. from
+  // the Live Context "All Results" list), scroll the matching card into view,
+  // expand it, and briefly pulse a highlight ring. Runs whenever the hash or the
+  // loaded digest set changes (so it fires once the list finishes loading).
+  useEffect(() => {
+    const hash = location.hash
+    if (!hash.startsWith('#digest-')) return
+    if (loading) return
+    const targetId = hash.slice('#digest-'.length)
+    if (!targetId) return
+
+    setExpandedId(targetId)
+
+    const raf = requestAnimationFrame(() => {
+      const el = document.getElementById(`digest-${targetId}`)
+      if (!el) return
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      const pulse = ['ring-2', 'ring-primary', 'ring-offset-2', 'ring-offset-background']
+      el.classList.add(...pulse)
+      window.setTimeout(() => el.classList.remove(...pulse), 2400)
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [location.hash, digests, loading])
 
   useEffect(() => {
     fetchProjects()
@@ -208,12 +251,12 @@ export function DigestsPage() {
         // UI should stop showing "Consolidating…".
         if (consolidating && !data.inflight) {
           setConsolidating(false)
-          fetchDigests(projectFilter)
+          fetchDigests(projectFilter, fromDate, toDate)
         }
       } catch { /* keep polling */ }
     }, 2000)
     return () => clearInterval(id)
-  }, [consolidating, status?.inflight, fetchDigests, projectFilter])
+  }, [consolidating, status?.inflight, fetchDigests, projectFilter, fromDate, toDate])
 
   // Group digests by date
   const byDate = digests.reduce<Record<string, Digest[]>>((acc, d) => {
@@ -233,6 +276,25 @@ export function DigestsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5" aria-label="Time range">
+            <input
+              type="date"
+              value={fromDate}
+              max={toDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="text-sm rounded border border-border bg-background px-2 py-1"
+              aria-label="From date"
+            />
+            <span className="text-xs text-muted-foreground">to</span>
+            <input
+              type="date"
+              value={toDate}
+              min={fromDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="text-sm rounded border border-border bg-background px-2 py-1"
+              aria-label="To date"
+            />
+          </div>
           {projects.length > 0 && (
             <select
               value={projectFilter}
@@ -296,12 +358,13 @@ export function DigestsPage() {
               </div>
               <div className="space-y-2 pl-6">
                 {byDate[date].map(d => (
-                  <DigestCard
-                    key={d.id}
-                    digest={d}
-                    isExpanded={expandedId === d.id}
-                    onToggle={() => setExpandedId(expandedId === d.id ? null : d.id)}
-                  />
+                  <div key={d.id} id={`digest-${d.id}`} className="scroll-mt-24 rounded-lg">
+                    <DigestCard
+                      digest={d}
+                      isExpanded={expandedId === d.id}
+                      onToggle={() => setExpandedId(expandedId === d.id ? null : d.id)}
+                    />
+                  </div>
                 ))}
               </div>
             </div>

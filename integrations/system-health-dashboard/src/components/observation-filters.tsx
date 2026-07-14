@@ -29,9 +29,14 @@ interface ObservationFiltersProps {
   onApply: (filters: FilterState) => void
 }
 
+// Default the lower bound far enough back to surface the JSON cold-store
+// history. SQLite only retains a short window (~7d); everything older lives in
+// .data/observation-export and is merged in server-side ONLY when `from`
+// reaches before the retention boundary. A 7-day default hid all of it, so we
+// reach back ~1 year (just under ColdStoreReader's 366-day max range).
 function getDefaultFrom(): string {
   const d = new Date()
-  d.setDate(d.getDate() - 7)
+  d.setDate(d.getDate() - 365)
   return d.toISOString().split('T')[0]
 }
 
