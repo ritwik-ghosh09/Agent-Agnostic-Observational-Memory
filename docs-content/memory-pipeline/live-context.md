@@ -74,4 +74,4 @@ exact configuration you settled on is what the agent uses on the next prompt.
 
 ---
 
-*Back to the [Overview](index.md) or the [repository](https://cc-github.bmwgroup.net/ritwikghosh/Agent-Agnostic-Observational-Memory).*
+*Back to the [Overview](index.md) or the [repository](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory).*

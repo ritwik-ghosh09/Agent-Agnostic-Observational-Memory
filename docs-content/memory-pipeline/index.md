@@ -5,7 +5,7 @@
     [Coding Documentation :material-book-open-variant:](https://fwornle.github.io/coding/).
     It documents the **Observational Memory + Working Memory ingestion** pipeline and the
     **Live Context Retrieval** pipeline (with its full ranking machinery) as implemented in the
-    [`Agent-Agnostic-Observational-Memory`](https://cc-github.bmwgroup.net/ritwikghosh/Agent-Agnostic-Observational-Memory)
+    [`Agent-Agnostic-Observational-Memory`](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory)
     repository. For the surrounding platform (LSL, UKB/VKB, constraints, health monitoring) refer back to the
     [base project](https://fwornle.github.io/coding/).
 
@@ -94,7 +94,7 @@ flowchart TB
 ## Single-owner architecture
 
 The runtime DB has exactly **one owner**: a host process — the **Observations API server**
-([`scripts/observations-api-server.mjs`](https://cc-github.bmwgroup.net/ritwikghosh/Agent-Agnostic-Observational-Memory/blob/main/scripts/observations-api-server.mjs), port `12436`).
+([`scripts/observations-api-server.mjs`](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory/blob/main/scripts/observations-api-server.mjs), port `12436`).
 Every other consumer (transcript monitor, dashboard, consolidator, retrieval) reaches
 `observations.db` **only** through this HTTP service. The `.observations` directory is **not**
 bind-mounted into the container.
@@ -117,4 +117,4 @@ the UKB/VKB "one writer, everyone else over HTTP" approach.
 
 ---
 
-*Part of the [Agent-Agnostic Observational Memory](https://cc-github.bmwgroup.net/ritwikghosh/Agent-Agnostic-Observational-Memory) project — an extension of the [Coding Documentation](https://fwornle.github.io/coding/).*
+*Part of the [Agent-Agnostic Observational Memory](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory) project — an extension of the [Coding Documentation](https://fwornle.github.io/coding/).*

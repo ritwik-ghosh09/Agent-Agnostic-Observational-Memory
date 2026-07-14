@@ -13,7 +13,7 @@ Reranking** loop: when a human reorders retrieval results to reflect what was
 actually useful, the system *learns* from that judgment and reranks future,
 similar queries accordingly.
 
-> 📖 **Documentation:** [Memory Pipeline docs](https://ritwikghosh.cc-pages.bmwgroup.net/Agent-Agnostic-Observational-Memory/memory-pipeline/) —
+> 📖 **Documentation:** [Memory Pipeline docs](https://pages.bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory/memory-pipeline/) —
 > a deep-dive into ingestion, working memory, live context retrieval, and ranking,
 > built as an extension of the [Coding Documentation](https://fwornle.github.io/coding/).
 

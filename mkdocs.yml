@@ -1,8 +1,8 @@
 site_name: Agent-Agnostic Observational Memory
 site_description: Observational & Working Memory ingestion and Live Context Retrieval pipeline — an extension of the Coding Documentation
-site_url: https://ritwikghosh.cc-pages.bmwgroup.net/Agent-Agnostic-Observational-Memory/
-repo_url: https://cc-github.bmwgroup.net/ritwikghosh/Agent-Agnostic-Observational-Memory
-repo_name: ritwikghosh/Agent-Agnostic-Observational-Memory
+site_url: https://pages.bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory/
+repo_url: https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory
+repo_name: Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory
 
 docs_dir: docs-content
 
@@ -127,7 +127,7 @@ extra:
   homepage: https://fwornle.github.io/coding/
   social:
     - icon: fontawesome/brands/github
-      link: https://cc-github.bmwgroup.net/ritwikghosh/Agent-Agnostic-Observational-Memory
+      link: https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory
     - icon: material/book-open-variant
       link: https://fwornle.github.io/coding/
       name: Base project — Coding Documentation

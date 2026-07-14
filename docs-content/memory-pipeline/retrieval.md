@@ -6,7 +6,7 @@ tier-tagged markdown — prefixed with [Working Memory](working-memory.md).
 
 !!! info "Entry point"
     `POST /api/retrieve` on the host obs-api → `RetrievalService.retrieve(query, options)` in
-    [`src/retrieval/retrieval-service.js`](https://cc-github.bmwgroup.net/ritwikghosh/Agent-Agnostic-Observational-Memory/blob/main/src/retrieval/retrieval-service.js).
+    [`src/retrieval/retrieval-service.js`](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory/blob/main/src/retrieval/retrieval-service.js).
     Defaults: `scoreThreshold = 0.70`, `defaultBudget = 1000` tokens.
 
 ## The 8-stage pipeline
@@ -101,4 +101,4 @@ prepended last.
 
 ---
 
-*Continue to [Ranking & Nuances](ranking.md) or the [Live Context Preview](live-context.md). Back to the [repository](https://cc-github.bmwgroup.net/ritwikghosh/Agent-Agnostic-Observational-Memory).*
+*Continue to [Ranking & Nuances](ranking.md) or the [Live Context Preview](live-context.md). Back to the [repository](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory).*

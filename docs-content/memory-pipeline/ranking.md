@@ -14,7 +14,7 @@ $$
 
 So rank 1 contributes `1/(60+0+1) = 0.0164`, rank 100 contributes `1/(60+99+1) = 0.00625`.
 Implemented in
-[`src/retrieval/rrf-fusion.js`](https://cc-github.bmwgroup.net/ritwikghosh/Agent-Agnostic-Observational-Memory/blob/main/src/retrieval/rrf-fusion.js)
+[`src/retrieval/rrf-fusion.js`](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory/blob/main/src/retrieval/rrf-fusion.js)
 as `rrfFuse(rankedLists, k = 60, agentProfile = null)`.
 
 ## 2. Tier weighting
@@ -31,7 +31,7 @@ export const TIER_WEIGHTS = {
 // entry.score *= TIER_WEIGHTS[entry.item.tier] ?? 1.0;
 ```
 
-Optional **agent profiles** ([`config/agent-profiles.json`](https://cc-github.bmwgroup.net/ritwikghosh/Agent-Agnostic-Observational-Memory/blob/main/config/agent-profiles.json))
+Optional **agent profiles** ([`config/agent-profiles.json`](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory/blob/main/config/agent-profiles.json))
 apply a second per-agent multiplier pass, letting different agents favour different tiers.
 
 ## 3. Reranking passes
@@ -133,7 +133,7 @@ multiplier       = clamp(1 + COEFFICIENT × learnedSignal, MIN, MAX)   # [0.90, 
 - **Gate 2 — exponential emphasis:** within the admitted band (0.85–1.00), reshape
   `weight = similarity ^ k` (k = 3) to stretch the compressed band into a usable spread.
 
-### Tuning constants ([`feedback-store.js`](https://cc-github.bmwgroup.net/ritwikghosh/Agent-Agnostic-Observational-Memory/blob/main/src/retrieval/feedback-store.js), env-overridable)
+### Tuning constants ([`feedback-store.js`](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory/blob/main/src/retrieval/feedback-store.js), env-overridable)
 
 | Constant | Default | Meaning |
 |----------|---------|---------|
@@ -160,4 +160,4 @@ observations (which appear in all three lists) would monopolize the budget and s
 
 ---
 
-*Continue to the [Live Context Preview](live-context.md). Back to the [repository](https://cc-github.bmwgroup.net/ritwikghosh/Agent-Agnostic-Observational-Memory).*
+*Continue to the [Live Context Preview](live-context.md). Back to the [repository](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory).*

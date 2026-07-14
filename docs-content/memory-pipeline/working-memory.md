@@ -17,7 +17,7 @@ semantic results are appended.
 ## Assembly
 
 Implemented in
-[`src/retrieval/working-memory.js`](https://cc-github.bmwgroup.net/ritwikghosh/Agent-Agnostic-Observational-Memory/blob/main/src/retrieval/working-memory.js)
+[`src/retrieval/working-memory.js`](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory/blob/main/src/retrieval/working-memory.js)
 via `buildWorkingMemory(context, codingRoot)`.
 
 ```mermaid
@@ -71,4 +71,4 @@ env var — and the first that yields parseable frontmatter wins.
 
 ---
 
-*Continue to [Live Context Retrieval](retrieval.md). Back to the [repository](https://cc-github.bmwgroup.net/ritwikghosh/Agent-Agnostic-Observational-Memory).*
+*Continue to [Live Context Retrieval](retrieval.md). Back to the [repository](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory).*

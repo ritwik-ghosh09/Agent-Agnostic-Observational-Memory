@@ -5,7 +5,7 @@ summary, deduplicates it, persists it, and later consolidates it into higher tie
 
 !!! info "Source of truth"
     All ingestion runs **in-process** inside the host Observations API server
-    ([`scripts/observations-api-server.mjs`](https://cc-github.bmwgroup.net/ritwikghosh/Agent-Agnostic-Observational-Memory/blob/main/scripts/observations-api-server.mjs), port `12436`).
+    ([`scripts/observations-api-server.mjs`](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory/blob/main/scripts/observations-api-server.mjs), port `12436`).
 
 ## End-to-end write flow
 
@@ -157,4 +157,4 @@ an async embedding backfill into Qdrant (see [Retrieval](retrieval.md)).
 
 ---
 
-*Continue to [Working Memory](working-memory.md) or [Live Context Retrieval](retrieval.md). Back to the [repository](https://cc-github.bmwgroup.net/ritwikghosh/Agent-Agnostic-Observational-Memory).*
+*Continue to [Working Memory](working-memory.md) or [Live Context Retrieval](retrieval.md). Back to the [repository](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory).*

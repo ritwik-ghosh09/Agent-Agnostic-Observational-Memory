@@ -1,9 +1,10 @@
 name: Deploy Documentation
 
-# Publishes the MkDocs site to BMW cc-pages via the gh-pages branch.
-# NOTE: BMW GitHub Enterprise (cc-github.bmwgroup.net) does not support the
-# github.com OIDC Pages actions (upload-pages-artifact / deploy-pages), so we
-# publish with `mkdocs gh-deploy` to a gh-pages branch instead.
+# Publishes the MkDocs site to GitHub Pages on bmw.ghe.com (GitHub Enterprise
+# Cloud) via the gh-pages branch. `mkdocs gh-deploy` needs only checkout +
+# python, so it works on the GHEC GitHub-hosted runners without the OIDC Pages
+# actions. After the first run, enable Pages in repo Settings → Pages with the
+# gh-pages branch as the source.
 
 on:
   push:
@@ -24,9 +25,9 @@ concurrency:
 
 jobs:
   deploy:
-    # Override with a repo/org Actions variable RUNNER_LABEL if a specific
-    # self-hosted runner pool is required on cc-github.bmwgroup.net.
-    runs-on: ${{ vars.RUNNER_LABEL || 'self-hosted' }}
+    # GHEC provides GitHub-hosted runners. Override with an Actions variable
+    # RUNNER_LABEL only if a self-hosted pool is required.
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
         with:
