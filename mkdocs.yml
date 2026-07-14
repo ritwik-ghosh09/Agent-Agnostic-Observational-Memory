@@ -1,28 +1,30 @@
-site_name: Coding Documentation
-site_description: Development environment with MCP services, knowledge management, and LSL system
-site_url: https://fwornle.github.io/coding
-repo_url: https://github.com/fwornle/coding
-repo_name: fwornle/coding
+site_name: Agent-Agnostic Observational Memory
+site_description: Observational & Working Memory ingestion and Live Context Retrieval pipeline — an extension of the Coding Documentation
+site_url: https://ritwikghosh.cc-pages.bmwgroup.net/Agent-Agnostic-Observational-Memory/
+repo_url: https://cc-github.bmwgroup.net/ritwikghosh/Agent-Agnostic-Observational-Memory
+repo_name: ritwikghosh/Agent-Agnostic-Observational-Memory
 
 docs_dir: docs-content
 
 theme:
   name: material
   palette:
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
+    # Default: deep translucent dark
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
       primary: indigo
       accent: indigo
       toggle:
-        icon: material/brightness-4
+        icon: material/weather-night
         name: Switch to light mode
+    # Light
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
   features:
     - navigation.tabs
     - navigation.sections
@@ -68,6 +70,13 @@ extra_css:
 
 nav:
   - Home: index.md
+  - Memory Pipeline:
+    - Overview: memory-pipeline/index.md
+    - Ingestion: memory-pipeline/ingestion.md
+    - Working Memory: memory-pipeline/working-memory.md
+    - Live Context Retrieval: memory-pipeline/retrieval.md
+    - Ranking & Nuances: memory-pipeline/ranking.md
+    - Live Context Preview: memory-pipeline/live-context.md
   - Release Notes: release-notes.md
   - Getting Started:
     - Overview: getting-started/index.md
@@ -115,6 +124,10 @@ nav:
     - Self-Learning Layer: reference/articles/self-learning-layer.md
 
 extra:
+  homepage: https://fwornle.github.io/coding/
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/fwornle/coding
+      link: https://cc-github.bmwgroup.net/ritwikghosh/Agent-Agnostic-Observational-Memory
+    - icon: material/book-open-variant
+      link: https://fwornle.github.io/coding/
+      name: Base project — Coding Documentation

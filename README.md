@@ -3,7 +3,7 @@
 > A cross-agent, self-improving memory system that **watches** your coding
 > sessions, **summarizes** them into structured knowledge, and **retrieves** the
 > right slice of that knowledge back into your next prompt — continuously sharpened
-> by **live human feedback**.
+> by [**live human feedback**](#7--live-human-feedback-reranking-the-standout-feature).
 
 Observational Memory captures what happens across *all* your coding agents (Claude
 Code, GitHub Copilot, OpenCode, Mastracode), distills it into a three-tier memory
@@ -12,6 +12,10 @@ apart from a vanilla "embed-and-search" memory is its **Live Human-Feedback
 Reranking** loop: when a human reorders retrieval results to reflect what was
 actually useful, the system *learns* from that judgment and reranks future,
 similar queries accordingly.
+
+> 📖 **Documentation:** [Memory Pipeline docs](https://ritwikghosh.cc-pages.bmwgroup.net/Agent-Agnostic-Observational-Memory/memory-pipeline/) —
+> a deep-dive into ingestion, working memory, live context retrieval, and ranking,
+> built as an extension of the [Coding Documentation](https://fwornle.github.io/coding/).
 
 ---
 
@@ -138,7 +142,7 @@ Observational Memory addresses this with three structural advantages:
 | **Human in the loop** | None | **Live drag-to-reorder feedback** becomes a learned, decaying rerank boost |
 | **Truth maintenance** | Stale silently | Insights are re-verified against live code; stale claims demoted |
 
-The headline differentiator is **#7 — Live Human-Feedback Reranking**. Everything
+The headline differentiator is [**#7 — Live Human-Feedback Reranking**](#7--live-human-feedback-reranking-the-standout-feature). Everything
 else is the well-engineered substrate that makes that loop safe, bounded, and
 fail-open.
 

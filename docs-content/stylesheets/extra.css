@@ -7,6 +7,54 @@
   --md-accent-fg-color: #536dfe;
 }
 
+/* ==========================================================================
+   Deep translucent dark theme (default palette: slate)
+   A frosted, semi-transparent dark surface layered over a subtle radial glow.
+   Light palette (default scheme) is left untouched.
+   ========================================================================== */
+[data-md-color-scheme="slate"] {
+  --md-hue: 232;
+  --md-default-bg-color: rgba(14, 17, 26, 0.86);
+  --md-default-bg-color--light: rgba(14, 17, 26, 0.72);
+  --md-default-bg-color--lighter: rgba(14, 17, 26, 0.46);
+  --md-default-bg-color--lightest: rgba(14, 17, 26, 0.22);
+  --md-primary-fg-color: #5c6bc0;
+  --md-accent-fg-color: #7c8cff;
+}
+
+/* Fixed translucent backdrop behind the frosted content surface */
+[data-md-color-scheme="slate"] body {
+  background:
+    radial-gradient(1200px 600px at 15% -10%, rgba(92, 107, 192, 0.20), transparent 60%),
+    radial-gradient(1000px 700px at 110% 10%, rgba(83, 109, 254, 0.16), transparent 55%),
+    linear-gradient(160deg, #0a0d16 0%, #0e1119 45%, #070a12 100%);
+  background-attachment: fixed;
+}
+
+/* Frost the main content + navigation drawers */
+[data-md-color-scheme="slate"] .md-main__inner,
+[data-md-color-scheme="slate"] .md-sidebar__scrollwrap,
+[data-md-color-scheme="slate"] .md-header,
+[data-md-color-scheme="slate"] .md-tabs {
+  background-color: transparent;
+}
+
+[data-md-color-scheme="slate"] .md-header,
+[data-md-color-scheme="slate"] .md-tabs {
+  background-color: rgba(10, 13, 22, 0.55);
+  backdrop-filter: saturate(140%) blur(10px);
+  -webkit-backdrop-filter: saturate(140%) blur(10px);
+}
+
+[data-md-color-scheme="slate"] .md-typeset .admonition,
+[data-md-color-scheme="slate"] .md-typeset details,
+[data-md-color-scheme="slate"] .md-typeset pre > code,
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) {
+  background-color: rgba(20, 24, 36, 0.62);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
 /* Code block styling */
 .md-typeset code {
   font-size: 0.85em;
