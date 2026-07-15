@@ -1,0 +1,50 @@
+[
+  {
+    "id": 5452,
+    "user_hash": "49b0c8",
+    "timestamp": "2026-06-29T10:57:29.896Z",
+    "provider": "copilot",
+    "model": "claude-sonnet-4.6",
+    "model_raw": "claude-sonnet-4.6",
+    "process": "health-coordinator",
+    "subscription": "copilot-subscription",
+    "input_tokens": 9,
+    "output_tokens": 27,
+    "total_tokens": 36,
+    "latency_ms": 2474,
+    "prompt_preview": "say OK",
+    "tokens_estimated": 0
+  },
+  {
+    "id": 5453,
+    "user_hash": "49b0c8",
+    "timestamp": "2026-06-29T10:58:35.071Z",
+    "provider": "copilot",
+    "model": "claude-sonnet-4.6",
+    "model_raw": "claude-sonnet-4.6",
+    "process": "health-coordinator",
+    "subscription": "copilot-subscription",
+    "input_tokens": 9,
+    "output_tokens": 28,
+    "total_tokens": 37,
+    "latency_ms": 2635,
+    "prompt_preview": "say OK",
+    "tokens_estimated": 0
+  },
+  {
+    "id": 5454,
+    "user_hash": "49b0c8",
+    "timestamp": "2026-06-29T10:59:38.872Z",
+    "provider": "copilot",
+    "model": "claude-sonnet-4.6",
+    "model_raw": "claude-sonnet-4.6",
+    "process": "health-coordinator",
+    "subscription": "copilot-subscription",
+    "input_tokens": 9,
+    "output_tokens": 29,
+    "total_tokens": 38,
+    "latency_ms": 1421,
+    "prompt_preview": "say OK",
+    "tokens_estimated": 0
+  }
+]

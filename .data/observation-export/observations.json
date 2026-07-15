@@ -26015,7 +26015,7 @@
     "project": "<USER_ID_REDACTED>",
     "quality": "normal",
     "createdAt": "2026-06-23T23:16:32.138Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-25T11:30:05.569Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -26031,7 +26031,7 @@
     "project": "<USER_ID_REDACTED>",
     "quality": "high",
     "createdAt": "2026-06-23T23:30:23.054Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-25T11:30:05.569Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -26047,7 +26047,7 @@
     "project": "<USER_ID_REDACTED>",
     "quality": "high",
     "createdAt": "2026-06-23T23:30:23.054Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-25T11:30:05.569Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -26063,7 +26063,7 @@
     "project": "<USER_ID_REDACTED>",
     "quality": "high",
     "createdAt": "2026-06-24T01:07:09.552Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-25T11:31:29.967Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -26079,7 +26079,7 @@
     "project": "<USER_ID_REDACTED>",
     "quality": "high",
     "createdAt": "2026-06-24T01:19:39.051Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-25T11:31:29.967Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -26095,7 +26095,7 @@
     "project": "<USER_ID_REDACTED>",
     "quality": "high",
     "createdAt": "2026-06-24T01:22:32.405Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-25T11:31:29.967Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -26111,7 +26111,7 @@
     "project": "<USER_ID_REDACTED>",
     "quality": "high",
     "createdAt": "2026-06-24T11:50:31.305Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-25T11:31:29.967Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -26127,7 +26127,7 @@
     "project": "<USER_ID_REDACTED>",
     "quality": "high",
     "createdAt": "2026-06-24T11:50:31.305Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-25T11:31:29.967Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -26146,7 +26146,7 @@
     "project": "<USER_ID_REDACTED>",
     "quality": "high",
     "createdAt": "2026-06-24T12:17:36.517Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-25T11:31:29.967Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -26162,7 +26162,7 @@
     "project": "<USER_ID_REDACTED>",
     "quality": "high",
     "createdAt": "2026-06-24T12:42:21.395Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-25T11:31:29.967Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -26178,7 +26178,7 @@
     "project": "<USER_ID_REDACTED>",
     "quality": "high",
     "createdAt": "2026-06-24T12:42:21.395Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-25T11:31:29.967Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -26194,7 +26194,7 @@
     "project": "<USER_ID_REDACTED>",
     "quality": "normal",
     "createdAt": "2026-06-24T12:59:33.927Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-25T11:31:29.967Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -26210,7 +26210,7 @@
     "project": "obs-memory",
     "quality": "normal",
     "createdAt": "2026-06-24T13:15:53.178Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-25T11:31:29.967Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -26226,7 +26226,7 @@
     "project": "obs-memory",
     "quality": "high",
     "createdAt": "2026-06-24T13:27:35.800Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-25T11:31:29.967Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -26242,7 +26242,7 @@
     "project": "obs-memory",
     "quality": "high",
     "createdAt": "2026-06-24T13:27:35.800Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-25T11:31:29.967Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -26258,7 +26258,7 @@
     "project": "obs-memory",
     "quality": "high",
     "createdAt": "2026-06-24T13:27:35.800Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-25T11:31:29.967Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -26274,7 +26274,7 @@
     "project": "obs-memory",
     "quality": "high",
     "createdAt": "2026-06-24T15:14:20.871Z",
-    "digestedAt": null,
+    "digestedAt": "2026-06-25T11:31:29.967Z",
     "llm": {
       "model": "claude-sonnet-4.6",
       "provider": "copilot"
@@ -26282,5 +26282,81 @@
     "modifiedFiles": [
       "/home/<USER_ID_REDACTED>/.copilot/session-state/d1761379-c0ce-4a1c-9a3e-6c040414db25/plan.md"
     ]
+  },
+  {
+    "id": "2b994c48-d451-4b8c-9cdd-d1c6df94ea12",
+    "summary": "Intent: [find the FIFA 2026 <USER_ID_REDACTED>-finalists via web search]\nApproach: Web searches were performed to look up current information about the 2026 FIFA World Cup finalists.\nArtifacts: none\nResult: The 2026 FIFA World Cup had not yet taken place at the time of the query; no <USER_ID_REDACTED>-finalists were available as the tournament begins in June 2026.",
+    "agent": "claude",
+    "project": "obs-memory",
+    "quality": "normal",
+    "createdAt": "2026-07-09T23:32:26.203Z",
+    "digestedAt": null,
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": null
+  },
+  {
+    "id": "1c673af0-e71b-46ed-84b4-149868a34861",
+    "summary": "Intent: Investigate why the OM (obs-memory) indicator in the CLI tmux pane is not showing green.\nApproach: Attempted to inspect the repository structure and search for OM indicator logic, but all tool calls were blocked by an erroring preToolUse hook.\nArtifacts: edited live-query-monitor.js\nResult: Investigation was blocked entirely by a failing preToolUse hook that denied all filesystem and bash tool calls; root cause of the non-green OM indicator could not be determined.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "normal",
+    "createdAt": "2026-07-15T16:03:47.056Z",
+    "digestedAt": null,
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory/scripts/live-query-monitor.js"
+    ]
+  },
+  {
+    "id": "6cc5edbf-b61e-4730-9501-dc5c122d6910",
+    "summary": "Intent: [verify that available tools are accessible and functioning]\nApproach: [ran basic shell and filesystem commands to test tool responsiveness]\nArtifacts: edited live-query-monitor.js\nResult: [tools confirmed accessible; basic bash execution, SQL, and glob operations were tested successfully]",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-07-15T16:15:17.558Z",
+    "digestedAt": null,
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory/scripts/live-query-monitor.js"
+    ]
+  },
+  {
+    "id": "c9b2f69b-ef82-4f03-b5b5-af3c3dc426ee",
+    "summary": "Intent: Stop storing every typed tmux keystroke in the Recent <USER_ID_REDACTED> sidebar and instead only store a prompt when it is actually submitted, using the UserPromptSubmit event as the trigger.\nApproach: The assistant investigated the full pipeline — tmux capture heuristics in live-query-monitor.js, OTel span consumption in received-context-logger.mjs, the UserPromptSubmit hook in knowledge-injection-hook.js, and the dashboard server endpoint — to identify which component is the authoritative \"prompt submitted\" signal and where the sidebar population logic lives.\nArtifacts: edited live-query-monitor.js\nResult: No files were changed; this was a pure investigation/planning session. The assistant identified that the reliable submission signal exists via the UserPromptSubmit hook (knowledge-injection-hook.js) and OTel spans (received-context-logger.mjs), while live-query-monitor.js uses an unreliable keystroke/box-clearing heuristic — the fix needs to route only confirmed-submitted prompts to the dashboard's Recent <USER_ID_REDACTED> buffer.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-07-15T16:31:50.813Z",
+    "digestedAt": null,
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": [
+      "/home/q677724/Ritwik/Memory/agent_agnostic/obs-memory/scripts/live-query-monitor.js"
+    ]
+  },
+  {
+    "id": "b68d9781-e102-4787-9f37-442cf08ddf03",
+    "summary": "Intent: Debug why Recent <USER_ID_REDACTED> still appear in the dashboard's Live Memory Context after previous fixes.\nApproach: Investigated running processes and in-memory state to determine why edits weren't taking effect, discovering the live server runs compiled dist-backend/server.js (not source) and holds stale entries in a ring buffer.\nArtifacts: none\nResult: Root cause identified: server (PID 6896, ~2 days uptime) runs old compiled code and has no clear endpoint for the submitted log buffer; stale partial entries persist until restart or a new clear endpoint is added.",
+    "agent": "copilot",
+    "project": "obs-memory",
+    "quality": "high",
+    "createdAt": "2026-07-15T16:48:37.045Z",
+    "digestedAt": null,
+    "llm": {
+      "model": "claude-sonnet-4.6",
+      "provider": "copilot"
+    },
+    "modifiedFiles": null
   }
 ]

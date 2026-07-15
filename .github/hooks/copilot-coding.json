@@ -4,7 +4,7 @@
     "sessionStart": [
       {
         "type": "command",
-        "bash": "CODING_REPO=\"${CODING_REPO:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; export CODING_REPO; exec \"$CODING_REPO/scripts/copilot-hooks/session-start.sh\"",
+        "bash": "if [ -z \"$CODING_REPO\" ] || [ ! -f \"$CODING_REPO/scripts/copilot-hooks/_lib.sh\" ]; then d=\"$PWD\"; while [ \"$d\" != \"/\" ]; do if [ -f \"$d/scripts/copilot-hooks/_lib.sh\" ]; then CODING_REPO=\"$d\"; break; fi; d=\"$(dirname \"$d\")\"; done; fi; CODING_REPO=\"${CODING_REPO:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; export CODING_REPO; exec \"$CODING_REPO/scripts/copilot-hooks/session-start.sh\"",
         "cwd": ".",
         "timeoutSec": 10
       }
@@ -12,7 +12,7 @@
     "userPromptSubmitted": [
       {
         "type": "command",
-        "bash": "CODING_REPO=\"${CODING_REPO:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; export CODING_REPO; exec \"$CODING_REPO/scripts/copilot-hooks/user-prompt.sh\"",
+        "bash": "if [ -z \"$CODING_REPO\" ] || [ ! -f \"$CODING_REPO/scripts/copilot-hooks/_lib.sh\" ]; then d=\"$PWD\"; while [ \"$d\" != \"/\" ]; do if [ -f \"$d/scripts/copilot-hooks/_lib.sh\" ]; then CODING_REPO=\"$d\"; break; fi; d=\"$(dirname \"$d\")\"; done; fi; CODING_REPO=\"${CODING_REPO:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; export CODING_REPO; exec \"$CODING_REPO/scripts/copilot-hooks/user-prompt.sh\"",
         "cwd": ".",
         "timeoutSec": 5
       }
@@ -20,7 +20,7 @@
     "preToolUse": [
       {
         "type": "command",
-        "bash": "CODING_REPO=\"${CODING_REPO:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; export CODING_REPO; exec \"$CODING_REPO/scripts/copilot-hooks/pre-tool.sh\"",
+        "bash": "if [ -z \"$CODING_REPO\" ] || [ ! -f \"$CODING_REPO/scripts/copilot-hooks/_lib.sh\" ]; then d=\"$PWD\"; while [ \"$d\" != \"/\" ]; do if [ -f \"$d/scripts/copilot-hooks/_lib.sh\" ]; then CODING_REPO=\"$d\"; break; fi; d=\"$(dirname \"$d\")\"; done; fi; CODING_REPO=\"${CODING_REPO:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; export CODING_REPO; exec \"$CODING_REPO/scripts/copilot-hooks/pre-tool.sh\"",
         "cwd": ".",
         "timeoutSec": 15
       }
@@ -28,7 +28,7 @@
     "postToolUse": [
       {
         "type": "command",
-        "bash": "CODING_REPO=\"${CODING_REPO:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; export CODING_REPO; exec \"$CODING_REPO/scripts/copilot-hooks/post-tool.sh\"",
+        "bash": "if [ -z \"$CODING_REPO\" ] || [ ! -f \"$CODING_REPO/scripts/copilot-hooks/_lib.sh\" ]; then d=\"$PWD\"; while [ \"$d\" != \"/\" ]; do if [ -f \"$d/scripts/copilot-hooks/_lib.sh\" ]; then CODING_REPO=\"$d\"; break; fi; d=\"$(dirname \"$d\")\"; done; fi; CODING_REPO=\"${CODING_REPO:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; export CODING_REPO; exec \"$CODING_REPO/scripts/copilot-hooks/post-tool.sh\"",
         "cwd": ".",
         "timeoutSec": 5
       }
@@ -36,7 +36,7 @@
     "sessionEnd": [
       {
         "type": "command",
-        "bash": "CODING_REPO=\"${CODING_REPO:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; export CODING_REPO; exec \"$CODING_REPO/scripts/copilot-hooks/session-end.sh\"",
+        "bash": "if [ -z \"$CODING_REPO\" ] || [ ! -f \"$CODING_REPO/scripts/copilot-hooks/_lib.sh\" ]; then d=\"$PWD\"; while [ \"$d\" != \"/\" ]; do if [ -f \"$d/scripts/copilot-hooks/_lib.sh\" ]; then CODING_REPO=\"$d\"; break; fi; d=\"$(dirname \"$d\")\"; done; fi; CODING_REPO=\"${CODING_REPO:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; export CODING_REPO; exec \"$CODING_REPO/scripts/copilot-hooks/session-end.sh\"",
         "cwd": ".",
         "timeoutSec": 10
       }
@@ -44,7 +44,7 @@
     "errorOccurred": [
       {
         "type": "command",
-        "bash": "CODING_REPO=\"${CODING_REPO:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; export CODING_REPO; exec \"$CODING_REPO/scripts/copilot-hooks/error-occurred.sh\"",
+        "bash": "if [ -z \"$CODING_REPO\" ] || [ ! -f \"$CODING_REPO/scripts/copilot-hooks/_lib.sh\" ]; then d=\"$PWD\"; while [ \"$d\" != \"/\" ]; do if [ -f \"$d/scripts/copilot-hooks/_lib.sh\" ]; then CODING_REPO=\"$d\"; break; fi; d=\"$(dirname \"$d\")\"; done; fi; CODING_REPO=\"${CODING_REPO:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; export CODING_REPO; exec \"$CODING_REPO/scripts/copilot-hooks/error-occurred.sh\"",
         "cwd": ".",
         "timeoutSec": 5
       }

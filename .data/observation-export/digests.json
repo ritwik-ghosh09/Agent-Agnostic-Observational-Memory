@@ -17640,5 +17640,187 @@
       "sourceCount": 1
     },
     "project": "<USER_ID_REDACTED>"
+  },
+  {
+    "id": "1cd7cd0b-2b95-4e53-aa30-97ec47f7db86",
+    "date": "2026-06-23",
+    "theme": "Diagnosing Human Feedback Scope in Learned Reranking",
+    "summary": "A sustained session investigated the human-feedback loop underpinning the learned reranking logic in `retrieve()`, progressing from pipeline-connectivity questions to root-cause analysis of over-broad feedback application. All three observations touched `retrieval-settings.js`.\n\n- **Observation 1 (pipeline trace):** The agent traced whether `feedbackStore.findSimilar` reads from the same `human_rerank_feedback` collection that the dashboard endpoint writes to; this verification was still in progress and left inconclusive.\n- **Observations 2 & 3 (algorithm diagnosis):** Attention shifted to *how* feedback is applied once retrieved. The `rankDelta` logic in `feedback-store.js` was found to gate feedback with a 0.85 cosine-similarity threshold, but within the allowed `[0.85, 1.0]` band the weighting is near-linear (`similarityWeight = event.score`), compressing meaningful variation across that narrow range.\n- **Root cause:** The flat curve prevents the threshold gate from doing useful work — an upvote from a loosely-related query (score ≈ 0.86) delivers nearly the same boost as one from a near-duplicate (score ≈ 0.99), causing feedback to bleed over to genuinely different <USER_ID_REDACTED>.\n- **Proposed fix:** Replace the linear weighting with a steeper, non-linear decay so the rank multiplier drops sharply as query similarity falls toward the 0.85 floor, tightening feedback scope to only the most similar <USER_ID_REDACTED>.",
+    "observationIds": [
+      "c7affc7f-b50c-4406-8ef9-7f10e64114bd",
+      "7c87f7ad-e318-4a0e-9436-87d524efc632",
+      "06970efd-33cd-43d4-b4f8-77ded6c4e254"
+    ],
+    "agents": [
+      "copilot"
+    ],
+    "filesTouched": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/src/retrieval/retrieval-settings.js"
+    ],
+    "quality": "high",
+    "createdAt": "2026-06-25T11:30:05.569Z",
+    "metadata": {
+      "sourceCount": 3
+    },
+    "project": "<USER_ID_REDACTED>"
+  },
+  {
+    "id": "29108058-a352-4139-8674-7f300e7dbf4e",
+    "date": "2026-06-24",
+    "theme": "Tunable Retrieval Scoring Shipped, Committed, and Documented",
+    "summary": "The goal was to ensure `KnowledgeInjectionHook`'s `retrieve()` is the single authority on user-configured thresholds at call time, so that every `UserPromptSubmit` event uses the live query-item, query-query, and exponential-toggle settings rather than any hardcoded fallback.\n\n- Removed hardcoded `threshold: 0.70` default from `callRetrieval` in `knowledge-injection-hook.js`; both code paths were verified end-to-end against the running hook endpoint\n- Committed 15 feature files scoped to the tunable-retrieval-scoring feature; `.observations/retrieval-settings.json` was added to `.gitignore` to exclude runtime state from version control\n- `README.md` was updated with a full retrieval-pipeline section — tunable threshold parameters and exponential-toggle details sourced directly from codebase constants — with fence balance verified (44 fences) before the commit landed",
+    "observationIds": [
+      "4dd1a6e1-4637-472e-944c-b1f01244ba6e",
+      "25da5515-1ee8-4b1f-9f36-e0b28723cb96",
+      "d383dc28-026e-41d6-9ca4-72cd4dc20898"
+    ],
+    "agents": [
+      "copilot"
+    ],
+    "filesTouched": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/src/hooks/knowledge-injection-hook.js",
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/README.md"
+    ],
+    "quality": "high",
+    "createdAt": "2026-06-25T11:31:29.967Z",
+    "metadata": {
+      "sourceCount": 3
+    },
+    "project": "<USER_ID_REDACTED>"
+  },
+  {
+    "id": "a532abe7-0211-4f3c-9cac-c192b92c28a8",
+    "date": "2026-06-24",
+    "theme": "OM Indicator Pills Added to Live-Context Dashboard",
+    "summary": "The goal was to surface which retrieved result items were actually used to populate Observational Memory (OM) and Working Memory (WM) via indicator pills in the live-context dashboard. Investigation established that WM originates from the VKB knowledge-graph and `STATE.md` — not from ranked retrieval candidates — making a WM pill semantically undefined; only an OM pill is meaningful. The full data path was then implemented:\n\n- `assembleBudgetedMarkdown` in `token-budget.js` now returns its previously internal `includedIds` set alongside the assembled markdown\n- `retrieval-service.js` maps those IDs to a `usedInObservationalMemory` boolean on each `RankedResult`\n- `useLiveContextWebSocket.ts` propagates the flag through the websocket hook\n- `live-context.tsx` renders a small **\"OM\"** pill beside the tier badge for any result item that was included in observational memory",
+    "observationIds": [
+      "6d683414-235b-4006-a78a-2815e6b03487",
+      "4e787f60-cdae-49bf-a198-36f4ae89db8d"
+    ],
+    "agents": [
+      "copilot"
+    ],
+    "filesTouched": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/src/retrieval/token-budget.js",
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/src/retrieval/retrieval-service.js",
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/integrations/system-health-dashboard/src/hooks/useLiveContextWebSocket.ts",
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/integrations/system-health-dashboard/src/pages/live-context.tsx"
+    ],
+    "quality": "high",
+    "createdAt": "2026-06-25T11:31:29.967Z",
+    "metadata": {
+      "sourceCount": 2
+    },
+    "project": "<USER_ID_REDACTED>"
+  },
+  {
+    "id": "259f3da5-1848-469f-893d-d0c1102c0201",
+    "date": "2026-06-24",
+    "theme": "Working Memory Preview Hardcoded to Wrong Project Root",
+    "summary": "Investigation into why the Working Memory preview in the System Health Dashboard always displays stale or wrong project data. Root cause was identified in `working-memory.js`: `buildWorkingMemory` ignores the `context` object (carrying `project`, `cwd`, `agent`) passed through `retrieve()` and unconditionally falls back to a hardcoded `this.codingRoot` with `TEAM='coding'`. The fix was **not yet applied** — this remains an open defect where the WM preview is decoupled from the live query context flowing through the `KnowledgeInjectionHook` pipeline.",
+    "observationIds": [
+      "f9e0005b-d871-4b3b-9247-68e6e649d577"
+    ],
+    "agents": [
+      "copilot"
+    ],
+    "filesTouched": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/src/retrieval/working-memory.js"
+    ],
+    "quality": "high",
+    "createdAt": "2026-06-25T11:31:29.967Z",
+    "metadata": {
+      "sourceCount": 1
+    },
+    "project": "<USER_ID_REDACTED>"
+  },
+  {
+    "id": "2d356df5-01cf-4971-83fa-794c08aa8309",
+    "date": "2026-06-24",
+    "theme": "Observational Memory Output Reordered by Final Rank",
+    "summary": "The goal was to change Observational Memory output from tier-bucketed ordering (Insights → Digests → Entities → Observations) to a single flat list sorted by final score, so the most favoured content always appears first regardless of tier. An initial investigation pass through `token-budget.js` confirmed where ordering could be enforced without disturbing existing selection logic.\n\n- `assembleBudgetedMarkdown` in `token-budget.js` was rewritten to emit all chosen items in a single rank-sorted sequence (highest final score first)\n- Existing selection behaviour — including G2 reservation — was preserved; only the output assembly ordering was changed\n- The investigation-only pass (observation 7) and the implementation (observation 8) both touch `token-budget.js` in the same session",
+    "observationIds": [
+      "bcdb1968-5a90-4476-a164-68439a405ff6",
+      "b4483df1-a432-4c60-8f26-de499002cd3d"
+    ],
+    "agents": [
+      "copilot"
+    ],
+    "filesTouched": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/src/retrieval/token-budget.js"
+    ],
+    "quality": "high",
+    "createdAt": "2026-06-25T11:31:29.967Z",
+    "metadata": {
+      "sourceCount": 2
+    },
+    "project": "<USER_ID_REDACTED>"
+  },
+  {
+    "id": "67135ae8-decc-4467-9e66-bd810c21b9c3",
+    "date": "2026-06-24",
+    "theme": "Recent Prompts Sidebar UserPromptSubmit Filter Investigation",
+    "summary": "The goal is to restrict the Recent Prompts sidebar to only show prompts submitted via the `UserPromptSubmit` event, excluding commands and unsubmitted typed input. This observation covers the investigation phase only — `live-context.tsx` and the WebSocket hook were read to map current capture and filter logic before any changes are made. `_lib.sh` was noted as a touched artifact during the session. No implementation changes were applied yet.",
+    "observationIds": [
+      "f0c1706a-0810-4f62-8b52-1aca78cbd98a"
+    ],
+    "agents": [
+      "copilot"
+    ],
+    "filesTouched": [
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/scripts/copilot-hooks/_lib.sh"
+    ],
+    "quality": "normal",
+    "createdAt": "2026-06-25T11:31:29.967Z",
+    "metadata": {
+      "sourceCount": 1
+    },
+    "project": "<USER_ID_REDACTED>"
+  },
+  {
+    "id": "4d77f9b2-799b-4f9d-a256-91085c56801c",
+    "date": "2026-06-24",
+    "theme": "Authoring Observational Memory Documentation from Codebase",
+    "summary": "The goal was to produce a comprehensive `Observational_Memory.md` covering the full creation pipeline, retrieval pipeline, DB storage, all retrieval concepts, and the Live Human-Feedback reranking feature as a primary differentiator.\n\nAll four observations represent progressive phases of the same documentation effort by the copilot agent:\n- **[1]** (13:15): Research/planning phase — codebase exploration of retrieval source files, feedback store, RRF fusion logic, retrieval settings, and the API server; `plan.md` was edited but `Observational_Memory.md` was not yet written.\n- **[2]** (13:27): Style guide skill injection triggered a second round of proactive investigation — grep and source reads to verify embedding model, keyword search logic, and token budget behavior; no files modified yet.\n- **[3] & [4]** (13:27): Drafting executed — `/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/Observational_Memory.md` was created/updated, synthesizing verified implementation details from keyword-search, token-budget, and retrieval-service source files into structured markdown following injected style conventions (H1 title, H2 sections, Mermaid `graph TD` with subgraphs).\n\nThe repeated 13:27 timestamp across observations 2–4 suggests multiple rapid sequential exchanges during the same documentation <COMPANY_NAME_REDACTED>.",
+    "observationIds": [
+      "c4cfc869-3820-45a0-bfe9-6213c5433dfe",
+      "fa2f36ec-2e28-4ee7-9780-204d30b5d7d4",
+      "0098592c-b13d-44d7-baa0-fdaeb81dff2f",
+      "7b605848-6ed6-4369-b894-8d0e2f489fab"
+    ],
+    "agents": [
+      "copilot"
+    ],
+    "filesTouched": [
+      "/home/<USER_ID_REDACTED>/.copilot/session-state/d1761379-c0ce-4a1c-9a3e-6c040414db25/plan.md",
+      "/home/<USER_ID_REDACTED>/Ritwik/Memory/agent_agnostic/obs-memory/Observational_Memory.md"
+    ],
+    "quality": "high",
+    "createdAt": "2026-06-25T11:31:29.967Z",
+    "metadata": {
+      "sourceCount": 4
+    },
+    "project": "obs-memory"
+  },
+  {
+    "id": "08b3b277-a78a-4f6b-b02a-81ec0d4c57cb",
+    "date": "2026-06-24",
+    "theme": "Deepening Plan with Reranking Mechanics and Diagram Polish",
+    "summary": "The goal was to upgrade `plan.md` from a high-level outline into a technically grounded, visually professional document.\n\n- Inspected live dashboard source files (`RetrievalTuningPanel`, `useRetrievalSettings` hook, live-context page) before writing, ensuring mathematical descriptions match actual code behavior.\n- Added a deep-dive section on **human-feedback re-ranking**: user rank adjustments, gated similarity score thresholding, and the exponential decay/boost formula.\n- Documented how the **Retrieval Tuning slider** (threshold gate) and **Exponential toggle** affect retrieval scoring at query time.\n- Added a new section proposing **supervised fine-tuning of the embedder** using collected \"good\" retrieval cases as training signal.\n- All architecture and flow diagrams were re-rendered with color and formatting for a professional Markdown appearance.\n- Artifact: `/home/<USER_ID_REDACTED>/.copilot/session-state/d1761379-c0ce-4a1c-9a3e-6c040414db25/plan.md`",
+    "observationIds": [
+      "3c51501e-31ed-40df-88f8-94daada632cc"
+    ],
+    "agents": [
+      "copilot"
+    ],
+    "filesTouched": [
+      "/home/<USER_ID_REDACTED>/.copilot/session-state/d1761379-c0ce-4a1c-9a3e-6c040414db25/plan.md"
+    ],
+    "quality": "high",
+    "createdAt": "2026-06-25T11:31:29.967Z",
+    "metadata": {
+      "sourceCount": 1
+    },
+    "project": "obs-memory"
   }
 ]

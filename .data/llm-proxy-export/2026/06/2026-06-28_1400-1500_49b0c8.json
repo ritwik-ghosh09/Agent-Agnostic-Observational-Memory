@@ -1,0 +1,34 @@
+[
+  {
+    "id": 4575,
+    "user_hash": "49b0c8",
+    "timestamp": "2026-06-28T12:57:53.343Z",
+    "provider": "copilot",
+    "model": "claude-sonnet-4.6",
+    "model_raw": "claude-sonnet-4.6",
+    "process": "health-coordinator",
+    "subscription": "copilot-subscription",
+    "input_tokens": 9,
+    "output_tokens": 27,
+    "total_tokens": 36,
+    "latency_ms": 1801,
+    "prompt_preview": "say OK",
+    "tokens_estimated": 0
+  },
+  {
+    "id": 4576,
+    "user_hash": "49b0c8",
+    "timestamp": "2026-06-28T12:58:57.890Z",
+    "provider": "copilot",
+    "model": "claude-sonnet-4.6",
+    "model_raw": "claude-sonnet-4.6",
+    "process": "health-coordinator",
+    "subscription": "copilot-subscription",
+    "input_tokens": 9,
+    "output_tokens": 28,
+    "total_tokens": 37,
+    "latency_ms": 1345,
+    "prompt_preview": "say OK",
+    "tokens_estimated": 0
+  }
+]
