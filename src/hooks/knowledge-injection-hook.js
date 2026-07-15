@@ -14,6 +14,7 @@
  * Uses shared retrieval-client.js for HTTP calls.
  */
 
+import http from 'node:http';
 import { callRetrieval } from './retrieval-client.js';
 import {
   isSubstantivePrompt,
@@ -25,6 +26,57 @@ import {
 const SAFETY_TIMEOUT_MS = 5000;
 const safetyTimer = setTimeout(() => process.exit(0), SAFETY_TIMEOUT_MS);
 safetyTimer.unref();
+
+/**
+ * Record the genuinely-submitted prompt into the dashboard "Recent Queries"
+ * log. This runs on the real UserPromptSubmit event (Claude Code invokes this
+ * hook only when the user actually sends a prompt), so — unlike the tmux draft
+ * monitor — it never logs typed-but-unsent drafts. Fire-and-forget, fail-open.
+ *
+ * @param {string} prompt   the submitted prompt text
+ * @param {object} context  { project, cwd, agent }
+ * @param {string} sessionId  agent session id (optional)
+ * @returns {Promise<void>} resolves regardless of outcome
+ */
+function recordSubmitted(prompt, context, sessionId) {
+  return new Promise((resolve) => {
+    let base;
+    try {
+      base = new URL(process.env.LIVE_CONTEXT_URL || 'http://127.0.0.1:3033');
+    } catch {
+      resolve();
+      return;
+    }
+    let body;
+    try {
+      body = JSON.stringify({
+        query: prompt.slice(0, 500),
+        agent: context.agent || 'claude',
+        sessionId: sessionId || null,
+        project: context.project || null,
+        ts: new Date().toISOString(),
+      });
+    } catch {
+      resolve();
+      return;
+    }
+    const req = http.request(
+      {
+        hostname: base.hostname,
+        port: base.port,
+        path: '/api/live-context/submitted',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+        timeout: 1500,
+      },
+      (res) => { res.resume(); res.on('end', resolve); }
+    );
+    req.on('timeout', () => { req.destroy(); resolve(); });
+    req.on('error', () => resolve());
+    req.write(body);
+    req.end();
+  });
+}
 
 const MAX_OUTPUT_CHARS = 9500;
 
@@ -61,6 +113,11 @@ async function main() {
       cwd: process.env.CODING_PROJECT_DIR || process.cwd(),
       agent: 'claude',
     };
+
+    // 6b. Record this genuine submission into the dashboard "Recent Queries"
+    //     log. UserPromptSubmit fires only on a real send, so this replaces the
+    //     unreliable tmux box-clear heuristic. Fire-and-forget, fail-open.
+    recordSubmitted(prompt, context, input.session_id);
 
     // 7-9. Build the retrieval query via the shared query-builder so the tmux
     //      live-draft path (live-query-monitor) produces an identical query and

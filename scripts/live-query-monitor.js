@@ -8,8 +8,8 @@
  * reaching the host tmux server through a bind-mounted socket (LQM_TMUX_SOCKET).
  * It periodically snapshots the agent's tmux pane with
  * `tmux capture-pane -p`, extracts the draft the user is currently typing (via
- * InputDraftExtractor), and emits three kinds of update to the Health Dashboard
- * so the "Live Context" tab can render three zones:
+ * InputDraftExtractor), and emits two kinds of update to the Health Dashboard
+ * so the "Live Context" tab can render its draft + memory zones:
  *
  *   1. Draft stream — on every change, POST the in-progress draft to
  *      `/api/live-context/draft` → streamed live into the main heading bar.
@@ -17,12 +17,20 @@
  *      POST it to `/api/live-context/query`; the dashboard runs the Knowledge
  *      Context Injection memory pipeline and broadcasts Working + Observational
  *      memory for the live query → the two memory columns.
- *   3. Submitted — when the draft transitions non-empty → empty (the user pressed
- *      Enter and the input box cleared), POST the just-sent query to
- *      `/api/live-context/submitted` → appended to the "Recent Queries" log.
  *
- * Why not a UserPromptSubmit hook? The prompt has not been submitted yet — it
- * only exists on screen — so the terminal snapshot is the single source of truth.
+ * This monitor deliberately does NOT populate the "Recent Queries" log. The
+ * on-screen draft is only a *typed-but-unsent* preview; the input box clears for
+ * many reasons besides a real submission (Ctrl+C, Esc, /clear, backspacing, CLI
+ * redraws), so treating a box-clear as a submission logged every draft as a
+ * "Recent Query" — the bug this split fixes. Recent Queries are instead driven
+ * by the genuine UserPromptSubmit event: the Copilot OTel span (one span == one
+ * real submission, via received-context-logger.mjs) and the Claude/OpenCode
+ * UserPromptSubmit hook, both of which POST to `/api/live-context/submitted`
+ * only once a prompt is actually sent to the model.
+ *
+ * Why is the *draft/query* preview still snapshot-based? Because that preview is
+ * for a prompt not yet submitted — it only exists on screen — so the terminal
+ * snapshot is the single source of truth for the draft zone.
  *
  * Environment variables:
  *   LQM_SESSION          tmux session/target to capture. Optional: when unset the
@@ -124,7 +132,6 @@ let lastDraft = null;        // most recent extracted draft
 let lastDraftAt = 0;         // when lastDraft was first observed (stability timer)
 let lastSentQuery = null;    // last query we actually retrieved on
 let lastSentAt = 0;          // when we last fired a retrieval
-let lastNonEmptyDraft = null; // last non-empty draft seen (for submission detection)
 let stopped = false;
 
 /**
@@ -236,7 +243,6 @@ function adoptSession(name) {
   lastDraftAt = 0;
   lastSentQuery = null;
   lastSentAt = 0;
-  lastNonEmptyDraft = null;
   process.stderr.write(`[live-query-monitor] adopted session='${SESSION}' agent='${AGENT}'\n`);
 }
 
@@ -392,23 +398,7 @@ function sendDraft(query, context = '') {
 }
 
 /**
- * Record a query the user actually submitted to the CLI (box cleared after Enter)
- * into the dashboard "Recent Queries" log. Fail-open.
- *
- * @param {string} query  the submitted query text
- */
-function sendSubmitted(query) {
-  return postJson('/api/live-context/submitted', {
-    query,
-    agent: AGENT,
-    sessionId: SESSION_ID,
-    project: PROJECT,
-    ts: new Date().toISOString(),
-  });
-}
-
-/**
- * One polling tick: snapshot → extract → stream draft / detect submit → maybe retrieve.
+ * One polling tick: snapshot → extract → stream draft → maybe retrieve.
  */
 async function tick() {
   if (stopped) return;
@@ -446,19 +436,14 @@ async function tick() {
     lastDraftAt = now;
 
     if (draft == null || draft === '') {
-      // Input box emptied. If we had a non-empty draft, treat the box clearing
-      // as a submission (the user pressed Enter) and log it as a Recent Query.
-      const submitted = lastNonEmptyDraft;
-      lastNonEmptyDraft = null;
-      // Clear the live heading regardless.
+      // Input box emptied (Enter, Ctrl+C, Esc, /clear, backspacing, or a CLI
+      // redraw). We only clear the live heading here — we do NOT log a Recent
+      // Query, because a cleared box is not a reliable submission signal. Real
+      // submissions are recorded by the genuine UserPromptSubmit event
+      // (Copilot OTel span / agent hook) → /api/live-context/submitted.
       sendDraft('', '');
-      if (submitted && submitted.trim()) {
-        process.stderr.write(`[live-query-monitor] submitted → "${submitted.slice(0, 80)}"\n`);
-        sendSubmitted(submitted);
-      }
     } else {
       // Still typing — stream the in-progress draft to the heading bar.
-      lastNonEmptyDraft = draft;
       sendDraft(draft, paneContext(pane, draft));
     }
     return;

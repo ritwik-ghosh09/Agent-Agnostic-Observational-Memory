@@ -26,6 +26,7 @@
  *   node scripts/received-context-logger.mjs --self-test     # parser self-test (no Copilot needed)
  *   node scripts/received-context-logger.mjs --otel <path> --log-dir <dir>
  *   node scripts/received-context-logger.mjs --no-live       # skip Live-Context best-effort join
+ *   node scripts/received-context-logger.mjs --no-submit     # don't feed the dashboard Recent Queries log
  *
  * Author: Ritwik Ghosh · Intern · EF 412
  */
@@ -43,12 +44,13 @@ const ITEM_MARKER = /^\*\*\[(Insight|Digest|Entity|Observation)\]\*\*/;
 // CLI
 // ---------------------------------------------------------------------------
 function parseArgs(argv) {
-  const a = { watch: false, selfTest: false, live: true };
+  const a = { watch: false, selfTest: false, live: true, submit: true };
   for (let i = 2; i < argv.length; i++) {
     const t = argv[i];
     if (t === '--watch') a.watch = true;
     else if (t === '--self-test') a.selfTest = true;
     else if (t === '--no-live') a.live = false;
+    else if (t === '--no-submit') a.submit = false;
     else if (t === '--otel') a.otel = argv[++i];
     else if (t === '--log-dir') a.logDir = argv[++i];
     else if (t === '--live-url') a.liveUrl = argv[++i];
@@ -269,6 +271,61 @@ function httpGetJson(url, timeoutMs = 1500) {
   });
 }
 
+/**
+ * POST a JSON body to a URL, fail-open (always resolves). Used to record a
+ * genuine prompt submission into the dashboard "Recent Queries" log.
+ */
+function httpPostJson(url, payload, timeoutMs = 1500) {
+  return new Promise((resolve) => {
+    let body;
+    try { body = JSON.stringify(payload); } catch { resolve(false); return; }
+    try {
+      const u = new URL(url);
+      const req = http.request(
+        {
+          hostname: u.hostname,
+          port: u.port,
+          path: u.pathname + u.search,
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+          timeout: timeoutMs,
+        },
+        (res) => { res.resume(); res.on('end', () => resolve(res.statusCode < 400)); }
+      );
+      req.on('timeout', () => { req.destroy(); resolve(false); });
+      req.on('error', () => resolve(false));
+      req.write(body);
+      req.end();
+    } catch { resolve(false); }
+  });
+}
+
+/**
+ * Record a genuinely-submitted prompt into the dashboard "Recent Queries" log.
+ *
+ * This is the reliable UserPromptSubmit signal for Copilot: one OTel span ==
+ * one prompt actually sent to the model. Unlike the tmux draft monitor (which
+ * cannot distinguish a real submission from any input-box clear), we only reach
+ * here once Copilot has emitted a span for a submitted prompt. Fail-open.
+ *
+ * @param {object} record  the built submission record
+ * @param {string} liveUrl dashboard base URL (e.g. http://localhost:3033)
+ */
+function postSubmitted(record, liveUrl) {
+  const query = (record.query || '').trim();
+  if (!query) return Promise.resolve(false);
+  const project = process.env.CODING_PROJECT_DIR
+    ? path.basename(process.env.CODING_PROJECT_DIR)
+    : path.basename(process.env.CODING_REPO || process.cwd());
+  return httpPostJson(`${liveUrl}/api/live-context/submitted`, {
+    query,
+    agent: 'copilot',
+    sessionId: record.conversationId || null,
+    project,
+    ts: record.spanTimestamp || record.loggedAt,
+  });
+}
+
 function norm(s) { return (s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
 
 async function attachLiveContext(record, liveUrl) {
@@ -360,6 +417,9 @@ async function processFile(otelPath, logDir, opts) {
       if (seen.has(key)) continue;
       if (opts.live) { try { await attachLiveContext(rec, opts.liveUrl); } catch { /* fail-open */ } }
       fs.appendFileSync(logFileFor(logDir, rec.loggedAt), JSON.stringify(rec) + '\n');
+      // Feed the dashboard "Recent Queries" log from this genuine submission
+      // (one OTel span == one prompt actually sent to the model). Fail-open.
+      if (opts.submit) { try { await postSubmitted(rec, opts.liveUrl); } catch { /* fail-open */ } }
       seen.add(key); written++;
     }
   }
@@ -440,7 +500,7 @@ async function main() {
 
   const otelPath = resolveOtelPath(args.otel);
   const logDir = resolveLogDir(args.logDir);
-  const opts = { live: args.live, liveUrl: args.liveUrl || process.env.LIVE_CONTEXT_URL || 'http://localhost:3033' };
+  const opts = { live: args.live, submit: args.submit, liveUrl: args.liveUrl || process.env.LIVE_CONTEXT_URL || 'http://localhost:3033' };
 
   await processFile(otelPath, logDir, opts);
 
