@@ -347,6 +347,7 @@ class SystemHealthAPIServer {
         this.app.post('/api/live-context/draft', this.handleLiveContextDraft.bind(this));
         this.app.post('/api/live-context/submitted', this.handleLiveContextSubmitted.bind(this));
         this.app.get('/api/live-context/submitted', this.handleGetLiveContextSubmitted.bind(this));
+        this.app.delete('/api/live-context/submitted', this.handleClearLiveContextSubmitted.bind(this));
 
         // Error handling
         this.app.use(this.handleError.bind(this));
@@ -5022,6 +5023,19 @@ class SystemHealthAPIServer {
         );
         const data = this.submittedBuffer.slice(-limit);
         res.json({ data, total: this.submittedBuffer.length });
+    }
+
+    /**
+     * DELETE /api/live-context/submitted — clear the "Recent Queries" log. The
+     * buffer is purely in-memory, so before this endpoint the only way to drop
+     * stale entries was to restart the server. Broadcasts LIVE_SUBMITTED_CLEAR
+     * so connected tabs can empty the sidebar without a reload.
+     */
+    handleClearLiveContextSubmitted(req, res) {
+        const cleared = this.submittedBuffer.length;
+        this.submittedBuffer = [];
+        this.broadcastLive('LIVE_SUBMITTED_CLEAR', { clearedAt: new Date().toISOString(), cleared });
+        res.json({ ok: true, cleared });
     }
 
     /**
