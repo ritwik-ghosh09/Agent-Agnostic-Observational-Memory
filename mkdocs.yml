@@ -70,58 +70,9 @@ extra_css:
 
 nav:
   - Home: index.md
-  - Memory Pipeline:
-    - Overview: memory-pipeline/index.md
-    - Ingestion: memory-pipeline/ingestion.md
-    - Working Memory: memory-pipeline/working-memory.md
-    - Live Context Retrieval: memory-pipeline/retrieval.md
-    - Ranking & Nuances: memory-pipeline/ranking.md
-    - Live Context Preview: memory-pipeline/live-context.md
-  - Release Notes: release-notes.md
-  - Getting Started:
-    - Overview: getting-started/index.md
-    - Installation: getting-started/installation.md
-    - Verify & Repair: getting-started/verify-repair.md
-    - Configuration: getting-started/configuration.md
-  - Core Systems:
-    - Overview: core-systems/index.md
-    - Live Session Logging: core-systems/lsl.md
-    - Knowledge Management: core-systems/ukb-vkb.md
-    - Ontology: core-systems/ontology.md
-    - Constraints: core-systems/constraints.md
-    - Observational Memory: core-systems/observational-memory.md
-  - Architecture:
-    - Overview: architecture/index.md
-    - Knowledge Injection: architecture/knowledge-injection.md
-    - LLM Architecture: architecture/llm-architecture.md
-    - Health Monitoring: architecture/health-monitoring.md
-    - Token Usage: architecture/token-usage.md
-    - Data Flow: architecture/data-flow.md
-  - Integrations:
-    - Overview: integrations/index.md
-    - Semantic Analysis: integrations/semantic-analysis.md
-    - Constraint Monitor: integrations/constraint-monitor.md
-    - Code Graph RAG: integrations/code-graph-rag.md
-    - Dashboard: integrations/dashboard.md
-    - LLM CLI Proxy: integrations/llm-cli-proxy.md
-  - Guides:
-    - Overview: guides/index.md
-    - Agent Integration: guides/agent-integration.md
-    - Network Configuration: guides/network-configuration.md
-    - Status Line: guides/status-line.md
-    - Health Dashboard: guides/health-dashboard.md
-    - LLM Providers: guides/llm-providers.md
-    - Constraint Testing: guides/constraint-testing.md
-    - VKB Visualization: guides/vkb-visualization.md
-    - Knowledge Workflows: guides/knowledge-workflows.md
-    - Skills System: guides/skills-system.md
-  - Reference:
-    - Overview: reference/index.md
-    - Commands: reference/commands.md
-    - API: reference/api.md
-    - Troubleshooting: reference/troubleshooting.md
-  - Articles:
-    - Self-Learning Layer: reference/articles/self-learning-layer.md
+  - Memory Retention: memory-pipeline/memory-retention.md
+  - Live Context Retrieval: memory-pipeline/live-context-retrieval.md
+  - Human-in-the-Loop: memory-pipeline/human-in-the-loop.md
 
 extra:
   homepage: https://fwornle.github.io/coding/

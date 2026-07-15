@@ -1,229 +1,91 @@
-# Coding
-
-**A self-learning experience layer for AI coding assistants**
-
-Coding wraps around your AI coding assistant to capture conversations, build knowledge, prevent mistakes, and track progress - creating a continuously improving development environment.
-
-![VKB Knowledge Graph](images/vkb-hero.png)
-
----
-
-## What is Coding?
-
-Coding is an infrastructure layer that enhances AI coding assistants by:
-
-- **Capturing everything** - Automatic session logging of all prompts, tool calls, and responses
-- **Learning from experience** - Build a knowledge base from your coding history and conversations
-- **Preventing mistakes** - Constraint system stops errors before they happen
-
-![System Architecture](images/coding-system-architecture.png)
-
----
-
-## Key Features
-
-### Live Session Logging (LSL)
-
-Every conversation is captured automatically with intelligent 5-layer classification that routes content between projects.
-
-![LSL Sample Output](images/lsl-sample-output.png)
-
-- Real-time monitoring with zero data loss
-- Automatic redaction of secrets and credentials
-- Multi-project support with foreign session tracking
-- Configurable time-based slots (hourly files)
-
-[Learn more about LSL](core-systems/lsl.md){ .md-button }
-
----
-
-### Knowledge Management (UKB/VKB)
-
-A 14-agent AI system extracts insights from your git history and conversation logs, building a searchable knowledge graph.
-
-![VKB Viewer — interactive knowledge graph with 281 entities across Project, Component, SubComponent, and Detail hierarchy](images/viewer.png)
-
-**Update Knowledge Base (UKB)**:
-```bash
-ukb           # Incremental update from last checkpoint
-ukb full      # Full analysis from first commit
-ukb debug     # Single-stepping with mocked LLM
-```
-
-**View Knowledge Base (VKB)**:
-```bash
-vkb           # Opens http://localhost:8080
-```
-
-[Learn more about Knowledge Management](core-systems/ukb-vkb.md){ .md-button }
-
----
-
-### Constraint System
-
-20+ configurable constraints enforce code quality via PreToolUse hooks - preventing mistakes before they happen.
-
-![Constraint Dashboard](images/constraint-dashboard.png)
-
-- Real-time violation detection and blocking
-- Web dashboard for monitoring and configuration
-- Per-project constraint configuration
-- Auto-correction suggestions
-
-[Learn more about Constraints](core-systems/constraints.md){ .md-button }
-
----
-
-### Health Monitoring
-
-3-layer supervision architecture ensures system reliability with automatic recovery.
-
-![Health Dashboard](images/health-dashboard-hero.png)
-
-- Process health monitoring with automatic restart
-- Service lifecycle management
-- Multi-agent workflow visualization
-- LLM call tracing (tokens, duration, costs)
-
-[Learn more about Health Monitoring](architecture/health-monitoring.md){ .md-button }
-
----
-
-### Status Line
-
-Real-time feedback via the unified tmux status bar showing system health, costs, and development state. All coding agents (Claude, Copilot, OpenCode, Mastracode) are wrapped in tmux sessions with a shared status line rendered by `combined-status-line.js`.
-
-![Coding Environment — Tmux Status Bar](images/status-line.png)
-
-| Indicator | Meaning |
-|-----------|---------|
-| Health icons | Service status (green/red) |
-| Cost display | API usage tracking |
-| LSL status | Logging window and routing |
-
-[Learn more about Status Line](guides/status-line.md){ .md-button }
-
----
-
-### Multi-Agent Support
-
-While Claude Code is the primary and default agent, **coding** is fully agent-agnostic. Any coding assistant can be integrated with a single config file — no changes to shared code needed.
-
-| Agent | Launch | Status |
-|-------|--------|--------|
-| **Claude Code** (default) | `coding` or `coding --claude` | Full MCP integration |
-| **GitHub Copilot CLI** | `coding --copilot` | Pipe-pane I/O capture |
-| **OpenCode** | `coding --opencode` | Pipe-pane I/O capture |
-| **Mastracode** | `coding --mastra` | Lifecycle hook transcripts |
-
-All agents share the same infrastructure: tmux session wrapping, status line, health monitoring, LSL session logging, knowledge management, and constraint enforcement. Missing agent CLIs are auto-installed on first launch.
-
-![GitHub Copilot CLI running in coding](images/coding-copilot-cli.png)
-
-![OpenCode running in coding](images/coding-opencode.png)
-
-![Mastracode running in coding](images/coding-mastra.png)
-
-[Agent Integration Guide](guides/agent-integration.md){ .md-button }
-
----
-
-## Quick Start
-
-```bash
-# Clone and install
-git clone --recurse-submodules https://github.com/fwornle/coding ~/Agentic/coding
-cd ~/Agentic/coding && ./install.sh
-
-# Reload shell
-source ~/.bashrc  # or ~/.zshrc
-
-# Start coding with all features
-coding
-
-# View your knowledge graph
-vkb
-```
-
-![Coding Startup](images/coding-startup-dockerized.png)
-
-[Full Installation Guide](getting-started/index.md){ .md-button .md-button--primary }
-
----
-
-## Design Principles
-
-| Principle | Description |
-|-----------|-------------|
-| **Agent-Agnostic** | Designed for any AI assistant — add a new agent with [a single config file](guides/agent-integration.md). Claude, CoPilot, OpenCode, and Mastracode integrated |
-| **Non-Intrusive** | Docker deployment keeps your system clean |
-| **Provider Flexible** | Works with Anthropic, OpenAI, Groq, and local LLMs (DMR/llama.cpp) |
-| **Multi-Project** | Handle multiple projects with automatic context routing |
-| **Multi-Developer** | Session logs tagged per user for collaboration |
-| **Self-Healing** | 3-layer supervision with automatic recovery |
-
----
-
-## Feature Status
-
-| Feature | Status | Description |
-|---------|--------|-------------|
-| Live Session Logging | :material-check-circle:{ .green } Production | Full session capture with 5-layer classification |
-| Knowledge Base (UKB) | :material-check-circle:{ .green } Production | 14-agent knowledge extraction system |
-| Knowledge Viewer (VKB) | :material-check-circle:{ .green } Production | Graph visualization and exploration |
-| Constraint System | :material-check-circle:{ .green } Production | 20+ constraints with web dashboard |
-| Health Monitoring | :material-check-circle:{ .green } Production | 3-layer supervision architecture |
-| Status Line | :material-check-circle:{ .green } Production | Real-time terminal feedback |
-| Online Learning | :material-progress-clock:{ .yellow } Beta | Continuous learning without manual UKB |
-
----
-
-## MCP Integrations
-
-Coding provides several MCP (Model Context Protocol) servers:
-
-| Integration | Purpose |
-|-------------|---------|
-| [Semantic Analysis](integrations/semantic-analysis.md) | 14-agent AI-powered code analysis |
-| [Constraint Monitor](integrations/constraint-monitor.md) | Real-time violation detection |
-| [Code Graph RAG](integrations/code-graph-rag.md) | AST-based code search via Memgraph |
-
----
-
-## Documentation
+# 👁️ Observational Memory
+
+> A cross-agent, self-improving memory system that **watches** your coding sessions,
+> **summarizes** them into structured knowledge, and **retrieves** the right slice of that
+> knowledge back into your next prompt — continuously sharpened by **live human feedback**.
+
+This documentation is a focused deep-dive into the **Observational Memory** retention and retrieval
+machinery (plus **Working Memory**), built as an extension of the
+[Coding Documentation :material-book-open-variant:](https://fwornle.github.io/coding/). It covers
+**only** the components tied to memory retention and retrieval — for the surrounding platform (LSL,
+UKB/VKB, constraints, health monitoring) refer back to the base project.
+
+## What sets it apart
+
+Most "AI memory" systems are a single loop: embed text → store vectors → cosine search → inject
+top-k. Observational Memory adds three structural advantages:
+
+| Capability | Vanilla memory | Observational Memory |
+|------------|----------------|----------------------|
+| **Knowledge shape** | Flat chunks | 3-tier hierarchy: Observations → Digests → Insights |
+| **Retrieval** | Single vector search | Hybrid: semantic **+** keyword (FTS5) **+** recency, fused with RRF |
+| **Ranking signals** | Cosine only | Tier weight, agent profile, context, topic overlap, freshness, query↔item emphasis |
+| **Human in the loop** | None | **Live drag-to-reorder feedback** becomes a learned, decaying rerank boost |
+| **Truth maintenance** | Stale silently | Insights are re-verified against live code; stale claims demoted |
+
+## The three tabs
 
 <div class="grid cards" markdown>
 
--   :material-rocket-launch:{ .lg .middle } **Getting Started**
+- :material-database-import: **[Memory Retention](memory-pipeline/memory-retention.md)**
 
-    ---
+    The write path — capture, summarize, dedup, store, consolidate, and truthfulness-verify. Plus
+    **Working Memory**, the always-on ≤ 300-token context prefix.
 
-    Installation, configuration, and first steps
+- :material-magnify-scan: **[Live Context Retrieval](memory-pipeline/live-context-retrieval.md)**
 
-    [:octicons-arrow-right-24: Get started](getting-started/index.md)
+    The read path — the 8-stage pipeline: embed, parallel search, RRF fusion, tier weights,
+    reranking passes, token budgeting, and the live context preview.
 
--   :material-cog:{ .lg .middle } **Core Systems**
+- :material-account-arrow-up: **[Human-in-the-Loop](memory-pipeline/human-in-the-loop.md)**
 
-    ---
-
-    LSL, UKB/VKB, Constraints, Observational Memory
-
-    [:octicons-arrow-right-24: Explore](core-systems/index.md)
-
--   :material-puzzle:{ .lg .middle } **Integrations**
-
-    ---
-
-    MCP servers and external tools
-
-    [:octicons-arrow-right-24: View integrations](integrations/index.md)
-
--   :material-book-open-variant:{ .lg .middle } **Guides**
-
-    ---
-
-    Deep-dive tutorials and workflows
-
-    [:octicons-arrow-right-24: Read guides](guides/index.md)
+    The full reranking mechanism — capture & apply, the two similarity gates with the exponential
+    emphasis curve, a worked example, safety guarantees, the self-improving loop, and the dashboard
+    tuning controls.
 
 </div>
+
+## The two pipelines in one picture
+
+```mermaid
+flowchart LR
+    subgraph WRITE["Memory Retention — write path"]
+        direction TB
+        EX[Agent exchange] --> SUM[LLM summarize + dedup]
+        SUM --> OBS[(Observations)]
+        OBS --> DIG[(Digests)]
+        DIG --> INS[(Insights)]
+    end
+
+    subgraph STORE["Single-owner store"]
+        DB[(SQLite WAL + FTS5)]
+        QD[(Qdrant vectors)]
+    end
+
+    subgraph READ["Live Context Retrieval — read path"]
+        direction TB
+        Q[New prompt] --> RET[Embed + parallel search]
+        RET --> RRF[RRF fusion + rerank]
+        RRF --> BUD[Token budget + assembly]
+        BUD --> CTX[Injected context]
+    end
+
+    OBS --> DB
+    DIG --> DB
+    INS --> DB
+    INS -.embeddings.-> QD
+    DB --> RET
+    QD --> RET
+    CTX -. human feedback .-> QD
+
+    classDef w fill:#e3f2fd,stroke:#4051b5,color:#0d1b2a;
+    classDef r fill:#e8f5e9,stroke:#2e7d32,color:#0d1b2a;
+    classDef s fill:#fff8e1,stroke:#f9a825,color:#0d1b2a;
+    class EX,SUM,OBS,DIG,INS w;
+    class Q,RET,RRF,BUD,CTX r;
+    class DB,QD s;
+```
+
+---
+
+*Part of the [Agent-Agnostic Observational Memory](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory) project — an extension of the [Coding Documentation](https://fwornle.github.io/coding/).*
