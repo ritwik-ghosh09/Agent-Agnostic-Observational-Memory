@@ -190,7 +190,19 @@ function extractQuery(messages) {
   let q = pick.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, ' ');
   // Drop any leftover bare memory sections (block injected without reminder tags).
   q = q.replace(/##\s+(Working|Observational) Memory[\s\S]*?(?=\n##\s|$)/g, ' ');
-  return q.replace(/\s+/g, ' ').trim().slice(0, 500);
+  q = q.replace(/\s+/g, ' ').trim();
+  // Fallback: a bare (untagged) block that ran to EOF can swallow a trailing prompt.
+  // Recover it as the last non-memory prose line of the original message.
+  if (!q) {
+    const lines = pick.split('\n').map((s) => s.trim()).filter(Boolean);
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const l = lines[i];
+      if (/^#{1,6}\s/.test(l) || /^\*\*\[/.test(l) || /^\*\*[A-Za-z].*:\*\*/.test(l)
+          || /^[-*]\s/.test(l) || /^<\/?system-reminder>/.test(l)) continue;
+      q = l; break;
+    }
+  }
+  return q.slice(0, 500);
 }
 
 // ---------------------------------------------------------------------------
