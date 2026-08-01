@@ -6,7 +6,7 @@
 > by [**live human feedback**](#7--live-human-feedback-reranking-the-standout-feature).
 
 Observational Memory captures what happens across *all* your coding agents (Claude
-Code, GitHub Copilot, OpenCode, Mastracode), distills it into a three-tier memory
+Code, GitHub Copilot, OpenCode, Mastracode), distils it into a three-tier memory
 hierarchy, and serves it back through a hybrid retrieval pipeline. What sets it
 apart from a vanilla "embed-and-search" memory is its **Live Human-Feedback
 Reranking** loop: when a human reorders retrieval results to reflect what was
