@@ -10,6 +10,7 @@
 - **PlantUML**: Use `plantuml` CLI command. NEVER `java -jar plantuml.jar`
 - **TypeScript**: Mandatory with strict type checking
 - **API design**: Never modify working APIs for TypeScript compliance; fix types instead
+- **No AI attribution in commits**: NEVER add `Co-Authored-By: Claude/Copilot` trailers or "Generated with Claude Code/Copilot" footers to commit messages. Commit only as the configured repository identity (`ritwik-ghosh09 <jack.ritwik09@gmail.com>`). A `.githooks/prepare-commit-msg` sanitizer strips these automatically; do not bypass it.
 
 ## Startup & Services
 
