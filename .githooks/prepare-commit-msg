@@ -1,0 +1,20 @@
+#!/bin/sh
+# Strip AI-attribution trailers/footers from commit messages so GitHub never
+# renders Claude/Copilot as co-authors. Portable: POSIX sh + sed, works on
+# Linux, macOS, and Git for Windows.
+#
+# Enabled via: git config core.hooksPath .githooks
+
+f="$1"
+[ -f "$f" ] || exit 0
+
+tmp="${f}.clean"
+sed \
+    -e '/Co-[Aa]uthored-[Bb]y:.*Claude/d' \
+    -e '/Co-[Aa]uthored-[Bb]y:.*Copilot/d' \
+    -e '/Generated with.*Claude Code/d' \
+    -e '/Generated with.*Copilot/d' \
+    -e '/^🤖/d' \
+    "$f" > "$tmp" && mv -f "$tmp" "$f"
+
+exit 0
