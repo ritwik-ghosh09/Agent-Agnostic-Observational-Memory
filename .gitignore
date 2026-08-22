@@ -292,3 +292,7 @@ local_cache/
 
 # Runtime-generated tunable retrieval scoring settings (state, not source)
 .observations/retrieval-settings.json
+CLAUDE.md
+AGENTS.md
+# Accidental embedded-repo artifact; nothing references it
+lib/km-core/
