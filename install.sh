@@ -793,6 +793,16 @@ install_semantic_analysis() {
     cd "$CODING_REPO"
 }
 
+# Self-heal: recharts Tooltip formatter typing breaks `next build` in older
+# checkouts of the constraint-monitor dashboard (upstream may lag this fix).
+heal_constraint_dashboard_typing() {
+    local f="$1/dashboard/components/constraint-dashboard.tsx"
+    if [[ -f "$f" ]] && grep -q 'formatter={(value: number, name: string, props: unknown)' "$f"; then
+        sed -i 's/formatter={(value: number, name: string, props: unknown)/formatter={(value: any, name: any, props: unknown)/' "$f"
+        info "Applied recharts formatter typing fix to constraint-monitor dashboard"
+    fi
+}
+
 # Install MCP Constraint Monitor with Professional Dashboard (git submodule)
 install_constraint_monitor() {
     # Discard empty or partial checkouts (leftover from interrupted installs)
@@ -817,16 +827,6 @@ install_constraint_monitor() {
             info "Could not update mcp-constraint-monitor (may be on specific commit)"
         fi
     else
-# Self-heal: recharts Tooltip formatter typing breaks `next build` in older
-# checkouts of the constraint-monitor dashboard (upstream may lag this fix).
-heal_constraint_dashboard_typing() {
-    local f="$1/dashboard/components/constraint-dashboard.tsx"
-    if [[ -f "$f" ]] && grep -q 'formatter={(value: number, name: string, props: unknown)' "$f"; then
-        sed -i 's/formatter={(value: number, name: string, props: unknown)/formatter={(value: any, name: any, props: unknown)/' "$f"
-        info "Applied recharts formatter typing fix to constraint-monitor dashboard"
-    fi
-}
-
         info "Initializing mcp-constraint-monitor submodule..."
         git submodule update --init --recursive integrations/mcp-constraint-monitor || {
             warning "Failed to initialize mcp-constraint-monitor submodule at pinned commit"
