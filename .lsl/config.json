@@ -41,8 +41,8 @@
     "log_level": "info"
   },
   "deployment": {
-    "deployment_id": "lsl-20260619-224328",
-    "deployed_at": "2026-06-19T20:43:28Z",
+    "deployment_id": "lsl-20260822-212847",
+    "deployed_at": "2026-08-22T21:28:48Z",
     "version": "2.0.0",
     "components": [
       "enhanced-redaction-system",
