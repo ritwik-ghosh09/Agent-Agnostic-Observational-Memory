@@ -667,6 +667,18 @@ handle_non_mirrored_repo_cn() {
     success "All required dependencies are installed"
 }
 
+# Last-resort recovery for a stale/broken submodule pin (upstream history was
+# rewritten and the pinned SHA is unreachable): wipe the path and shallow-clone
+# the remote's default branch directly. Returns 0 only if a checkout exists.
+rescue_clone_submodule() {
+    local url="$1" dir="$2" branch="${3:-}"
+    rm -rf "$dir"
+    local branch_args=()
+    [[ -n "$branch" ]] && branch_args=(-b "$branch")
+    info "Attempting direct clone of ${url}${branch:+ (branch: $branch)}..."
+    git clone --depth 1 "${branch_args[@]}" "$url" "$dir" 2>/dev/null
+}
+
 # Install memory-visualizer (git submodule)
 install_memory_visualizer() {
     echo -e "\n${CYAN}📊 Installing memory-visualizer (git submodule)...${NC}"
@@ -684,7 +696,13 @@ install_memory_visualizer() {
         fi
     else
         info "Initializing memory-visualizer submodule..."
-        git submodule update --init --recursive integrations/memory-visualizer || error_exit "Failed to initialize memory-visualizer submodule"
+        git submodule update --init --recursive integrations/memory-visualizer || {
+            warning "Failed to initialize memory-visualizer submodule at pinned commit"
+            rescue_clone_submodule \
+                "$(git config -f .gitmodules submodule.integrations/memory-visualizer.url)" \
+                integrations/memory-visualizer ||
+                INSTALLATION_WARNINGS+=("memory-visualizer: failed to initialize (manual: git submodule update --init integrations/memory-visualizer)")
+        }
     fi
 
     cd "$MEMORY_VISUALIZER_DIR"
@@ -728,7 +746,13 @@ install_semantic_analysis() {
         fi
     else
         info "Initializing mcp-server-semantic-analysis submodule..."
-        git submodule update --init --recursive integrations/mcp-server-semantic-analysis || error_exit "Failed to initialize semantic-analysis submodule"
+        git submodule update --init --recursive integrations/mcp-server-semantic-analysis || {
+            warning "Failed to initialize semantic-analysis submodule at pinned commit"
+            rescue_clone_submodule \
+                "$(git config -f .gitmodules submodule.integrations/mcp-server-semantic-analysis.url)" \
+                integrations/mcp-server-semantic-analysis ||
+                INSTALLATION_WARNINGS+=("mcp-server-semantic-analysis: failed to initialize (manual: git submodule update --init integrations/mcp-server-semantic-analysis)")
+        }
     fi
 
     # Only proceed with build if we have the repository
@@ -779,10 +803,11 @@ install_constraint_monitor() {
     else
         info "Initializing mcp-constraint-monitor submodule..."
         git submodule update --init --recursive integrations/mcp-constraint-monitor || {
-            warning "Failed to initialize mcp-constraint-monitor submodule"
-            info "You can manually clone: git clone https://github.com/fwornle/mcp-constraint-monitor.git integrations/mcp-constraint-monitor"
-            INSTALLATION_WARNINGS+=("mcp-constraint-monitor: Failed to initialize submodule")
-            return 1
+            warning "Failed to initialize mcp-constraint-monitor submodule at pinned commit"
+            rescue_clone_submodule \
+                "$(git config -f .gitmodules submodule.integrations/mcp-constraint-monitor.url)" \
+                integrations/mcp-constraint-monitor "main" ||
+                INSTALLATION_WARNINGS+=("mcp-constraint-monitor: failed to initialize (manual: git clone https://github.com/fwornle/mcp-constraint-monitor.git integrations/mcp-constraint-monitor)")
         }
     fi
 
@@ -883,9 +908,9 @@ install_code_graph_rag() {
         elif git clone -b "$CODE_GRAPH_RAG_BRANCH" "$CODE_GRAPH_RAG_SSH" "$CODE_GRAPH_RAG_DIR" 2>/dev/null; then
             success "Cloned code-graph-rag via SSH"
         else
-            warning "Failed to clone code-graph-rag"
+            warning "Failed to clone code-graph-rag (continuing — CGR features will be unavailable)"
             INSTALLATION_WARNINGS+=("code-graph-rag: Failed to clone")
-            return 1
+            return 0
         fi
     fi
 
