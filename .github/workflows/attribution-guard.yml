@@ -1,0 +1,24 @@
+name: attribution-guard
+
+# Fails any push/PR whose git history carries AI (Claude/Copilot) attribution:
+# AI author/committer identities, Co-Authored-By-style trailers, or
+# "Generated with ..." footers. GitHub UI cache checks are skipped in CI
+# (they are runtime surfaces, verified by scripts/verify-attribution.sh locally).
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Audit history for AI attribution
+        run: sh scripts/verify-attribution.sh --git-only --no-fetch
