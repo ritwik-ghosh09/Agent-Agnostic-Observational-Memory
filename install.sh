@@ -681,6 +681,11 @@ rescue_clone_submodule() {
 
 # Install memory-visualizer (git submodule)
 install_memory_visualizer() {
+    # Discard empty or partial checkouts (leftover from interrupted installs)
+    if [[ -d "$CODING_REPO/integrations/memory-visualizer" ]] && [[ ! -f "$CODING_REPO/integrations/memory-visualizer/package.json" ]] && [[ ! -f "$CODING_REPO/integrations/memory-visualizer/pyproject.toml" ]] && [[ -z "$(ls -A "$CODING_REPO/integrations/memory-visualizer" 2>/dev/null | grep -v '^\.git' )" ]]; then
+        warning "Incomplete submodule checkout detected - resetting $CODING_REPO/integrations/memory-visualizer"
+        rm -rf "$CODING_REPO/integrations/memory-visualizer"
+    fi
     echo -e "\n${CYAN}📊 Installing memory-visualizer (git submodule)...${NC}"
 
     cd "$CODING_REPO"
@@ -731,6 +736,11 @@ install_memory_visualizer() {
 
 # Install semantic analysis MCP server (git submodule)
 install_semantic_analysis() {
+    # Discard empty or partial checkouts (leftover from interrupted installs)
+    if [[ -d "$CODING_REPO/integrations/mcp-server-semantic-analysis" ]] && [[ ! -f "$CODING_REPO/integrations/mcp-server-semantic-analysis/package.json" ]] && [[ ! -f "$CODING_REPO/integrations/mcp-server-semantic-analysis/pyproject.toml" ]] && [[ -z "$(ls -A "$CODING_REPO/integrations/mcp-server-semantic-analysis" 2>/dev/null | grep -v '^\.git' )" ]]; then
+        warning "Incomplete submodule checkout detected - resetting $CODING_REPO/integrations/mcp-server-semantic-analysis"
+        rm -rf "$CODING_REPO/integrations/mcp-server-semantic-analysis"
+    fi
     echo -e "\n${CYAN}🧠 Installing semantic analysis MCP server (git submodule)...${NC}"
 
     cd "$CODING_REPO"
@@ -785,6 +795,11 @@ install_semantic_analysis() {
 
 # Install MCP Constraint Monitor with Professional Dashboard (git submodule)
 install_constraint_monitor() {
+    # Discard empty or partial checkouts (leftover from interrupted installs)
+    if [[ -d "$constraint_monitor_dir" ]] && [[ ! -f "$constraint_monitor_dir/package.json" ]] && [[ ! -f "$constraint_monitor_dir/pyproject.toml" ]] && [[ -z "$(ls -A "$constraint_monitor_dir" 2>/dev/null | grep -v '^\.git' )" ]]; then
+        warning "Incomplete submodule checkout detected - resetting $constraint_monitor_dir"
+        rm -rf "$constraint_monitor_dir"
+    fi
     echo -e "\n${CYAN}🚦 Installing MCP Constraint Monitor with Professional Dashboard (git submodule)...${NC}"
 
     cd "$CODING_REPO"
@@ -2082,7 +2097,9 @@ configure_docker_mode() {
 
     if [[ -f "$CODING_REPO/docker/docker-compose.yml" ]]; then
         info "Building Docker images (this may take a few minutes)..."
-        if docker compose -f "$CODING_REPO/docker/docker-compose.yml" build; then
+        local DOCKER_CMD="docker"
+        docker info &>/dev/null || DOCKER_CMD="sudo docker"
+        if $DOCKER_CMD compose -f "$CODING_REPO/docker/docker-compose.yml" build; then
             success "Docker images built"
         else
             warning "Docker build had issues — you may need to rebuild manually"
