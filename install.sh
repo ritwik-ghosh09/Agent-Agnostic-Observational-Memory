@@ -1771,17 +1771,18 @@ verify_installation() {
 # Detect available coding agents
 detect_agents() {
     info "Detecting available coding agents..."
-    
+
     local agents_found=()
-    
+
     # Check for Claude Code
     if command -v claude >/dev/null 2>&1; then
         agents_found+=("claude")
         success "✓ Claude Code detected"
     else
         warning "Claude Code not found"
+        info "  Install with: npm install -g @anthropic-ai/claude-code"
     fi
-    
+
     # Check for GitHub CoPilot
     if command -v gh >/dev/null 2>&1; then
         if gh extension list 2>/dev/null | grep -q copilot; then
@@ -1795,12 +1796,49 @@ detect_agents() {
         warning "GitHub CLI not found"
         info "  Install from: https://cli.github.com/"
     fi
-    
-    if [ ${#agents_found[@]} -eq 0 ]; then
-        error_exit "No supported coding agents found. Please install Claude Code or GitHub CoPilot."
-        return 1
+
+    # Check for OpenCode (first-class agent — config/agents/opencode.sh)
+    if command -v opencode >/dev/null 2>&1; then
+        agents_found+=("opencode")
+        success "✓ OpenCode detected"
+    elif [[ -x "$HOME/.opencode/bin/opencode" ]]; then
+        # Common install location not currently on PATH — fix PATH instead of failing
+        agents_found+=("opencode")
+        success "✓ OpenCode detected at ~/.opencode/bin"
+        export PATH="$HOME/.opencode/bin:$PATH"
+        if ! grep -q '.opencode/bin' "$SHELL_RC" 2>/dev/null; then
+            echo 'export PATH="$HOME/.opencode/bin:$PATH"' >> "$SHELL_RC"
+        fi
+    else
+        warning "OpenCode not found"
+        info "  Install with: curl -fsSL https://opencode.ai/install | bash  (or: npm install -g opencode-ai)"
     fi
-    
+
+    if [ ${#agents_found[@]} -eq 0 ]; then
+        # Non-fatal: the unified launcher detects agents at runtime and can
+        # install them on demand (AGENT_INSTALL_COMMAND). Offer the common
+        # npm-based install here so a fresh machine ends up usable.
+        if command -v npm >/dev/null 2>&1; then
+            if confirm_system_change \
+                "Install Claude Code CLI via npm (npm install -g @anthropic-ai/claude-code)" \
+                "Installs a global npm package (may need sudo depending on your npm prefix)."; then
+                info "Installing Claude Code..."
+                npm install -g @anthropic-ai/claude-code 2>/dev/null \
+                    || sudo npm install -g @anthropic-ai/claude-code || true
+                if command -v claude >/dev/null 2>&1; then
+                    agents_found+=("claude")
+                    success "✓ Claude Code installed"
+                fi
+            fi
+        fi
+        if [ ${#agents_found[@]} -eq 0 ]; then
+            warning "No supported coding agents installed yet."
+            info "  Install one later, then launch it with: coding --claude | --copilot | --opencode | --mastra"
+            INSTALLATION_WARNINGS+=("Agents: none installed (install Claude Code / Copilot / OpenCode)")
+            return 0
+        fi
+    fi
+
     info "Found agents: ${agents_found[*]}"
     return 0
 }
