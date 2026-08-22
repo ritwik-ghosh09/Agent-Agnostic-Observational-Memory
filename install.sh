@@ -1742,6 +1742,139 @@ configure_team_setup() {
     info "Knowledge is managed by GraphDB at .data/knowledge-graph/ (auto-persisted)"
 }
 
+# Wait until the Docker daemon answers `docker info`, polling for up to
+# $1 seconds (default 120). Handles the slow first start of Docker Desktop.
+wait_for_docker_daemon() {
+    local timeout="${1:-120}"
+    local waited=0
+    while ! docker info &>/dev/null; do
+        sleep 5
+        waited=$((waited + 5))
+        if [[ $waited -ge $timeout ]]; then
+            return 1
+        fi
+    done
+    return 0
+}
+
+# Start the Docker daemon (Engine on Linux, Docker Desktop on macOS/Windows).
+# Returns 0 only if the daemon is answering afterwards.
+start_docker_daemon() {
+    case "$PLATFORM" in
+        linux)
+            if command -v systemctl &>/dev/null && systemctl list-unit-files docker.service &>/dev/null; then
+                info "Starting Docker Engine via systemd..."
+                sudo systemctl enable --now docker 2>/dev/null || sudo systemctl start docker 2>/dev/null || true
+            elif command -v service &>/dev/null; then
+                info "Starting Docker Engine via service..."
+                sudo service docker start 2>/dev/null || true
+            else
+                return 1
+            fi
+            ;;
+        macos)
+            info "Starting Docker Desktop..."
+            open -a Docker 2>/dev/null || return 1
+            ;;
+        windows)
+            # Git Bash / MSYS: locate and launch Docker Desktop, then poll.
+            local dd_exe
+            dd_exe="/c/Program Files/Docker/Docker/Docker Desktop.exe"
+            if [[ -f "$dd_exe" ]]; then
+                info "Starting Docker Desktop..."
+                powershell.exe -NoProfile -Command "Start-Process -FilePath 'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe'" &>/dev/null || true
+            else
+                return 1
+            fi
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+
+    wait_for_docker_daemon 120
+}
+
+# Install Docker (Engine on Linux, Docker Desktop on macOS/Windows) when the
+# `docker` command is missing. Every system modification goes through
+# confirm_system_change. Returns 0 only if `docker` is on PATH afterwards.
+install_docker() {
+    if [[ "$SANDBOX_MODE" == "true" ]]; then
+        warning "SANDBOX MODE: skipping Docker installation"
+        return 1
+    fi
+
+    echo ""
+    info "Docker is required but not installed. It can be installed automatically."
+    if ! confirm_system_change \
+        "Install Docker ($( [[ "$PLATFORM" == "linux" ]] && echo "Docker Engine" || echo "Docker Desktop" ))" \
+        "Installs system packages/services via the platform package manager (sudo may prompt for your password)."; then
+        return 1
+    fi
+
+    case "$PLATFORM" in
+        linux)
+            if [[ -r /etc/os-release ]] && grep -qiE '^(ID_LIKE=.* )?(id=(debian|ubuntu))' /etc/os-release; then
+                APT_PKG="docker.io docker-compose-v2"
+                info "Installing Docker Engine + compose plugin from distro repos ($APT_PKG)..."
+                if sudo apt-get update -y && sudo apt-get install -y $APT_PKG; then
+                    :
+                else
+                    info "Distro packages unavailable — falling back to Docker's official installer (get.docker.com)..."
+                    curl -fsSL https://get.docker.com | sudo sh || return 1
+                fi
+            else
+                info "Installing Docker Engine via Docker's official installer (get.docker.com)..."
+                curl -fsSL https://get.docker.com | sudo sh || return 1
+            fi
+
+            # Enable + start the daemon now so configure_docker_mode can proceed.
+            if command -v systemctl &>/dev/null && systemctl list-unit-files docker.service &>/dev/null; then
+                sudo systemctl enable --now docker 2>/dev/null || true
+            elif command -v service &>/dev/null; then
+                sudo service docker start 2>/dev/null || true
+            fi
+
+            # Offer docker-group membership so `docker` works without sudo.
+            if [[ "$(id -gn)" != "docker" ]] && ! id -nG "$USER" | grep -qw docker; then
+                if confirm_system_change \
+                    "Add user '$USER' to the 'docker' group" \
+                    "Group members can run containers as root-equivalent without sudo. Takes effect at next login."; then
+                    sudo usermod -aG docker "$USER" 2>/dev/null || true
+                    INSTALLATION_WARNINGS+=("Docker: log out/in (or run 'newgrp docker') for group membership to apply")
+                fi
+            fi
+            ;;
+        macos)
+            if ! command -v brew &>/dev/null; then
+                warning "Homebrew is required to install Docker Desktop automatically"
+                return 1
+            fi
+            info "Installing Docker Desktop via Homebrew..."
+            brew install --cask docker || return 1
+            open -a Docker 2>/dev/null || true
+            ;;
+        windows)
+            if command -v winget.exe &>/dev/null; then
+                info "Installing Docker Desktop via winget..."
+                winget.exe install -e --id Docker.DockerDesktop --accept-package-agreements --accept-source-agreements || return 1
+            elif command -v choco.exe &>/dev/null; then
+                info "Installing Docker Desktop via Chocolatey..."
+                choco.exe install docker-desktop -y || return 1
+            else
+                warning "Neither winget nor chocolatey found — install Docker Desktop manually: https://www.docker.com/products/docker-desktop"
+                return 1
+            fi
+            ;;
+        *)
+            warning "Unsupported platform for automatic Docker install: $PLATFORM"
+            return 1
+            ;;
+    esac
+
+    command -v docker &>/dev/null
+}
+
 # Build Docker infrastructure — the only supported deployment mode. Native
 # mode (host processes for MCP servers, dashboards, semantic-analysis) was
 # removed; Docker is mandatory because the supervisor/coordinator/dashboard
@@ -1755,11 +1888,19 @@ configure_docker_mode() {
     echo "monitor, the LLM proxy on :12435, and bin/init-history.sh."
 
     if ! command -v docker &>/dev/null; then
-        error_exit "Docker is required but not installed. Install Docker Desktop first: https://www.docker.com/products/docker-desktop"
+        if install_docker && command -v docker &>/dev/null; then
+            success "Docker installed"
+        else
+            error_exit "Docker is required but could not be installed automatically. Install Docker Desktop first: https://www.docker.com/products/docker-desktop"
+        fi
     fi
 
     if ! docker info &>/dev/null; then
-        error_exit "Docker daemon is not running. Start Docker Desktop, then re-run install.sh."
+        if start_docker_daemon && docker info &>/dev/null; then
+            success "Docker daemon is running"
+        else
+            error_exit "Docker daemon is not running. Start Docker Desktop (or 'sudo systemctl start docker'), then re-run install.sh."
+        fi
     fi
 
     # The .docker-mode marker is kept for backwards compatibility — older
