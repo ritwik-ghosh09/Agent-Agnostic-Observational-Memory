@@ -39,10 +39,12 @@ _docker_bin() {
     export _DOCKER_BIN_CACHE
   fi
   # No args: print the resolved command. With args: execute it.
+  # sudo strips the environment, so CODING_REPO (used by docker-compose.yml
+  # volume interpolation) must be re-exported explicitly.
   if [ "$#" -eq 0 ]; then
     echo "$_DOCKER_BIN_CACHE"
   elif [ "$_DOCKER_BIN_CACHE" = "sudo -n docker" ]; then
-    sudo -n docker "$@"
+    sudo -n env CODING_REPO="${CODING_REPO:-$(pwd)}" docker "$@"
   else
     docker "$@"
   fi
