@@ -26,7 +26,8 @@ the toolkit, launch any supported agent, and observations begin streaming
 automatically — no per-agent configuration required.
 
 ```bash
-# Install the system (safe - prompts before any system changes)
+# Install the system (safe - prompts before any system changes;
+# offers to install Docker Engine/Desktop automatically if missing)
 ./install.sh
 
 # Start Claude Code with all features (observations capture automatically)
