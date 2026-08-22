@@ -1,0 +1,11 @@
+{
+  "name": "@local/km-core",
+  "version": "1.0.0",
+  "description": "Self-contained knowledge-management core (graph store, ontology registry, REST router). Local replacement providing the km-core API surface used by this repository.",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "license": "MIT"
+}

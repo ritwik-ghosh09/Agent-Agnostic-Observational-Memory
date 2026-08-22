@@ -294,5 +294,3 @@ local_cache/
 .observations/retrieval-settings.json
 CLAUDE.md
 AGENTS.md
-# Accidental embedded-repo artifact; nothing references it
-lib/km-core/
