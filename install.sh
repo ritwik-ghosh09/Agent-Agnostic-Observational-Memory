@@ -1069,8 +1069,8 @@ DCEOF
             return 0
         fi
 
-        # Check if Docker daemon is running
-        if ! docker info &>/dev/null; then
+        # Check if Docker daemon is running (sudo fallback: user may not be in docker group yet)
+        if ! docker info &>/dev/null && ! sudo -n docker info &>/dev/null; then
             warning "Docker daemon not running - CGR reindex skipped"
             info "  Start Docker and run: cd integrations/code-graph-rag && docker-compose up -d && ./scripts/reindex-with-metadata.sh"
             return 0
@@ -1916,7 +1916,7 @@ configure_team_setup() {
 wait_for_docker_daemon() {
     local timeout="${1:-120}"
     local waited=0
-    while ! docker info &>/dev/null; do
+    while ! docker info &>/dev/null && ! sudo -n docker info &>/dev/null; do
         sleep 5
         waited=$((waited + 5))
         if [[ $waited -ge $timeout ]]; then
@@ -2065,8 +2065,12 @@ configure_docker_mode() {
     fi
 
     if ! docker info &>/dev/null; then
-        if start_docker_daemon && docker info &>/dev/null; then
+        if start_docker_daemon && { docker info &>/dev/null || sudo -n docker info &>/dev/null; }; then
             success "Docker daemon is running"
+            if ! docker info &>/dev/null; then
+                warning "Docker socket requires sudo (user not in 'docker' group yet)"
+                INSTALLATION_WARNINGS+=("Docker: log out/in after group membership, or run docker via sudo")
+            fi
         else
             error_exit "Docker daemon is not running. Start Docker Desktop (or 'sudo systemctl start docker'), then re-run install.sh."
         fi
