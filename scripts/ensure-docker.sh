@@ -16,6 +16,11 @@ if [ -n "$_ENSURE_DOCKER_LOADED" ]; then
 fi
 _ENSURE_DOCKER_LOADED=true
 
+# Canonical install/start/wait helpers (shared with install.sh)
+SCRIPT_DIR_ENSURE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# shellcheck source=scripts/docker-setup-lib.sh
+source "$SCRIPT_DIR_ENSURE/docker-setup-lib.sh"
+
 # ============================================
 # Platform Detection
 # ============================================
@@ -24,6 +29,7 @@ detect_platform() {
   case "$PLATFORM" in
     Darwin) PLATFORM="macos" ;;
     Linux)  PLATFORM="linux" ;;
+    MINGW*|CYGWIN*|MSYS*) PLATFORM="windows" ;;
     *)      PLATFORM="unknown" ;;
   esac
   export PLATFORM
@@ -32,8 +38,11 @@ detect_platform() {
 # ============================================
 # Docker Daemon Readiness Check
 # ============================================
+# sudo -n fallback: users not yet in the docker group (or before re-login)
+# can still reach the daemon non-interactively.
 docker_daemon_ready() {
-  timeout 5 docker ps >/dev/null 2>&1
+  timeout 5 docker ps >/dev/null 2>&1 && return 0
+  command -v sudo >/dev/null 2>&1 && timeout 10 sudo -n docker ps >/dev/null 2>&1
 }
 
 # ============================================
@@ -114,11 +123,17 @@ early_docker_launch() {
 
   log "Checking Docker status..."
 
-  # Check if docker client is installed
+  # Check if docker client is installed — auto-install if missing
   if ! command -v docker &>/dev/null; then
     log "Docker client not found in PATH"
-    log "Install Docker Desktop: https://www.docker.com/products/docker-desktop"
-    return 1
+    log "Attempting automatic Docker installation (this may take a few minutes)..."
+    if docker_lib_install "$(docker_lib_platform)"; then
+      log "Docker installed successfully"
+    else
+      log "Automatic Docker installation failed"
+      log "Install manually: https://www.docker.com/products/docker-desktop"
+      return 1
+    fi
   fi
 
   # Already running?
@@ -136,8 +151,15 @@ early_docker_launch() {
   if [ "$PLATFORM" = "macos" ]; then
     if [ ! -d "/Applications/Docker.app" ]; then
       log "Docker Desktop not installed"
-      log "Install from: https://www.docker.com/products/docker-desktop"
-      return 1
+      log "Attempting automatic installation via Homebrew..."
+      if docker_lib_install macos; then
+        log "Docker Desktop installed successfully"
+        DOCKER_LAUNCH_START=$(date +%s)
+      else
+        log "Automatic installation failed"
+        log "Install from: https://www.docker.com/products/docker-desktop"
+        return 1
+      fi
     fi
 
     # Check if Docker Desktop process is running
@@ -184,12 +206,22 @@ early_docker_launch() {
       fi
     fi
   elif [ "$PLATFORM" = "linux" ]; then
-    if command -v systemctl &>/dev/null && systemctl is-enabled docker &>/dev/null; then
-      log "Starting Docker via systemd..."
-      sudo systemctl start docker 2>/dev/null || true
-      DOCKER_LAUNCH_START=$(date +%s)
+    log "Starting Docker Engine automatically..."
+    DOCKER_LAUNCH_START=$(date +%s)
+    if docker_lib_start_daemon linux; then
+      log "  Docker Engine started and responding"
     else
-      log "Start Docker: sudo systemctl start docker"
+      log "  Could not start Docker Engine automatically"
+      log "  Try: sudo systemctl start docker"
+    fi
+  elif [ "$PLATFORM" = "windows" ]; then
+    log "Starting Docker Desktop automatically..."
+    DOCKER_LAUNCH_START=$(date +%s)
+    if docker_lib_start_daemon windows; then
+      log "  Docker Desktop started and responding"
+    else
+      log "  Could not start Docker Desktop automatically"
+      log "  Launch 'Docker Desktop' from the Start Menu, then re-run coding"
     fi
   fi
 

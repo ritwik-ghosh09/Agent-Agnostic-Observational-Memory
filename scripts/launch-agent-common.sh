@@ -24,6 +24,23 @@
 
 set -e
 
+# Resolve the docker command once per session: plain `docker` when the user
+# can reach the daemon, otherwise non-interactive sudo (covers users who were
+# added to the docker group but have not re-logged-in yet, and root-only daemons).
+_docker_bin() {
+  if [ -z "${_DOCKER_BIN_CACHE:-}" ]; then
+    if timeout 5 docker ps >/dev/null 2>&1; then
+      _DOCKER_BIN_CACHE="docker"
+    elif command -v sudo >/dev/null 2>&1 && timeout 10 sudo -n docker ps >/dev/null 2>&1; then
+      _DOCKER_BIN_CACHE="sudo -n docker"
+    else
+      _DOCKER_BIN_CACHE="docker"
+    fi
+    export _DOCKER_BIN_CACHE
+  fi
+  echo "$_DOCKER_BIN_CACHE"
+}
+
 # ============================================
 # Shared Functions
 # ============================================
@@ -322,11 +339,11 @@ _ensure_llm_cli_proxy() {
 # Returns 0 if ports are broken, 1 if OK or container not running.
 _container_has_unbound_ports() {
   local state
-  state=$(docker inspect coding-services --format '{{.State.Status}}' 2>/dev/null || echo "missing")
+  state=$(_docker_bin inspect coding-services --format '{{.State.Status}}' 2>/dev/null || echo "missing")
   [ "$state" != "running" ] && return 1
 
   local port_bindings
-  port_bindings=$(docker inspect coding-services --format '{{range $p, $conf := .NetworkSettings.Ports}}{{$p}}={{if $conf}}{{(index $conf 0).HostPort}}{{else}}UNBOUND{{end}} {{end}}' 2>/dev/null || true)
+  port_bindings=$(_docker_bin inspect coding-services --format '{{range $p, $conf := .NetworkSettings.Ports}}{{$p}}={{if $conf}}{{(index $conf 0).HostPort}}{{else}}UNBOUND{{end}} {{end}}' 2>/dev/null || true)
 
   echo "$port_bindings" | grep -q "UNBOUND"
 }
@@ -340,7 +357,7 @@ _recover_stale_container() {
   _agent_log "⚠️  Container has unbound ports — resolving conflicts and recreating..."
   _resolve_port_conflicts "$docker_dir/docker-compose.yml"
 
-  docker compose -f "$docker_dir/docker-compose.yml" up -d --force-recreate coding-services 2>/dev/null
+  $(_docker_bin) compose -f "$docker_dir/docker-compose.yml" up -d --force-recreate coding-services 2>/dev/null
 
   for j in $(seq 1 "$max_wait"); do
     if curl -sf http://localhost:8080/health >/dev/null 2>&1; then
@@ -360,7 +377,7 @@ _diagnose_unhealthy_services() {
   local docker_dir="$1"
 
   local state
-  state=$(docker inspect coding-services --format '{{.State.Status}}' 2>/dev/null || echo "missing")
+  state=$(_docker_bin inspect coding-services --format '{{.State.Status}}' 2>/dev/null || echo "missing")
   _agent_log "   Container state: $state"
 
   if [ "$state" = "running" ] && _container_has_unbound_ports; then
@@ -369,7 +386,7 @@ _diagnose_unhealthy_services() {
 
   # Show recent logs for debugging
   _agent_log "   Recent logs:"
-  docker compose -f "$docker_dir/docker-compose.yml" logs --tail 10 coding-services 2>/dev/null | sed 's/^/   /'
+  $(_docker_bin) compose -f "$docker_dir/docker-compose.yml" logs --tail 10 coding-services 2>/dev/null | sed 's/^/   /'
   _agent_log "   Full logs: docker compose -f $docker_dir/docker-compose.yml logs coding-services"
   return 1
 }
@@ -451,7 +468,7 @@ _clear_leaked_docker_proxies() {
 
   # Host ports currently published by running containers (e.g. "0.0.0.0:3100->3000/tcp").
   local live_ports
-  live_ports=$(docker ps --format '{{.Ports}}' 2>/dev/null \
+  live_ports=$(_docker_bin ps --format '{{.Ports}}' 2>/dev/null \
     | grep -oE ':[0-9]+->' | grep -oE '[0-9]+' | sort -u || true)
 
   local leaked_pids=""
@@ -574,13 +591,13 @@ _start_services() {
       _resolve_port_conflicts "$docker_dir/docker-compose.yml"
       _agent_log "🐳 Recreating coding-services (stale port bindings)..."
       export CODING_REPO
-      docker compose -f "$docker_dir/docker-compose.yml" up -d --force-recreate coding-services
+      $(_docker_bin) compose -f "$docker_dir/docker-compose.yml" up -d --force-recreate coding-services
     else
       _resolve_port_conflicts "$docker_dir/docker-compose.yml"
       _agent_log "🐳 Starting coding services via Docker..."
       export CODING_REPO
       local up_log
-      if ! up_log=$(docker compose -f "$docker_dir/docker-compose.yml" up -d 2>&1); then
+      if ! up_log=$(_docker_bin compose -f "$docker_dir/docker-compose.yml" up -d 2>&1); then
         echo "$up_log" | sed 's/^/   /'
         # A leaked docker-proxy or stray host listener is the usual cause of a
         # port-bind failure on Linux. Clear orphans + conflicts and retry once.
@@ -588,8 +605,8 @@ _start_services() {
           _agent_log "⚠️  Port bind conflict — clearing leaked proxies/host listeners and retrying..."
           _clear_leaked_docker_proxies
           _resolve_port_conflicts "$docker_dir/docker-compose.yml"
-          docker compose -f "$docker_dir/docker-compose.yml" down --remove-orphans 2>/dev/null || true
-          if ! docker compose -f "$docker_dir/docker-compose.yml" up -d; then
+          $(_docker_bin) compose -f "$docker_dir/docker-compose.yml" down --remove-orphans 2>/dev/null || true
+          if ! $(_docker_bin) compose -f "$docker_dir/docker-compose.yml" up -d; then
             _agent_log "Error: Failed to start Docker containers after conflict recovery"
             _agent_log "   A root-owned leaked proxy may still hold a port. Try:"
             _agent_log "     sudo systemctl restart docker   # then re-run 'coding'"
