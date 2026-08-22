@@ -936,7 +936,7 @@ install_code_graph_rag() {
 
         # Use Groq as default (OpenAI quota issues are common)
         # Fall back to OpenAI if no Groq key available
-        if [[ -n "$GROQ_API_KEY" ]]; then
+        if [[ -n "${GROQ_API_KEY:-}" ]]; then
             cat > "$CODE_GRAPH_RAG_DIR/.env" << ENVEOF
 # code-graph-rag configuration
 MEMGRAPH_HOST=localhost
@@ -947,7 +947,7 @@ MEMGRAPH_BATCH_SIZE=1000
 CYPHER_PROVIDER=openai
 CYPHER_MODEL=llama-3.3-70b-versatile
 CYPHER_ENDPOINT=https://api.groq.com/openai/v1
-CYPHER_API_KEY=$GROQ_API_KEY
+CYPHER_API_KEY=${GROQ_API_KEY:-}
 ENVEOF
             info "Created .env with Groq configuration"
         else
@@ -968,12 +968,12 @@ ENVEOF
         if [[ -f "$CODING_REPO/.env" ]]; then
             source "$CODING_REPO/.env"
         fi
-        if [[ -n "$GROQ_API_KEY" ]] && ! grep -q "CYPHER_API_KEY" "$CODE_GRAPH_RAG_DIR/.env"; then
+        if [[ -n "${GROQ_API_KEY:-}" ]] && ! grep -q "CYPHER_API_KEY" "$CODE_GRAPH_RAG_DIR/.env"; then
             info "Adding Groq API key to existing code-graph-rag .env..."
             echo "" >> "$CODE_GRAPH_RAG_DIR/.env"
             echo "# Groq API key added by installer" >> "$CODE_GRAPH_RAG_DIR/.env"
             echo "CYPHER_ENDPOINT=https://api.groq.com/openai/v1" >> "$CODE_GRAPH_RAG_DIR/.env"
-            echo "CYPHER_API_KEY=$GROQ_API_KEY" >> "$CODE_GRAPH_RAG_DIR/.env"
+            echo "CYPHER_API_KEY=${GROQ_API_KEY:-}" >> "$CODE_GRAPH_RAG_DIR/.env"
         fi
     fi
 
