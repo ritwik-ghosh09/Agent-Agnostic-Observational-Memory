@@ -5,8 +5,7 @@
 > knowledge back into your next prompt — continuously sharpened by **live human feedback**.
 
 This documentation is a focused deep-dive into the **Observational Memory** retention and retrieval
-machinery (plus **Working Memory**), built as an extension of the
-[Coding Documentation :material-book-open-variant:](https://fwornle.github.io/coding/). It covers
+machinery (plus **Working Memory**). It covers
 **only** the components tied to memory retention and retrieval — for the surrounding platform (LSL,
 UKB/VKB, constraints, health monitoring) refer back to the base project.
 
@@ -88,4 +87,4 @@ flowchart LR
 
 ---
 
-*Part of the [Agent-Agnostic Observational Memory](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory) project — an extension of the [Coding Documentation](https://fwornle.github.io/coding/).*
+*Part of the [Agent-Agnostic Observational Memory](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory) project.*

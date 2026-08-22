@@ -258,6 +258,6 @@ echo "Diagnostics collected in diagnostics.txt"
 
 ### Support Resources
 
-- [GitHub Issues](https://github.com/fwornle/coding/issues)
+- [GitHub Issues](../../issues)
 - [Documentation](../index.md)
 - Configuration Validator: `node scripts/validate-lsl-config.js`

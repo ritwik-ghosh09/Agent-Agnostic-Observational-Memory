@@ -62,7 +62,7 @@ Coding runs in Docker. All services (MCP servers, databases, dashboards) run as 
 
 ```bash
 # 1. Clone repository with submodules
-git clone --recurse-submodules https://github.com/fwornle/coding ~/Agentic/coding
+git clone --recurse-submodules https://github.com/ritwik-ghosh09/Agent-Agnostic-Observational-Memory.git Agent-Agnostic-Observational-Memory
 cd ~/Agentic/coding
 
 # 2. Run installer

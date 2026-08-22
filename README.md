@@ -15,7 +15,7 @@ similar queries accordingly.
 
 > 📖 **Documentation:** [Memory Pipeline docs](https://ritwik-ga-ghosh-agent-agnostic-observational-memory.pages.bmw.ghe.com/release-notes/) —
 > a deep-dive into ingestion, working memory, live context retrieval, and ranking,
-> built as an extension of the [Coding Documentation](https://fwornle.github.io/coding/).
+> built as an extension of the Agent-Agnostic Observational Memory project.
 
 ---
 

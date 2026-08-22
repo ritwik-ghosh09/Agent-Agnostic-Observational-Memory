@@ -376,7 +376,7 @@ The age of custom-made software is approaching. And AI coding assistants make it
 
 ## Documentation
 
-Full documentation is available at **[fwornle.github.io/coding](https://fwornle.github.io/coding)**.
+Full documentation is available at the repository documentation.
 
 The documentation itself was produced in a fully vibed manner - including all the PlantUML architecture diagrams. It covers installation, configuration, all core systems, integrations, and deep-dive guides.
 
@@ -385,7 +385,7 @@ The documentation itself was produced in a fully vibed manner - including all th
 ## Getting Started
 
 ```bash
-git clone --recurse-submodules https://github.com/fwornle/coding ~/Agentic/coding
+git clone --recurse-submodules https://github.com/ritwik-ghosh09/Agent-Agnostic-Observational-Memory.git Agent-Agnostic-Observational-Memory
 cd ~/Agentic/coding && ./install.sh
 source ~/.bashrc
 coding
