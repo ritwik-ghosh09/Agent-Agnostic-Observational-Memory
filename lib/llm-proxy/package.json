@@ -1,0 +1,12 @@
+{
+  "name": "@local/llm-proxy",
+  "version": "1.0.0",
+  "description": "Self-contained LLM service client (OpenAI-compatible endpoints with provider fallback). Local replacement for the LLMService API used by this repository.",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./proxy-bridge": "./proxy-bridge.js"
+  },
+  "license": "MIT"
+}
