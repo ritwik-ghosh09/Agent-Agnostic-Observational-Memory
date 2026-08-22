@@ -38,7 +38,14 @@ _docker_bin() {
     fi
     export _DOCKER_BIN_CACHE
   fi
-  echo "$_DOCKER_BIN_CACHE"
+  # No args: print the resolved command. With args: execute it.
+  if [ "$#" -eq 0 ]; then
+    echo "$_DOCKER_BIN_CACHE"
+  elif [ "$_DOCKER_BIN_CACHE" = "sudo -n docker" ]; then
+    sudo -n docker "$@"
+  else
+    docker "$@"
+  fi
 }
 
 # ============================================
