@@ -294,3 +294,6 @@ local_cache/
 .observations/retrieval-settings.json
 CLAUDE.md
 AGENTS.md
+
+# Local knowledge-management layer ships real JS runtime modules
+!src/knowledge-management/*.js
