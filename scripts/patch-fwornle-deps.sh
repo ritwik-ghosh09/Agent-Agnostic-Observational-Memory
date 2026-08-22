@@ -35,6 +35,11 @@ for tree in "$SUB/dist" "$SUB/src"; do
             {} +
 done
 
+# 2b. Prose references inside the submodule README.
+if [ -f "$SUB/README.md" ]; then
+    sed -i -e "s|@fwornle/km-core|$KM_LOCAL|g" "$SUB/README.md"
+fi
+
 # 3. Stale lockfile pins the old tarball URLs — drop it so npm re-resolves.
 rm -f "$SUB/package-lock.json"
 
