@@ -351,8 +351,8 @@ install_missing_dependencies() {
                     esac
                 done
                 if [[ $need_node -eq 1 ]] && ! command -v node &>/dev/null; then
-                    info "Adding NodeSource repository (Node.js 20.x)..."
-                    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - || true
+                    info "Adding NodeSource repository (Node.js 22.x)..."
+                    curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - || true
                 fi
                 sudo apt-get update -y || true
                 if [[ $need_node -eq 1 ]]; then
@@ -3332,7 +3332,7 @@ install_mastra_opencode() {
     if ! command -v node &> /dev/null; then
         warning "Node.js not found. Mastra OpenCode requires Node.js 22+"
         INSTALLATION_WARNINGS+=("Mastra OpenCode: Node.js not found")
-        return 1
+        return 0
     fi
 
     local node_major
@@ -3340,7 +3340,7 @@ install_mastra_opencode() {
     if [[ "$node_major" -lt 22 ]]; then
         warning "Node.js $node_major found, but Mastra OpenCode requires Node.js >= 22.13.0"
         INSTALLATION_WARNINGS+=("Mastra OpenCode: Node.js version too old ($node_major, need 22+)")
-        return 1
+        return 0
     fi
     info "Node.js v$(node -v | sed 's/^v//') detected (>= 22 required)"
 
@@ -3351,7 +3351,7 @@ install_mastra_opencode() {
     else
         warning "npm install @mastra/opencode failed. If package is unavailable, a monorepo build fallback may be needed."
         INSTALLATION_WARNINGS+=("Mastra OpenCode: npm install failed -- check npm registry availability")
-        return 1
+        return 0
     fi
 
     # Create .observations/ directory for LibSQL storage
