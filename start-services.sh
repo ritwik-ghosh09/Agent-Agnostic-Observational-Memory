@@ -99,7 +99,7 @@ if [ ! -d "$CODING_DIR/integrations/mcp-constraint-monitor" ]; then
         echo "   ✅ Local MCP Constraint Monitor installed"
     else
         echo "   🌐 Cloning from repository..."
-        if git clone https://github.com/fwornle/mcp-server-constraint-monitor.git mcp-constraint-monitor 2>/dev/null; then
+        if git clone https://github.com/ritwik-ghosh09/Agent-Agnostic-Observational-Memory.git mcp-constraint-monitor 2>/dev/null; then
             cd mcp-constraint-monitor
             echo "   📦 Installing dependencies..."
             npm install --production 2>/dev/null || echo "   ⚠️ npm install failed, continuing..."
@@ -107,7 +107,7 @@ if [ ! -d "$CODING_DIR/integrations/mcp-constraint-monitor" ]; then
         else
             echo "   ⚠️ Failed to clone repository"
             echo "   💡 Ensure internet connection and GitHub access"
-            echo "   💡 Manual install: git clone https://github.com/fwornle/mcp-server-constraint-monitor.git mcp-constraint-monitor"
+            echo "   💡 Manual install: git clone https://github.com/ritwik-ghosh09/Agent-Agnostic-Observational-Memory.git mcp-constraint-monitor"
         fi
     fi
     cd "$CODING_DIR"

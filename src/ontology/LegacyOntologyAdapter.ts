@@ -19,7 +19,7 @@
  * legacy `ResolvedEntityDefinition` shape.
  */
 
-import { OntologyRegistry } from '@fwornle/km-core';
+import { OntologyRegistry } from '@local/km-core';
 import { OntologyManager, ResolvedEntityDefinition } from './OntologyManager.js';
 import {
   PropertyDefinition,

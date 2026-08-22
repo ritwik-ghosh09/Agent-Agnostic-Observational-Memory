@@ -50,8 +50,14 @@ RUN ARCH=$(uname -m) && \
     fi
 
 # Copy and install each integration's dependencies separately
+# Local replacements for unavailable upstream packages must exist before
+# npm install resolves the rewritten file: specifiers.
+COPY lib/km-core/ ./lib/km-core/
+COPY lib/llm-proxy/ ./lib/llm-proxy/
+COPY scripts/patch-fwornle-deps.sh ./scripts/patch-fwornle-deps.sh
 COPY integrations/mcp-server-semantic-analysis/package*.json ./integrations/mcp-server-semantic-analysis/
-RUN cd integrations/mcp-server-semantic-analysis && npm install --ignore-scripts --legacy-peer-deps 2>/dev/null || true
+RUN sh ./scripts/patch-fwornle-deps.sh \
+ && cd integrations/mcp-server-semantic-analysis && npm install --ignore-scripts --legacy-peer-deps 2>/dev/null || true
 
 COPY integrations/mcp-constraint-monitor/package*.json ./integrations/mcp-constraint-monitor/
 RUN cd integrations/mcp-constraint-monitor && npm install --ignore-scripts 2>/dev/null || true
@@ -109,7 +115,8 @@ RUN cd lib/llm && npm install --ignore-scripts 2>/dev/null || true
 # have been overwritten by COPY integrations/ since .dockerignore excludes node_modules)
 RUN cd integrations/mcp-constraint-monitor && npm install --ignore-scripts 2>/dev/null || true
 RUN cd integrations/mcp-constraint-monitor/dashboard && npm install 2>/dev/null || true
-RUN cd integrations/mcp-server-semantic-analysis && npm install --ignore-scripts --legacy-peer-deps 2>/dev/null || true
+RUN sh ./scripts/patch-fwornle-deps.sh \
+ && cd integrations/mcp-server-semantic-analysis && npm install --ignore-scripts --legacy-peer-deps 2>/dev/null || true
 
 # Patch broken JSDoc comment in @rapid/llm-proxy network-detect.js
 # The comment contains "utun*/" which prematurely closes the /* block, breaking ESM parsing

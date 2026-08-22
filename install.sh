@@ -777,6 +777,7 @@ install_semantic_analysis() {
         fi
 
         # Install dependencies and build
+        "$CODING_REPO/scripts/patch-fwornle-deps.sh" || true
         npm install || warning "Failed to install semantic analysis dependencies"
         npm run build || warning "Failed to build semantic analysis server"
 
