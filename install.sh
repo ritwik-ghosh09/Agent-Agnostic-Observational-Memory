@@ -340,24 +340,27 @@ install_missing_dependencies() {
     case "$PLATFORM" in
         linux)
             if command -v apt-get &>/dev/null; then
-                local apt_pkgs=()
-                local dep pkg
+                local apt_pkgs=() dep need_node=0
                 for dep in "${deps[@]}"; do
                     case "$dep" in
-                        node)
-                            # NodeSource for a maintained Node.js (provides node + npm)
-                            if ! command -v node &>/dev/null; then
-                                info "Adding NodeSource repository (Node.js 20.x)..."
-                                curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - || true
-                            fi
-                            pkg="nodejs"
-                            ;;
-                        npm) pkg="npm" ;;
-                        *) pkg="$dep" ;;
+                        # NodeSource's nodejs package bundles BOTH node and npm;
+                        # Ubuntu's own `npm` package conflicts with it, so never
+                        # install distro `npm` alongside it.
+                        node|npm) need_node=1 ;;
+                        *) apt_pkgs+=("$dep") ;;
                     esac
-                    apt_pkgs+=("$pkg")
                 done
-                sudo apt-get update -y && sudo apt-get install -y "${apt_pkgs[@]}"
+                if [[ $need_node -eq 1 ]] && ! command -v node &>/dev/null; then
+                    info "Adding NodeSource repository (Node.js 20.x)..."
+                    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - || true
+                fi
+                sudo apt-get update -y || true
+                if [[ $need_node -eq 1 ]]; then
+                    sudo apt-get install -y nodejs || true
+                fi
+                if [[ ${#apt_pkgs[@]} -gt 0 ]]; then
+                    sudo apt-get install -y "${apt_pkgs[@]}" || true
+                fi
             elif command -v dnf &>/dev/null; then
                 sudo dnf install -y "${deps[@]}"
             elif command -v yum &>/dev/null; then
