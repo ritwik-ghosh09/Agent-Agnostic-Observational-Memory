@@ -1604,11 +1604,11 @@ initialize_shared_memory() {
             if timeout 60 node bin/graph-sync import 2>&1 | grep -E "^✓|entities|relations" | head -10; then
                 success "Knowledge imported from JSON exports to GraphDB"
             else
-                warn "Knowledge import encountered issues (non-fatal)"
+                warning "Knowledge import encountered issues (non-fatal)"
             fi
             cd - > /dev/null
         else
-            warn "Node.js not available - skipping knowledge import"
+            warning "Node.js not available - skipping knowledge import"
         fi
     elif [[ "$json_exports_exist" == "true" ]]; then
         info "GraphDB already has data, skipping JSON import"
@@ -3513,7 +3513,7 @@ install_skills() {
         "$CODING_REPO/scripts/generate-agent-instructions.sh" "$CODING_REPO" "$CODING_REPO"
         success "Skills synced to Claude (global), Copilot, and OpenCode"
     else
-        warn "scripts/generate-agent-instructions.sh not found or not executable"
+        warning "scripts/generate-agent-instructions.sh not found or not executable"
     fi
 }
 
