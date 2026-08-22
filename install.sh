@@ -798,7 +798,7 @@ install_constraint_monitor() {
     # Discard empty or partial checkouts (leftover from interrupted installs)
     if [[ -d "$constraint_monitor_dir" ]] && [[ ! -f "$constraint_monitor_dir/package.json" ]] && [[ ! -f "$constraint_monitor_dir/pyproject.toml" ]] && [[ -z "$(ls -A "$constraint_monitor_dir" 2>/dev/null | grep -v '^\.git' )" ]]; then
         warning "Incomplete submodule checkout detected - resetting $constraint_monitor_dir"
-        rm -rf "$constraint_monitor_dir"
+        rm -rf "$CODING_REPO/integrations/mcp-constraint-monitor"
     fi
     echo -e "\n${CYAN}🚦 Installing MCP Constraint Monitor with Professional Dashboard (git submodule)...${NC}"
 
