@@ -319,6 +319,104 @@ test_proxy_connectivity() {
 }
 
 # Check for required dependencies
+# Attempt automatic installation of missing core dependencies.
+# Populates global REMAINING_MISSING with anything that could not be installed.
+# Returns 0 only if nothing remains missing.
+REMAINING_MISSING=()
+install_missing_dependencies() {
+    REMAINING_MISSING=()
+    local deps=("$@")
+    [[ ${#deps[@]} -eq 0 ]] && return 0
+
+    echo ""
+    info "Missing dependencies can be installed automatically: ${deps[*]}"
+    if ! confirm_system_change \
+        "Install missing dependencies (${deps[*]})" \
+        "Uses the platform package manager (sudo may prompt for your password)."; then
+        REMAINING_MISSING=("${deps[@]}")
+        return 1
+    fi
+
+    case "$PLATFORM" in
+        linux)
+            if command -v apt-get &>/dev/null; then
+                local apt_pkgs=()
+                local dep pkg
+                for dep in "${deps[@]}"; do
+                    case "$dep" in
+                        node)
+                            # NodeSource for a maintained Node.js (provides node + npm)
+                            if ! command -v node &>/dev/null; then
+                                info "Adding NodeSource repository (Node.js 20.x)..."
+                                curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - || true
+                            fi
+                            pkg="nodejs"
+                            ;;
+                        npm) pkg="npm" ;;
+                        *) pkg="$dep" ;;
+                    esac
+                    apt_pkgs+=("$pkg")
+                done
+                sudo apt-get update -y && sudo apt-get install -y "${apt_pkgs[@]}"
+            elif command -v dnf &>/dev/null; then
+                sudo dnf install -y "${deps[@]}"
+            elif command -v yum &>/dev/null; then
+                sudo yum install -y "${deps[@]}"
+            elif command -v pacman &>/dev/null; then
+                local pac_pkgs=() dep
+                for dep in "${deps[@]}"; do
+                    case "$dep" in node) pac_pkgs+=("nodejs") ;; npm) : ;; *) pac_pkgs+=("$dep") ;; esac
+                done
+                sudo pacman -Sy --noconfirm "${pac_pkgs[@]}"
+            else
+                warning "No supported package manager found (apt/dnf/yum/pacman)"
+                REMAINING_MISSING=("${deps[@]}")
+                return 1
+            fi
+            ;;
+        macos)
+            if ! command -v brew &>/dev/null; then
+                warning "Homebrew not found — cannot auto-install. Install it from https://brew.sh"
+                REMAINING_MISSING=("${deps[@]}")
+                return 1
+            fi
+            local brew_pkgs=() dep
+            for dep in "${deps[@]}"; do
+                case "$dep" in npm) : ;; *) brew_pkgs+=("$dep") ;; esac
+            done
+            brew install "${brew_pkgs[@]}"
+            ;;
+        windows)
+            if command -v winget.exe &>/dev/null; then
+                local dep
+                for dep in "${deps[@]}"; do
+                    case "$dep" in
+                        node|npm) winget.exe install -e --id OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements || true ;;
+                        git)      winget.exe install -e --id Git.Git --accept-package-agreements --accept-source-agreements || true ;;
+                        python3)  winget.exe install -e --id Python.Python.3.12 --accept-package-agreements --accept-source-agreements || true ;;
+                        jq)       winget.exe install -e --id jqlang.jq --accept-package-agreements --accept-source-agreements || true ;;
+                        *)        warning "No winget package mapped for '$dep' — install manually" ;;
+                    esac
+                done
+            elif command -v choco.exe &>/dev/null; then
+                choco.exe install "${deps[@]}" -y || true
+            else
+                warning "Neither winget nor chocolatey found"
+                REMAINING_MISSING=("${deps[@]}")
+                return 1
+            fi
+            ;;
+    esac
+
+    # Re-verify what actually got installed.
+    local dep
+    for dep in "${deps[@]}"; do
+        command -v "$dep" &>/dev/null || REMAINING_MISSING+=("$dep")
+    done
+
+    [[ ${#REMAINING_MISSING[@]} -eq 0 ]]
+}
+
 check_dependencies() {
     echo -e "${CYAN}🔍 Checking dependencies...${NC}"
     
@@ -533,29 +631,34 @@ handle_non_mirrored_repo_cn() {
 }
 
     if [[ ${#missing_deps[@]} -ne 0 ]]; then
-        echo -e "${RED}Missing required dependencies: ${missing_deps[*]}${NC}"
-        echo -e "${YELLOW}Please install the missing dependencies and run the installer again.${NC}"
-        
-        # Provide installation hints
-        echo -e "\n${CYAN}Installation hints:${NC}"
-        case "$PLATFORM" in
-            macos)
-                echo "  - Install Homebrew: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
-                echo "  - Then run: brew install git node python3 jq plantuml tmux"
-                ;;
-            linux)
-                echo "  - Ubuntu/Debian: sudo apt-get update && sudo apt-get install -y git nodejs npm python3 python3-pip jq plantuml tmux"
-                echo "  - RHEL/CentOS: sudo yum install -y git nodejs npm python3 python3-pip jq plantuml tmux"
-                echo "  - Arch: sudo pacman -S git nodejs npm python python-pip jq plantuml tmux"
-                ;;
-            windows)
-                echo "  - Install Git Bash: https://git-scm.com/downloads"
-                echo "  - Install Node.js: https://nodejs.org/"
-                echo "  - Install Python: https://www.python.org/downloads/"
-                echo "  - Install jq: https://stedolan.github.io/jq/download/"
-                ;;
-        esac
-        exit 1
+        if install_missing_dependencies "${missing_deps[@]}" && [[ ${#REMAINING_MISSING[@]} -eq 0 ]]; then
+            success "All missing dependencies were installed automatically"
+        else
+            local failed_deps=("${REMAINING_MISSING[@]:-${missing_deps[@]}}")
+            echo -e "${RED}Missing required dependencies: ${failed_deps[*]}${NC}"
+            echo -e "${YELLOW}Please install the missing dependencies and run the installer again.${NC}"
+
+            # Provide installation hints
+            echo -e "\n${CYAN}Installation hints:${NC}"
+            case "$PLATFORM" in
+                macos)
+                    echo "  - Install Homebrew: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+                    echo "  - Then run: brew install git node python3 jq plantuml tmux"
+                    ;;
+                linux)
+                    echo "  - Ubuntu/Debian: sudo apt-get update && sudo apt-get install -y git nodejs npm python3 python3-pip jq plantuml tmux"
+                    echo "  - RHEL/CentOS: sudo yum install -y git nodejs npm python3 python3-pip jq plantuml tmux"
+                    echo "  - Arch: sudo pacman -S git nodejs npm python python-pip jq plantuml tmux"
+                    ;;
+                windows)
+                    echo "  - Install Git Bash: https://git-scm.com/downloads"
+                    echo "  - Install Node.js: https://nodejs.org/"
+                    echo "  - Install Python: https://www.python.org/downloads/"
+                    echo "  - Install jq: https://stedolan.github.io/jq/download/"
+                    ;;
+            esac
+            exit 1
+        fi
     fi
     
     success "All required dependencies are installed"
