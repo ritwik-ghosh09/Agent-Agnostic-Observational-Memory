@@ -68,7 +68,7 @@ Progressive escalation for reliability:
 
 ## Deployment
 
-MCP servers run as HTTP/SSE services in Docker containers; the host-side Claude/Copilot CLI talks to them via lightweight stdio proxies. Docker Desktop must be installed and running. The stack is launched automatically by `coding --claude`. See the [Docker Deployment Guide](docker/README.md) for container details.
+MCP servers run as HTTP/SSE services in Docker containers; the host-side Claude/Copilot CLI talks to them via lightweight stdio proxies. Docker Desktop must be installed and running. The stack is launched automatically by `coding --claude`. See the [Docker Deployment Guide](https://github.com/ritwik-ghosh09/Agent-Agnostic-Observational-Memory/blob/main/docker/README.md) for container details.
 
 ## Development Patterns
 
