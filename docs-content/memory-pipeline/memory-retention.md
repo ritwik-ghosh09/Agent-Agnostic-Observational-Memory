@@ -8,7 +8,7 @@ assembled at query time.
 !!! abstract "Scope"
     This documentation covers **only** Observational Memory retention/retrieval and Working Memory.
     All retention runs **in-process** inside the host Observations API server
-    ([`scripts/observations-api-server.mjs`](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory/blob/main/scripts/observations-api-server.mjs), port `12436`).
+    ([`scripts/observations-api-server.mjs`](https://github.com/ritwik-ghosh09/Agent-Agnostic-Observational-Memory/blob/main/scripts/observations-api-server.mjs), port `12436`).
 
 ## Three-tier memory hierarchy
 
@@ -287,7 +287,7 @@ semantic results are appended.
 ### Assembly
 
 Implemented in
-[`src/retrieval/working-memory.js`](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory/blob/main/src/retrieval/working-memory.js)
+[`src/retrieval/working-memory.js`](https://github.com/ritwik-ghosh09/Agent-Agnostic-Observational-Memory/blob/main/src/retrieval/working-memory.js)
 via `buildWorkingMemory(context, codingRoot)`.
 
 ```mermaid
@@ -339,4 +339,4 @@ env var — and the first that yields parseable frontmatter wins.
 
 ---
 
-*Continue to [Live Context Retrieval](live-context-retrieval.md). Back to the [repository](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory).*
+*Continue to [Live Context Retrieval](live-context-retrieval.md). Back to the [repository](https://github.com/ritwik-ghosh09/Agent-Agnostic-Observational-Memory).*

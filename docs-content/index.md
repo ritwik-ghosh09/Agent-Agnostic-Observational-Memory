@@ -87,4 +87,4 @@ flowchart LR
 
 ---
 
-*Part of the [Agent-Agnostic Observational Memory](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory) project.*
+*Part of the [Agent-Agnostic Observational Memory](https://github.com/ritwik-ghosh09/Agent-Agnostic-Observational-Memory) project.*

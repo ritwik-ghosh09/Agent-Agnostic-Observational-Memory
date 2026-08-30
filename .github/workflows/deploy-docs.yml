@@ -1,10 +1,9 @@
 name: Deploy Documentation
 
-# Publishes the MkDocs site to GitHub Pages on bmw.ghe.com (GitHub Enterprise
-# Cloud) via the gh-pages branch. `mkdocs gh-deploy` needs only checkout +
-# python, so it works on the GHEC GitHub-hosted runners without the OIDC Pages
-# actions. After the first run, enable Pages in repo Settings → Pages with the
-# gh-pages branch as the source.
+# Publishes the MkDocs site to GitHub Pages via the gh-pages branch.
+# `mkdocs gh-deploy` needs only checkout + python, so it works on GitHub-hosted
+# runners without the OIDC Pages actions. After the first run, enable Pages in
+# repo Settings → Pages with the gh-pages branch as the source.
 
 on:
   push:

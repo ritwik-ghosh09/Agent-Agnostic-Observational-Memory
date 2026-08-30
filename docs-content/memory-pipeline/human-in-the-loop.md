@@ -249,7 +249,7 @@ flowchart TB
 
 ## Tuning constants
 
-[`feedback-store.js`](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory/blob/main/src/retrieval/feedback-store.js),
+[`feedback-store.js`](https://github.com/ritwik-ghosh09/Agent-Agnostic-Observational-Memory/blob/main/src/retrieval/feedback-store.js),
 all env-overridable:
 
 | Constant | Default | Meaning |
@@ -266,4 +266,4 @@ all env-overridable:
 
 ---
 
-*Back to [Memory Retention](memory-retention.md) · [Live Context Retrieval](live-context-retrieval.md) · the [repository](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory).*
+*Back to [Memory Retention](memory-retention.md) · [Live Context Retrieval](live-context-retrieval.md) · the [repository](https://github.com/ritwik-ghosh09/Agent-Agnostic-Observational-Memory).*

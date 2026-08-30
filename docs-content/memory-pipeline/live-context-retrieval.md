@@ -7,7 +7,7 @@ with [Working Memory](memory-retention.md#working-memory-the-always-on-prefix).
 
 !!! info "Entry point"
     `POST /api/retrieve` on the host obs-api → `RetrievalService.retrieve(query, options)` in
-    [`src/retrieval/retrieval-service.js`](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory/blob/main/src/retrieval/retrieval-service.js).
+    [`src/retrieval/retrieval-service.js`](https://github.com/ritwik-ghosh09/Agent-Agnostic-Observational-Memory/blob/main/src/retrieval/retrieval-service.js).
     Defaults: `scoreThreshold = 0.70`, `defaultBudget = 1000` tokens.
 
 ## The 8-stage pipeline
@@ -88,7 +88,7 @@ $$
 
 So rank 1 contributes `1/(60+0+1) = 0.0164`, rank 100 contributes `1/(60+99+1) = 0.00625`.
 Implemented in
-[`src/retrieval/rrf-fusion.js`](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory/blob/main/src/retrieval/rrf-fusion.js)
+[`src/retrieval/rrf-fusion.js`](https://github.com/ritwik-ghosh09/Agent-Agnostic-Observational-Memory/blob/main/src/retrieval/rrf-fusion.js)
 as `rrfFuse(rankedLists, k = 60, agentProfile = null)`.
 
 ### Tier weighting
@@ -105,7 +105,7 @@ export const TIER_WEIGHTS = {
 // entry.score *= TIER_WEIGHTS[entry.item.tier] ?? 1.0;
 ```
 
-Optional **agent profiles** ([`config/agent-profiles.json`](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory/blob/main/config/agent-profiles.json))
+Optional **agent profiles** ([`config/agent-profiles.json`](https://github.com/ritwik-ghosh09/Agent-Agnostic-Observational-Memory/blob/main/config/agent-profiles.json))
 apply a second per-agent multiplier pass, letting different agents favour different tiers.
 
 ## Step 4 — Reranking passes
@@ -214,4 +214,4 @@ live drag-to-reorder feedback and its tuning console are covered on the
 
 ---
 
-*Continue to [Human-in-the-Loop](human-in-the-loop.md). Back to the [repository](https://bmw.ghe.com/Ritwik-GA-Ghosh/Agent-Agnostic-Observational-Memory).*
+*Continue to [Human-in-the-Loop](human-in-the-loop.md). Back to the [repository](https://github.com/ritwik-ghosh09/Agent-Agnostic-Observational-Memory).*
